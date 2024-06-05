@@ -16,9 +16,6 @@ ALLOWED_HOSTS = ['*']
 # Application definition
 resend.api_key = os.environ["RESEND_API_KEY"]
 
-# os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'scuibai.settings') 
-# django.setup()
-
 INSTALLED_APPS = [
     "django.contrib.admin",
     "django.contrib.auth",
