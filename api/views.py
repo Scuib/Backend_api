@@ -88,6 +88,8 @@ def login(request):
             return Response({
                 'refresh': str(refresh),
                 'access': str(refresh.access_token), # type: ignore
+                'user_id': user.id, # type: ignore
+                'first_name': user.first_name
             })
         else:
             print(user.password)
