@@ -71,16 +71,18 @@ from django.contrib.auth.models import update_last_login
 def login(request):
     serializer = LoginSerializer(data=request.data)
     if serializer.is_valid():
-        email = serializer.validated_data['email'] # type:ignore
-        password = serializer.validated_data['password'] # type:ignore
-
-        # Check if the User email is verified
+        email = serializer.validated_data['email'] # type: ignore
+        password = serializer.validated_data['password'] # type: ignore
+        
         if not EmailAddress.objects.get(email=email).verified:
-            return Response({'error': 'Email not verified. Please verify your email'}, status=status.HTTP_401_UNAUTHORIZED)
+            return Response({'error': 'Email is not verified '}, status=status.HTTP_401_UNAUTHORIZED)
 
-        user = authenticate(request, username=email, password=password)
+        try:
+            user = User.objects.get(email=email)
+        except User.DoesNotExist:
+            return Response({'error': 'Invalid email or password'}, status=status.HTTP_401_UNAUTHORIZED)
 
-        if user is not None:
+        if user.check_password(password):
             refresh = RefreshToken.for_user(user)
             # update_last_login(None, user)
 
@@ -92,7 +94,6 @@ def login(request):
             return Response({'error': 'Invalid email or password'}, status=status.HTTP_401_UNAUTHORIZED)
     else:
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-
 
 
 # Verify Email Here
