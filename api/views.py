@@ -46,18 +46,18 @@ def register(request):
             email=user.email # type: ignore
         )
         key, exp = VerifyEmail_key(user_id=user.id) # type: ignore Because it sees user as a list and can't access id, It can actually
-        params = {
-            "from": "Acme <onboarding@resend.dev>",
-            # "to": [user.email]
-            "to": ["cyrile450@gmail.com"], # type: ignore 
-            "subject": f"{user.first_name}, Verify your Email", # type: ignore
-            "html": f"<strong>Your Verification code is {key}. Expires at {exp}</strong>"
-            }
-        
-        email = resend.Emails.send(params=params) # type: ignore
-        print(email)
+        # params = {
+        #     "from": "Acme <onboarding@resend.dev>",
+        #     # "to": [user.email]
+        #     "to": ["cyrile450@gmail.com"], # type: ignore 
+        #     "subject": f"{user.first_name}, Verify your Email", # type: ignore
+        #     "html": f"<strong>Your Verification code is {key}. Expires at {exp}</strong>"
+        #     }
 
-        return Response({'detail': _('Verification e-mail sent.')}, status=status.HTTP_201_CREATED)
+        # email = resend.Emails.send(params=params) # type: ignore
+        # print(email)
+
+        return Response({'detail': {'name': user.first_name, 'key': key, 'expires': exp} }, status=status.HTTP_201_CREATED) # type: ignore
     return Response(serialized_data.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
@@ -160,18 +160,18 @@ def reset_password(request):
         
         key, uid = ResetPassword_key(email=data['email']) # type: ignore pylance warning
         url = f"https://api/password/reset/confirm/{uid}/{key}/"
-        params = {
-            "from": "Acme <onboarding@resend.dev>",
-            # "to": [user.email]
-            "to": ["cyrile450@gmail.com"], # type: ignore 
-            "subject": f"Password Reset", # type: ignore
-            "html": f"<strong>Reset your password: {url}</strong>"
-            }
+        # params = {
+        #     "from": "Acme <onboarding@resend.dev>",
+        #     # "to": [user.email]
+        #     "to": ["cyrile450@gmail.com"], # type: ignore 
+        #     "subject": f"Password Reset", # type: ignore
+        #     "html": f"<strong>Reset your password: {url}</strong>"
+        #     }
         
-        email = resend.Emails.send(params=params) # type: ignore
-        print(email)
+        # email = resend.Emails.send(params=params) # type: ignore
+        # print(email)
 
-        return Response({'detail': _('Password Reset e-mail sent.')}, status=status.HTTP_201_CREATED)
+        return Response({'detail': {'url': url}}, status=status.HTTP_201_CREATED)
     return Response({'errors': 'Something went wrong!'}, status=status.HTTP_400_BAD_REQUEST)
 
 # Verify Email Here
