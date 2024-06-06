@@ -28,6 +28,7 @@ class UserSerializer(serializers.ModelSerializer):
 
     def create(self, validated_data):
         validated_data.pop('password2')  # Remove confirm_password from validated data
+        validated_data['password'] = make_password(validated_data['password'])
         user = User.objects.create(**validated_data)
         return user
 

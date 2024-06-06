@@ -15,6 +15,8 @@ from django.utils.translation import gettext_lazy as _
 from .tools import VerifyEmail_key, ResetPassword_key
 # from django.contrib.auth.hashers import make_password
 
+from django.contrib.auth.hashers import make_password, check_password
+
 from allauth.account.models import EmailAddress
 
 
@@ -58,11 +60,6 @@ def register(request):
     return Response(serialized_data.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
-from django.contrib.auth import authenticate
-from rest_framework.decorators import api_view, permission_classes
-from rest_framework.permissions import AllowAny
-from rest_framework.response import Response
-from rest_framework import status
 from rest_framework_simplejwt.tokens import RefreshToken
 from django.contrib.auth.models import update_last_login
 
@@ -73,17 +70,18 @@ def login(request):
     if serializer.is_valid():
         email = serializer.validated_data['email'] # type: ignore
         password = serializer.validated_data['password'] # type: ignore
-        
-        if not EmailAddress.objects.get(email=email).verified:
-            return Response({'error': 'Email is not verified '}, status=status.HTTP_401_UNAUTHORIZED)
+
 
         try:
             user = User.objects.get(email=email)
         except User.DoesNotExist:
             return Response({'error': 'Invalid email or password'}, status=status.HTTP_401_UNAUTHORIZED)
+        
+        if not EmailAddress.objects.get(email=email).verified:
+                return Response({'error': 'Email is not verified '}, status=status.HTTP_401_UNAUTHORIZED)
 
-        if user.check_password(password):
-            print(user.password)
+        if check_password(password, user.password):
+            # print(user.password)
             refresh = RefreshToken.for_user(user)
             # update_last_login(None, user)
 
@@ -92,7 +90,8 @@ def login(request):
                 'access': str(refresh.access_token), # type: ignore
             })
         else:
-            return Response({'error': 'Invalid email or password'}, status=status.HTTP_401_UNAUTHORIZED)
+            print(user.password)
+            return Response({'erro': 'Invalid email or password'}, status=status.HTTP_401_UNAUTHORIZED)
     else:
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
