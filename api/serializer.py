@@ -1,3 +1,5 @@
+from attr import fields
+from questionary import password
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 from .models import AllSkills, User, Profile, UserSkills, EmailVerication_Keys, PasswordReset_keys
 
@@ -6,6 +8,12 @@ from django.contrib.auth.hashers import make_password
 from rest_framework.serializers import ModelSerializer
 
 from rest_framework import serializers
+
+
+class LoginSerializer(serializers.Serializer):
+    email = serializers.EmailField()
+    password = serializers.CharField(write_only=True)
+
 
 class UserSerializer(serializers.ModelSerializer):
     password = serializers.CharField(write_only=True)

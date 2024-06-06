@@ -7,7 +7,7 @@ from rest_framework import status
 from .models import Profile, User, EmailVerication_Keys, PasswordReset_keys
 from rest_framework_simplejwt.views import TokenObtainPairView, TokenBlacklistView
 from .serializer import (MyTokenObtainPairSerializer, UserSerializer,
-                         profileSerializer, EmailVerifySerializer)
+                         profileSerializer, EmailVerifySerializer, LoginSerializer)
 # from rest_framework.views import APIView
 import resend
 from django.utils import timezone
@@ -56,6 +56,43 @@ def register(request):
 
         return Response({'detail': _('Verification e-mail sent.')}, status=status.HTTP_201_CREATED)
     return Response(serialized_data.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+from django.contrib.auth import authenticate
+from rest_framework.decorators import api_view, permission_classes
+from rest_framework.permissions import AllowAny
+from rest_framework.response import Response
+from rest_framework import status
+from rest_framework_simplejwt.tokens import RefreshToken
+from django.contrib.auth.models import update_last_login
+
+@api_view(['POST'])
+@permission_classes([AllowAny])
+def login(request):
+    serializer = LoginSerializer(data=request.data)
+    if serializer.is_valid():
+        email = serializer.validated_data['email'] # type:ignore
+        password = serializer.validated_data['password'] # type:ignore
+
+        # Check if the User email is verified
+        if not EmailAddress.objects.get(email=email).verified:
+            return Response({'error': 'Email not verified. Please verify your email'}, status=status.HTTP_401_UNAUTHORIZED)
+
+        user = authenticate(request, username=email, password=password)
+
+        if user is not None:
+            refresh = RefreshToken.for_user(user)
+            # update_last_login(None, user)
+
+            return Response({
+                'refresh': str(refresh),
+                'access': str(refresh.access_token), # type: ignore
+            })
+        else:
+            return Response({'error': 'Invalid email or password'}, status=status.HTTP_401_UNAUTHORIZED)
+    else:
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
 
 
 # Verify Email Here
@@ -162,7 +199,7 @@ def confirm_reset_password(request, uid, key):
         user.set_password(password)
         user.save()
         print(f"New password: {user.password}")
-        
+
         return Response({'detail': _('Password Successfully changed.')}, status=status.HTTP_201_CREATED)
 
     except User.DoesNotExist or PasswordReset_keys.DoesNotExist:
