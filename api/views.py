@@ -17,6 +17,7 @@ from .tools import VerifyEmail_key, ResetPassword_key
 
 from allauth.account.models import EmailAddress
 
+
 def home(request):
     return render(request, 'home.html')
 
