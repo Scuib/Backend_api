@@ -158,12 +158,10 @@ def confirm_reset_password(request, uid, key):
 
 
         # Update the user's password
-        # print("Old password")
-        # print(user.password)
+        print(f"Old password: {user.password}")
         user.set_password(password)
         user.save()
-        # print("New password")
-        # print(user.password)
+        print(f"New password: {user.password}")
         
         return Response({'detail': _('Password Successfully changed.')}, status=status.HTTP_201_CREATED)
 
