@@ -83,6 +83,7 @@ def login(request):
             return Response({'error': 'Invalid email or password'}, status=status.HTTP_401_UNAUTHORIZED)
 
         if user.check_password(password):
+            print(user.password)
             refresh = RefreshToken.for_user(user)
             # update_last_login(None, user)
 
