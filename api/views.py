@@ -4,6 +4,7 @@ from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated, AllowAny
 from rest_framework.response import Response
 from rest_framework import status
+from yaml import serialize
 from .models import Profile, User, EmailVerication_Keys, PasswordReset_keys
 from rest_framework_simplejwt.views import TokenObtainPairView, TokenBlacklistView
 from .serializer import (MyTokenObtainPairSerializer, UserSerializer,
@@ -61,7 +62,19 @@ def register(request):
 
 
 from rest_framework_simplejwt.tokens import RefreshToken
-from django.contrib.auth.models import update_last_login
+# from django.contrib.auth.models import update_last_login
+
+@api_view(['GET', 'POST', 'PUT'])
+@permission_classes([IsAuthenticated])
+def logout(request):
+    try:
+        refresh_token = request.data["refresh"]
+        token = RefreshToken(refresh_token)
+        token.blacklist()
+
+        return Response(status=status.HTTP_205_RESET_CONTENT)
+    except Exception as e:
+        return Response(status=status.HTTP_400_BAD_REQUEST)
 
 @api_view(['POST'])
 @permission_classes([AllowAny])
