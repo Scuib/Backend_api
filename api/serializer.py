@@ -1,5 +1,3 @@
-from attr import fields
-from questionary import password
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 from .models import AllSkills, User, Profile, UserSkills, EmailVerication_Keys, PasswordReset_keys
 
