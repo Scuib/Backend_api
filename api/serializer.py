@@ -31,6 +31,7 @@ class UserSerializer(serializers.ModelSerializer):
         validated_data['password'] = make_password(validated_data['password'])
         # Create User
         user = User.objects.create(**validated_data)
+<<<<<<< Updated upstream
         user.save()
         # Save Default Skill English
         skill = UserSkills.objects.create(user_id=user.id, name='english') # type: ignore
@@ -39,6 +40,10 @@ class UserSerializer(serializers.ModelSerializer):
         profile = Profile.objects.create(user=user)
         profile.save()
 
+=======
+        profile = Profile.objects.create(user=user)
+        profile.save()
+>>>>>>> Stashed changes
         return user
 
 class MyTokenObtainPairSerializer(TokenObtainPairSerializer):
@@ -54,16 +59,22 @@ class MyTokenObtainPairSerializer(TokenObtainPairSerializer):
         return token
 
 
-class profileSerializer(ModelSerializer):
+class ProfileSerializer(ModelSerializer):
     class Meta:
         model = Profile
         fields = '__all__'
 
 
-class AllSkillsSerializer(ModelSerializer):
+class AllSkillSerializer(ModelSerializer):
     class Meta:
         model = AllSkills
         fields = ['name']
+
+class UserSkillSerializer(ModelSerializer):
+    class Meta:
+        model = AllSkills
+        fields = ['name']
+
 
 class EmailVerifySerializer(ModelSerializer):
     class Meta:

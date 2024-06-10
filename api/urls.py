@@ -2,6 +2,8 @@ from django.urls import path
 from . import views
 from rest_framework_simplejwt.views import TokenRefreshView
 
+
+
 urlpatterns = [
     # path('', views.home, name='home'),
     path('auth/register/', views.register, name='register'),
@@ -13,7 +15,10 @@ urlpatterns = [
     path('password/reset/confirm/<int:uid>/<str:key>/', views.confirm_reset_password, name='confirm_reset_password'),
     path('profile/', views.profile_detail, name='profile-detail'),
     path('profile/update/', views.profile_update, name='profile-update'),
+    path('profile/delete/', views.profile_delete, name='delete-user')
 ]
+
+
 
 
 

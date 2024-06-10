@@ -2,6 +2,7 @@ from pathlib import Path
 import resend
 import os
 from dotenv import load_dotenv
+import cloudinary_storage
 
 load_dotenv()
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
@@ -46,6 +47,9 @@ INSTALLED_APPS = [
     'allauth.socialaccount.providers.google',
     # local app
     "api",
+    # cloudinary
+    "cloudinary",
+    "cloudinary_storage"
 ]
 
 MIDDLEWARE = [
@@ -82,21 +86,6 @@ TEMPLATES = [
 WSGI_APPLICATION = "scuibai.wsgi.application"
 
 
-# Database
-# https://docs.djangoproject.com/en/4.2/ref/settings/#databases
-
-# DATABASES = {
-#     "default": {
-#         "ENGINE": "django.db.backends.postgresql",
-#         "NAME": os.getenv("DB_NAME"),
-#         "USER": os.getenv("DB_USER"),
-#         "PASSWORD": os.getenv("DB_PASS"),
-#         "HOST": os.getenv("DB_HOST"),
-#         "PORT": os.getenv("DB_PORT"),
-#     }
-# }
-
-
 DATABASES = {
     "default": {
         "ENGINE": "django.db.backends.postgresql",
@@ -109,9 +98,6 @@ DATABASES = {
 }
 
 
-# Password validation
-# https://docs.djangoproject.com/en/4.2/ref/settings/#auth-password-validators
-
 AUTH_PASSWORD_VALIDATORS = [
     {
         "NAME": "django.contrib.auth.password_validation.UserAttributeSimilarityValidator",
@@ -122,9 +108,6 @@ AUTH_PASSWORD_VALIDATORS = [
 ]
 
 
-# Internationalization
-# https://docs.djangoproject.com/en/4.2/topics/i18n/
-
 LANGUAGE_CODE = "en-us"
 
 TIME_ZONE = "UTC"
@@ -134,19 +117,7 @@ USE_I18N = True
 USE_TZ = True
 
 
-# Static files (CSS, JavaScript, Images)
-# https://docs.djangoproject.com/en/4.2/howto/static-files/
-
 STATIC_URL = "static/"
-
-# STATICFILES_DIRS = [
-#     os.path.join(BASE_DIR, "build/static")
-# ]
-
-# STATIC_ROOT = os.path.join(BASE_DIR, "static")
-
-# Default primary key field type
-# https://docs.djangoproject.com/en/4.2/ref/settings/#default-auto-field
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
@@ -203,3 +174,11 @@ AUTH_USER_MODEL = "api.User"
 APPEND_SLASH = False
 
 ACCOUNT_LOGOUT_ON_GET = True
+
+CLOUDINARY_STORAGE = {
+    'CLOUD_NAME': 'dkvj3fbg9',
+    'API_KEY': '255264913314912',
+    'API_SECRET': 'rGTI_GG2jN8MUI96vjYur0ZtQeE'
+}
+
+DEFAULT_FILE_STORAGE = 'cloudinary_storage.storage.MediaCloudinaryStorage'

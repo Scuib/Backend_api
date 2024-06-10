@@ -1,3 +1,4 @@
+from xml.etree.ElementInclude import default_loader
 from django.db import models
 from django.contrib.auth.models import AbstractUser, PermissionsMixin
 from django.utils.translation import gettext_lazy as _
@@ -33,7 +34,11 @@ class AllSkills(models.Model):
 
 
 class UserSkills(models.Model):
+<<<<<<< Updated upstream
     user_id = models.IntegerField()
+=======
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='skills')
+>>>>>>> Stashed changes
     name = models.CharField(max_length=100)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)

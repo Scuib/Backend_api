@@ -1,5 +1,5 @@
 from django.contrib import admin
-from .models import User, Profile, EmailVerication_Keys, PasswordReset_keys
+from .models import User, Profile, EmailVerication_Keys, PasswordReset_keys, AllSkills, UserSkills
 from django.contrib.auth.admin import UserAdmin
 from django.utils.translation import gettext_lazy as _
 
@@ -70,8 +70,21 @@ class PasswordResetKeysAdmin(admin.ModelAdmin):
         return obj.user.first_name
     get_user_first_name.short_description = 'First Name'
 
+class AllSkillsAdmin(admin.ModelAdmin):
+    list_display = ('id', 'name',)
+
+class UserSkillsAdmin(admin.ModelAdmin):
+    list_display = ('name',)
+
+    def get_user_first_name(self, obj):
+        return obj.user.first_name + ' ' + obj.user.id
+    get_user_first_name.short_description = 'User'
+
+
 
 admin.site.register(User, UserAdminCustom)
 admin.site.register(Profile, ProfileAdmin)
 admin.site.register(EmailVerication_Keys, EmailVericationKeysAdmin)
 admin.site.register(PasswordReset_keys, PasswordResetKeysAdmin)
+admin.site.register(AllSkills, AllSkillsAdmin)
+admin.site.register(UserSkills, UserSkillsAdmin)

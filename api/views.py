@@ -1,16 +1,14 @@
 from django.shortcuts import render, redirect, get_object_or_404
-from django.contrib.auth import logout
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated, AllowAny
 from rest_framework.response import Response
 from rest_framework import status
-from yaml import serialize
-from .models import Profile, User, EmailVerication_Keys, PasswordReset_keys
+from .models import Profile, User, EmailVerication_Keys, PasswordReset_keys, UserSkills, AllSkills
 from rest_framework_simplejwt.views import TokenObtainPairView, TokenBlacklistView
 from .serializer import (MyTokenObtainPairSerializer, UserSerializer,
-                         profileSerializer, EmailVerifySerializer, LoginSerializer)
+                         ProfileSerializer, EmailVerifySerializer, LoginSerializer)
 # from rest_framework.views import APIView
-import resend
+# import resend
 from django.utils import timezone
 from django.utils.translation import gettext_lazy as _
 from .tools import VerifyEmail_key, ResetPassword_key
@@ -19,6 +17,9 @@ from .tools import VerifyEmail_key, ResetPassword_key
 from django.contrib.auth.hashers import make_password, check_password
 
 from allauth.account.models import EmailAddress
+
+import cloudinary.uploader
+# from rest_framework.parsers import MultiPartParser, JSONParser
 
 
 def home(request):
@@ -226,7 +227,7 @@ def profile_detail(request):
     except Profile.DoesNotExist:
         return Response(status=status.HTTP_404_NOT_FOUND)
 
-    serialized_data = profileSerializer(profile)
+    serialized_data = ProfileSerializer(profile)
     if serialized_data.is_valid():
         return Response(serialized_data.data, status=status.HTTP_201_CREATED)
 
@@ -234,6 +235,7 @@ def profile_detail(request):
 
 # Profile Update of Authenticated User
 @api_view(['POST'])
+@permission_classes([IsAuthenticated])
 def profile_update(request):
     # Check if the profile exists
     try:
@@ -241,13 +243,74 @@ def profile_update(request):
     except Profile.DoesNotExist:
         return Response(status=status.HTTP_404_NOT_FOUND)
 
-    serialized_data = profileSerializer(profile, data=request.data, partial=True)
+    # Update skills
+    if 'skills' in request.data:
+        all_skills = AllSkills.objects.values_list('name', flat=True)
+        user_skills = UserSkills.objects.filter(user=request.user).values_list('name', flat=True)
+        new_skills = request.data['skills']
 
-    # Returns the data back
-    # FRONTEND: check if object was sent and validate the users id, Else 404 for false
+        for skill in new_skills:
+            if skill in all_skills and skill not in user_skills:
+                UserSkills.objects.create(user=request.user, name=skill)
+
+        # Set the skills to the profile
+        request.data['skills'] = list(UserSkills.objects.filter(user=request.user).values_list('id', flat=True))
+
+    # Update resume
+    if 'resume' in request.FILES:
+        try:
+            file = request.FILES['resume']
+            upload_data = cloudinary.uploader.upload(file)
+            request.data['resume_url'] = upload_data['secure_url']
+        except Exception as e:
+            return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+    # Update image
+    if 'image' in request.FILES:
+        try:
+            file = request.FILES['image']
+            upload_data = cloudinary.uploader.upload(file)
+            request.data['image_url'] = upload_data['secure_url']
+        except Exception as e:
+            return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+    # Update cover letter
+    if 'cover_letter' in request.FILES:
+        try:
+            file = request.FILES['cover_letter']
+            upload_data = cloudinary.uploader.upload(file)
+            request.data['cover_letter_url'] = upload_data['secure_url']
+        except Exception as e:
+            return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+    # Serialize and update profile
+    serialized_data = ProfileSerializer(profile, data=request.data, partial=True)
+
     if serialized_data.is_valid():
         serialized_data.save()
-
         return Response(serialized_data.data, status=status.HTTP_201_CREATED)
+
     return Response(serialized_data.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+# Delete Authenticated User
+api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def profile_delete(request):
+    try:
+        # Fetch the profile of the authenticated user
+        profile = Profile.objects.get(user=request.user)
+
+        # Delete the profile
+        profile.delete()
+
+        # Optionally delete the user account
+        user = request.user
+        user.delete()
+
+        return Response({"detail": "User and profile deleted successfully."}, status=status.HTTP_204_NO_CONTENT)
+    except Profile.DoesNotExist:
+        return Response({"detail": "Profile not found."}, status=status.HTTP_404_NOT_FOUND)
+    except Exception as e:
+        return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
