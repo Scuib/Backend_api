@@ -33,6 +33,7 @@ class AllSkills(models.Model):
 
 
 class UserSkills(models.Model):
+    user_id = models.IntegerField()
     name = models.CharField(max_length=100)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -49,13 +50,14 @@ class Profile(models.Model):
 
     user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='profile')
     bio = models.TextField(null=True, blank=True)
-    resume = models.TextField(null=True, blank=True)  # Consider FileField for actual files
-    image = models.TextField(null=True, blank=True)   # Consider ImageField for actual images
-    skills = models.ManyToManyField(UserSkills, related_name='skills')
+    resume_url = models.URLField(max_length=200, null=True, blank=True)
+    image_url = models.URLField(max_length=200, null=True, blank=True)
+    skills = models.ForeignKey(UserSkills, on_delete=models.CASCADE, related_name='skills')
     location = models.CharField(max_length=100, null=True, blank=True)
     job_location = models.CharField(max_length=2, choices=JobLocationChoices.choices, default=JobLocationChoices.BOTH)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
+    cover_letter_url = models.URLField(max_length=200, null=True, blank=True)
 
     def __str__(self):
         return self.user.first_name
@@ -73,8 +75,6 @@ class PasswordReset_keys(models.Model):
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='pwd_keys')
     key = models.CharField(max_length=100)
     exp = models.DateTimeField()
-
-
 
 
 

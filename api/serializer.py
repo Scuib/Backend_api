@@ -29,7 +29,16 @@ class UserSerializer(serializers.ModelSerializer):
     def create(self, validated_data):
         validated_data.pop('password2')  # Remove confirm_password from validated data
         validated_data['password'] = make_password(validated_data['password'])
+        # Create User
         user = User.objects.create(**validated_data)
+        user.save()
+        # Save Default Skill English
+        skill = UserSkills.objects.create(user_id=user.id, name='english') # type: ignore
+        skill.save()
+        # Save profile
+        profile = Profile.objects.create(user=user)
+        profile.save()
+
         return user
 
 class MyTokenObtainPairSerializer(TokenObtainPairSerializer):

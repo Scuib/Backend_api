@@ -46,16 +46,6 @@ def register(request):
             email=user.email # type: ignore
         )
         key, exp = VerifyEmail_key(user_id=user.id) # type: ignore Because it sees user as a list and can't access id, It can actually
-        # params = {
-        #     "from": "Acme <onboarding@resend.dev>",
-        #     # "to": [user.email]
-        #     "to": ["cyrile450@gmail.com"], # type: ignore 
-        #     "subject": f"{user.first_name}, Verify your Email", # type: ignore
-        #     "html": f"<strong>Your Verification code is {key}. Expires at {exp}</strong>"
-        #     }
-
-        # email = resend.Emails.send(params=params) # type: ignore
-        # print(email)
 
         return Response({'detail': {'name': user.first_name, 'key': key, 'expires': exp} }, status=status.HTTP_201_CREATED) # type: ignore
     return Response(serialized_data.errors, status=status.HTTP_400_BAD_REQUEST)
