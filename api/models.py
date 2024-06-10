@@ -34,11 +34,7 @@ class AllSkills(models.Model):
 
 
 class UserSkills(models.Model):
-<<<<<<< Updated upstream
     user_id = models.IntegerField()
-=======
-    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='skills')
->>>>>>> Stashed changes
     name = models.CharField(max_length=100)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)

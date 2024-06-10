@@ -150,19 +150,8 @@ def reset_password(request):
     if data:
         
         key, uid = ResetPassword_key(email=data['email']) # type: ignore pylance warning
-        url = f"https://api/password/reset/confirm/{uid}/{key}/"
-        # params = {
-        #     "from": "Acme <onboarding@resend.dev>",
-        #     # "to": [user.email]
-        #     "to": ["cyrile450@gmail.com"], # type: ignore 
-        #     "subject": f"Password Reset", # type: ignore
-        #     "html": f"<strong>Reset your password: {url}</strong>"
-        #     }
-        
-        # email = resend.Emails.send(params=params) # type: ignore
-        # print(email)
 
-        return Response({'detail': {'url': url}}, status=status.HTTP_201_CREATED)
+        return Response({'detail': {'uid': uid, 'key': key}}, status=status.HTTP_201_CREATED)
     return Response({'errors': 'Something went wrong!'}, status=status.HTTP_400_BAD_REQUEST)
 
 # Verify Email Here
