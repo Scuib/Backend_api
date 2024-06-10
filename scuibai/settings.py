@@ -176,9 +176,9 @@ APPEND_SLASH = False
 ACCOUNT_LOGOUT_ON_GET = True
 
 CLOUDINARY_STORAGE = {
-    'CLOUD_NAME': 'dkvj3fbg9',
-    'API_KEY': '255264913314912',
-    'API_SECRET': 'rGTI_GG2jN8MUI96vjYur0ZtQeE'
+    'CLOUD_NAME': os.environ['CLOUD_NAME'],
+    'API_KEY': os.environ['API_KEY'],
+    'API_SECRET': os.environ['API_SECRET']
 }
 
 DEFAULT_FILE_STORAGE = 'cloudinary_storage.storage.MediaCloudinaryStorage'
