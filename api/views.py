@@ -210,17 +210,14 @@ def confirm_reset_password(request, uid, key):
 def profile_detail(request):
     # Check if the profile exists
     try:
-        profile = Profile.objects.filter(user=request.user).values()[0]
+        profile = Profile.objects.get(user=request.user)
 
     # Returns 404 if user is not found
     except Profile.DoesNotExist:
         return Response(status=status.HTTP_404_NOT_FOUND)
 
-    serialized_data = ProfileSerializer(data=profile)
-    if serialized_data.is_valid():
-        return Response(serialized_data.data, status=status.HTTP_201_CREATED)
+    return Response(profile.data, status=status.HTTP_201_CREATED) # type: ignore
 
-    return Response(serialized_data.errors, status=status.HTTP_404_NOT_FOUND)
 
 # Profile Update of Authenticated User
 @api_view(['POST'])
