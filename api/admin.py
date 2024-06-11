@@ -74,11 +74,7 @@ class AllSkillsAdmin(admin.ModelAdmin):
     list_display = ('id', 'name',)
 
 class UserSkillsAdmin(admin.ModelAdmin):
-    list_display = ('name',)
-
-    def get_user_first_name(self, obj):
-        return obj.user.first_name + ' ' + obj.user.id
-    get_user_first_name.short_description = 'User'
+    list_display = ('user_id', 'name')
 
 
 
