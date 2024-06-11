@@ -203,6 +203,8 @@ def confirm_reset_password(request, uid, key):
                         status=status.HTTP_404_NOT_FOUND)
 
 
+from django.http import JsonResponse
+from django.core.exceptions import ObjectDoesNotExist
 
 # Profile Details of Authenticated User
 @api_view(['GET'])
@@ -211,12 +213,23 @@ def profile_detail(request):
     # Check if the profile exists
     try:
         profile = Profile.objects.get(user=request.user)
-
-    # Returns 404 if user is not found
     except Profile.DoesNotExist:
         return Response(status=status.HTTP_404_NOT_FOUND)
 
-    return Response(profile, status=status.HTTP_201_CREATED) # type: ignore
+    profile_data = {
+        'user_id': profile.user.id,
+        'bio': profile.bio,
+        'resume_url': profile.resume_url,
+        'image_url': profile.image_url,
+        'skills': profile.skills.name if profile.skills else None,
+        'location': profile.location,
+        'job_location': profile.get_job_location_display(),
+        'created_at': profile.created_at,
+        'updated_at': profile.updated_at,
+        'cover_letter_url': profile.cover_letter_url,
+    }
+
+    return JsonResponse(profile_data, status=status.HTTP_200_OK)
 
 
 # Profile Update of Authenticated User
