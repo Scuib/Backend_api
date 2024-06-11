@@ -217,15 +217,12 @@ def profile_detail(request):
         return Response(status=status.HTTP_404_NOT_FOUND)
 
     profile_data = {
-        'user_id': profile.user.id,
         'bio': profile.bio,
         'resume_url': profile.resume_url,
         'image_url': profile.image_url,
         'skills': profile.skills.name if profile.skills else None,
         'location': profile.location,
         'job_location': profile.get_job_location_display(),
-        'created_at': profile.created_at,
-        'updated_at': profile.updated_at,
         'cover_letter_url': profile.cover_letter_url,
     }
 
@@ -281,6 +278,8 @@ def profile_update(request):
             request.data['cover_letter_url'] = upload_data['secure_url']
         except Exception as e:
             return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+    
+    request.data['user'] = request.user
 
     # Serialize and update profile
     serialized_data = ProfileSerializer(profile, data=request.data, partial=True)
