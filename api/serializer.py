@@ -36,7 +36,7 @@ class UserSerializer(serializers.ModelSerializer):
         skill = UserSkills.objects.create(user_id=user.id, name='english') # type: ignore
         skill.save()
         # Save profile
-        profile = Profile.objects.create(user=user)
+        profile = Profile.objects.create(user=user, skills=skill)
         profile.save()
 
         return user
