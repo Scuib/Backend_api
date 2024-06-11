@@ -216,7 +216,7 @@ def profile_detail(request):
     except Profile.DoesNotExist:
         return Response(status=status.HTTP_404_NOT_FOUND)
 
-    serialized_data = ProfileSerializer(profile)
+    serialized_data = ProfileSerializer(data=profile)
     if serialized_data.is_valid():
         return Response(serialized_data.data, status=status.HTTP_201_CREATED)
 
