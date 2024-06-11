@@ -216,7 +216,7 @@ def profile_detail(request):
     except Profile.DoesNotExist:
         return Response(status=status.HTTP_404_NOT_FOUND)
 
-    return Response(profile.data, status=status.HTTP_201_CREATED) # type: ignore
+    return Response(profile, status=status.HTTP_201_CREATED) # type: ignore
 
 
 # Profile Update of Authenticated User
