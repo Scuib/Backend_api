@@ -210,8 +210,8 @@ def confirm_reset_password(request, uid, key):
 def profile_detail(request):
     # Check if the profile exists
     try:
-        profile = Profile.objects.get(user=request.user)
-    
+        profile = Profile.objects.filter(user=request.user).values()[0]
+
     # Returns 404 if user is not found
     except Profile.DoesNotExist:
         return Response(status=status.HTTP_404_NOT_FOUND)
