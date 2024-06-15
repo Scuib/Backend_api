@@ -2,7 +2,9 @@ from pathlib import Path
 import resend
 import os
 from dotenv import load_dotenv
-import cloudinary_storage
+import cloudinary.api
+import cloudinary.uploader
+import cloudinary
 
 load_dotenv()
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
@@ -10,18 +12,17 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 
 # SECURITY WARNING: keep the secret key used in production secret!
 # SECRET_KEY = os.getenv("SECRET_KEY")
-SECRET_KEY = os.environ["SECRET_KEY"]
+SECRET_KEY = "django-insecure-_)bt2+o-)hm$!m7z$wvxhnfuf@w&9o-w2i@b)_6p-z(2z*c67o"
 
 # SECURITY WARNING: don't run with debug turned on in production!
 # DEBUG = os.getenv("DEBUG")
-DEBUG = os.environ["DEBUG"]
+DEBUG = True
 
 ALLOWED_HOSTS = ['*']
 
 
 # Application definition
 # resend.api_key = os.getenv("RESEND_API_KEY")
-resend.api_key = os.environ["RESEND_API_KEY"]
 
 INSTALLED_APPS = [
     "django.contrib.admin",
@@ -89,11 +90,11 @@ WSGI_APPLICATION = "scuibai.wsgi.application"
 DATABASES = {
     "default": {
         "ENGINE": "django.db.backends.postgresql",
-        "NAME": os.environ["DB_NAME"],
-        "USER": os.environ["DB_USER"],
-        "PASSWORD": os.environ["DB_PASS"],
-        "HOST": os.environ["DB_HOST"],
-        "PORT": os.environ["DB_PORT"],
+        "NAME": "postgres",
+        "USER": "postgres.lcdflzbtuwavyohtibvn",
+        "PASSWORD": "AN2nWAKl6egttj6S",
+        "HOST": "aws-0-eu-central-1.pooler.supabase.com",
+        "PORT": 6543,
     }
 }
 
@@ -164,8 +165,8 @@ EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
 EMAIL_HOST = 'smtp.gmail.com'
 EMAIL_USE_TLS = True
 EMAIL_PORT = 587
-EMAIL_HOST_USER = os.environ["EMAIL_HOST_USER"]
-EMAIL_HOST_PASSWORD = os.environ["EMAIL_HOST_PASSWORD"]
+EMAIL_HOST_USER = "cyrile450@gmail.com"
+EMAIL_HOST_PASSWORD = "myles2005cyril"
 
 JWT_AUTH_HTTPONLY = False
 
@@ -175,10 +176,9 @@ APPEND_SLASH = False
 
 ACCOUNT_LOGOUT_ON_GET = True
 
-CLOUDINARY_STORAGE = {
-    'CLOUD_NAME': os.environ['CLOUD_NAME'],
-    'API_KEY': os.environ['API_KEY'],
-    'API_SECRET': os.environ['API_SECRET']
-}
 
-DEFAULT_FILE_STORAGE = 'cloudinary_storage.storage.MediaCloudinaryStorage'
+cloudinary.config(
+    cloud_name="dkvj3fbg9",
+    api_key="255264913314912",
+    api_secret="rGTI_GG2jN8MUI96vjYur0ZtQeE"
+)

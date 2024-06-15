@@ -15,7 +15,12 @@ urlpatterns = [
     path('password/reset/confirm/<int:uid>/<str:key>/', views.confirm_reset_password, name='confirm_reset_password'),
     path('profile/', views.profile_detail, name='profile-detail'),
     path('profile/update/', views.profile_update, name='profile-update'),
-    path('profile/delete/', views.profile_delete, name='delete-user')
+    path('profile/delete/', views.profile_delete, name='delete-user'),
+    path('upload/picture/', views.upload_image, name='upload-image'),
+    path('upload/resume/', views.upload_resume, name='upload-resume'),
+    path('upload/cover-letter/', views.upload_cover_letter, name='upload-cover-letter'),
+    path('jobs/create/', views.job_create, name='job-create'),
+    path('jobs/update/', views.job_update, name='job-update')
 ]
 
 

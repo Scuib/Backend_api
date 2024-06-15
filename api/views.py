@@ -1,12 +1,15 @@
+import cloudinary.uploader
 from django.shortcuts import render, redirect, get_object_or_404
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated, AllowAny
 from rest_framework.response import Response
 from rest_framework import status
-from .models import Profile, User, EmailVerication_Keys, PasswordReset_keys, UserSkills, AllSkills
-from rest_framework_simplejwt.views import TokenObtainPairView, TokenBlacklistView
-from .serializer import (MyTokenObtainPairSerializer, UserSerializer,
-                         ProfileSerializer, EmailVerifySerializer, LoginSerializer)
+import cloudinary
+from .models import (Profile, User, EmailVerication_Keys, PasswordReset_keys, JobSkills,
+                     UserSkills, AllSkills, Cover_Letter, Resume, Image, Jobs, Applicants)
+from rest_framework_simplejwt.views import TokenObtainPairView
+from .serializer import (MyTokenObtainPairSerializer, UserSerializer, ProfileSerializer, EmailVerifySerializer,
+                         LoginSerializer, ResumeSerializer, ImageSerializer, CoverLetterSerializer, JobSerializer, ApplicantSerializer)
 # from rest_framework.views import APIView
 # import resend
 from django.utils import timezone
@@ -18,9 +21,9 @@ from django.contrib.auth.hashers import make_password, check_password
 
 from allauth.account.models import EmailAddress
 
-import cloudinary.uploader
-# from rest_framework.parsers import MultiPartParser, JSONParser
+from api import serializer
 
+# from rest_framework.parsers import MultiPartParser, JSONParser
 
 def home(request):
     return render(request, 'home.html')
@@ -215,22 +218,21 @@ def profile_detail(request):
         profile = Profile.objects.get(user=request.user)
     except Profile.DoesNotExist:
         return Response(status=status.HTTP_404_NOT_FOUND)
+    
+    print(profile.skills)
 
     profile_data = {
         'bio': profile.bio,
-        'resume_url': profile.resume_url,
-        'image_url': profile.image_url,
         'skills': profile.skills.name if profile.skills else None,
         'location': profile.location,
         'job_location': profile.get_job_location_display(),
-        'cover_letter_url': profile.cover_letter_url,
     }
 
     return JsonResponse(profile_data, status=status.HTTP_200_OK)
 
 
 # Profile Update of Authenticated User
-@api_view(['POST'])
+@api_view(['POST', 'PUT'])
 @permission_classes([IsAuthenticated])
 def profile_update(request):
     # Check if the profile exists
@@ -242,57 +244,100 @@ def profile_update(request):
     # Update skills
     if 'skills' in request.data:
         all_skills = AllSkills.objects.values_list('name', flat=True)
-        user_skills = UserSkills.objects.filter(user=request.user).values_list('name', flat=True)
-        new_skills = request.data['skills']
+        user_skills = UserSkills.objects.filter(user_id=request.user.id).values_list('name', flat=True)
+        new_skills = request.data.pop('skills')
 
         for skill in new_skills:
             if skill in all_skills and skill not in user_skills:
-                UserSkills.objects.create(user=request.user, name=skill)
+                user_skill, created = UserSkills.objects.get_or_create(user_id=request.user.id, name=skill)
+                profile.objects.update(skills=user_skill)
 
-        # Set the skills to the profile
-        request.data['skills'] = list(UserSkills.objects.filter(user=request.user).values_list('id', flat=True))
+    # Update profile with the remaining fields
+    for attr, value in request.data.items():
+        setattr(profile, attr, value)
+    profile.save()
 
-    # Update resume
-    if 'resume' in request.FILES:
-        try:
-            file = request.FILES['resume']
-            upload_data = cloudinary.uploader.upload(file)
-            request.data['resume_url'] = upload_data['secure_url']
-        except Exception as e:
-            return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+    return Response(ProfileSerializer(profile).data, status=status.HTTP_200_OK)
 
-    # Update image
-    if 'image' in request.FILES:
-        try:
-            file = request.FILES['image']
-            upload_data = cloudinary.uploader.upload(file)
-            request.data['image_url'] = upload_data['secure_url']
-        except Exception as e:
-            return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
-    # Update cover letter
-    if 'cover_letter' in request.FILES:
-        try:
-            file = request.FILES['cover_letter']
-            upload_data = cloudinary.uploader.upload(file)
-            request.data['cover_letter_url'] = upload_data['secure_url']
-        except Exception as e:
-            return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+# Upload Resume
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def upload_resume(request):
+    serialized_data = ResumeSerializer(data=request.data)
     
-    request.data['user'] = request.user
+    if serialized_data.is_valid():
+        try:
+            # Check if resume exists for the user
+            resume = Resume.objects.get(user=request.user)
+            # Update the file field
+            resume.file = cloudinary.uploader.upload(serialized_data.validated_data['file'])['public_id'] # type: ignore
+            resume.save()
+            return Response("Resume updated successfully")
+        except Resume.DoesNotExist:
+            # Create a new resume if it does not exist
+            file= cloudinary.uploader.upload(serialized_data.validated_data['file'])['public_id'] # type: ignore
+            resume = Resume.objects.create(user=request.user, file=file)
+            resume.save()
+            return Response("Resume uploaded successfully")
+    else:
+        return Response(serialized_data.errors, status=400)
 
-    # Serialize and update profile
-    serialized_data = ProfileSerializer(profile, data=request.data, partial=True)
+ 
+
+# Upload Cover letter
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def upload_cover_letter(request):
+    serialized_data = CoverLetterSerializer(data=request.data)
+    
+    if serialized_data.is_valid():
+        try:
+            # Check if cover letter exists for the user
+            cover_letter = Cover_Letter.objects.get(user=request.user)
+            # Update the file field
+            cover_letter.file = cloudinary.uploader.upload(serialized_data.validated_data['file'])['public_id'] # type: ignore
+            cover_letter.save()
+            return Response("Resume updated successfully")
+        except Cover_Letter.DoesNotExist:
+            # Create a new resume if it does not exist
+            file= cloudinary.uploader.upload(serialized_data.validated_data['file'])['public_id'] # type: ignore
+            cover_letter = Cover_Letter.objects.create(user=request.user, file=file)
+            cover_letter.save()
+            return Response("Resume uploaded successfully")
+    else:
+        return Response(serialized_data.errors, status=400)
+
+
+
+# Upload Image
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def upload_image(request):
+    try:
+        image = Image.objects.get(user=request.user)
+    except Exception:
+        return Response("Image does not exist", status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+    serialized_data = ImageSerializer(data=request.data)
 
     if serialized_data.is_valid():
-        serialized_data.save()
-        return Response(serialized_data.data, status=status.HTTP_201_CREATED)
+        file = cloudinary.uploader.upload(serialized_data.validated_data['file'])['public_id'] # type: ignore
+        image.file=file
 
-    return Response(serialized_data.errors, status=status.HTTP_400_BAD_REQUEST)
+        image.save()
+
+        print(image)
+        return Response({'detail': _('Successfully updated!')},
+                        status=status.HTTP_404_NOT_FOUND)
+
+    return Response({'detail': _('Data Not Valid')},
+                        status=status.HTTP_404_NOT_FOUND)
+
 
 
 # Delete Authenticated User
-api_view(['POST'])
+@api_view(['GET', 'DELETE'])
 @permission_classes([IsAuthenticated])
 def profile_delete(request):
     try:
@@ -311,4 +356,63 @@ def profile_delete(request):
         return Response({"detail": "Profile not found."}, status=status.HTTP_404_NOT_FOUND)
     except Exception as e:
         return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def job_create(request):
+    request.data['owner'] = request.user.id  # Ensure user is set correctly
+    
+    all_skills = set(AllSkills.objects.values_list('name', flat=True))
+    new_skills = request.data.pop('skills', [])
+    print(new_skills)
+
+    # Check for invalid skills
+    invalid_skills = [skill for skill in new_skills if skill not in all_skills]
+    if invalid_skills:
+        return Response({"detail": f"Invalid skills: {', '.join(invalid_skills)}"}, status=status.HTTP_400_BAD_REQUEST)
+
+    serialized_data = JobSerializer(data=request.data)
+    print(serialized_data.is_valid())
+
+    if serialized_data.is_valid():
+        serialized_data.save()
+
+        # Create JobSkills relationships
+        job = Jobs.objects.get(id=serialized_data.data['id'])
+    
+        for skill in new_skills:
+            job_skill, created = JobSkills.objects.get_or_create(job=job, name=skill)
+            job_skill.save()
+
+        return Response({'detail': _("Job Successfully posted!")}, status=status.HTTP_201_CREATED)
+    
+    return Response(serialized_data.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+@api_view(['POST', 'PUT'])
+@permission_classes([IsAuthenticated])
+def job_update(request):
+    try:
+        job = Jobs.objects.get(user=request.user)
+    except Jobs.DoesNotExist:
+        return Response(status=status.HTTP_404_NOT_FOUND)
+
+    # Update skills
+    if 'skills' in request.data:
+        all_skills = AllSkills.objects.values_list('name', flat=True)
+        job_skills = JobSkills.objects.filter(user_id=request.user.id).values_list('name', flat=True)
+        new_skills = request.data.pop('skills')
+
+        for skill in new_skills:
+            if skill in all_skills and skill not in job_skills:
+                user_skill, created = JobSkills.objects.get_or_create(user_id=request.user.id, name=skill)
+                job.objects.update(skills=user_skill)
+
+    # Update profile with the remaining fields
+    for attr, value in request.data.items():
+        setattr(job, attr, value)
+    job.save()
+
+    return Response(ProfileSerializer(job).data, status=status.HTTP_200_OK)
 

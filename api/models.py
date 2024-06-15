@@ -3,6 +3,7 @@ from django.db import models
 from django.contrib.auth.models import AbstractUser, PermissionsMixin
 from django.utils.translation import gettext_lazy as _
 from .managers import CustomUserManager
+from cloudinary.models import CloudinaryField
 
 class User(AbstractUser):
     email = models.EmailField(unique=True)
@@ -51,17 +52,27 @@ class Profile(models.Model):
 
     user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='profile')
     bio = models.TextField(null=True, blank=True)
-    resume_url = models.URLField(max_length=200, null=True, blank=True)
-    image_url = models.URLField(max_length=200, null=True, blank=True)
     skills = models.ForeignKey(UserSkills, on_delete=models.CASCADE, related_name='skills')
     location = models.CharField(max_length=100, null=True, blank=True)
     job_location = models.CharField(max_length=2, choices=JobLocationChoices.choices, default=JobLocationChoices.BOTH)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
-    cover_letter_url = models.URLField(max_length=200, null=True, blank=True)
 
     def __str__(self):
         return self.user.first_name
+
+class Resume(models.Model):
+    user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='resume')
+    file = CloudinaryField('resume')
+
+class Cover_Letter(models.Model):
+    user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='cover_letter')
+    file = CloudinaryField('cover_letter')
+
+class Image(models.Model):
+    user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='image')
+    file = CloudinaryField('image')
+
 
 
 # This is to store every email verification key issued 
@@ -79,5 +90,42 @@ class PasswordReset_keys(models.Model):
 
 
 
+class Jobs(models.Model):
+    class CurrencyChoices(models.TextChoices):
+        usd = 'USD', 'United States Dollar'
+        ngn = 'NGN', 'Nigerian Naira'
+        eur = 'EUR', 'Euros'
+
+    
+    class EmploymentType(models.TextChoices):
+        REMOTE = 'R', 'Remote'
+        ONSITE = 'O', 'Onsite'
+
+    class ExperienceLevel(models.TextChoices):
+        entry = 'ENTRY', 'Entry Level'
+        mid = 'MID', 'Mid Level'
+        senior = 'SENIOR', 'Senior Level'
+        lead = 'LEAD', 'Lead Level'
+    owner = models.ForeignKey(User, on_delete=models.CASCADE, related_name='jobs')
+    title = models.CharField(max_length=50)
+    description = models.TextField()
+    location = models.CharField(max_length=255)
+    salary = models.IntegerField()
+    currency_type = models.CharField(max_length=30, choices=CurrencyChoices.choices, default=CurrencyChoices.ngn)
+    employment_type = models.CharField(max_length=20, choices=EmploymentType.choices)
+    experience_level = models.CharField(max_length=20, choices=ExperienceLevel.choices)
 
 
+class Applicants(models.Model):
+    applicant = models.ForeignKey(User, on_delete=models.CASCADE, related_name='applicant')
+    job = models.ForeignKey(Jobs, on_delete=models.CASCADE, related_name='job')
+
+
+class JobSkills(models.Model):
+    job = models.ForeignKey(Jobs, on_delete=models.CASCADE, related_name='job_skills')
+    name = models.CharField(max_length=100)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self) -> str:
+        return self.name
