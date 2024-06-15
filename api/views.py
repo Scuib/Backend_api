@@ -398,7 +398,12 @@ def job_update(request):
     except Jobs.DoesNotExist:
         return Response(status=status.HTTP_404_NOT_FOUND)
 
-    # Update skills
+    # Update profile with the remaining fields
+    for attr, value in request.data.items():
+        setattr(job, attr, value)
+    job.save()
+
+        # Update skills
     if 'skills' in request.data:
         all_skills = AllSkills.objects.values_list('name', flat=True)
         job_skills = JobSkills.objects.filter(user_id=request.user.id).values_list('name', flat=True)
@@ -406,13 +411,52 @@ def job_update(request):
 
         for skill in new_skills:
             if skill in all_skills and skill not in job_skills:
-                user_skill, created = JobSkills.objects.get_or_create(user_id=request.user.id, name=skill)
-                job.objects.update(skills=user_skill)
-
-    # Update profile with the remaining fields
-    for attr, value in request.data.items():
-        setattr(job, attr, value)
-    job.save()
+                JobSkills.objects.get_or_create(job=job, name=skill)
 
     return Response(ProfileSerializer(job).data, status=status.HTTP_200_OK)
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def user_jobs(request):
+    user = request.user
+    jobs = Jobs.objects.filter(owner=user)
+    job_list = []
+    for job in jobs:
+        skills = [skill.name for skill in job.job_skills.all()] #job_skills is the related_name in JobSkills
+        job_data = {
+            'id': job.id,
+            'title': job.title,
+            'description': job.description,
+            'location': job.location,
+            'salary': job.salary,
+            'currency_type': job.currency_type,
+            'employment_type': job.employment_type,
+            'experience_level': job.experience_level,
+            'skills': skills,
+        }
+        job_list.append(job_data)
+    return Response(job_list)
+
+
+@api_view(['GET'])
+@permission_classes([AllowAny])
+def all_jobs(request):
+    jobs = Jobs.objects.all()
+    job_list = []
+    for job in jobs:
+        skills = [skill.name for skill in job.job_skills.all()]
+        job_data = {
+            'id': job.id,
+            'title': job.title,
+            'description': job.description,
+            'location': job.location,
+            'salary': job.salary,
+            'currency_type': job.currency_type,
+            'employment_type': job.employment_type,
+            'experience_level': job.experience_level,
+            'skills': skills,
+        }
+        job_list.append(job_data)
+    return Response(job_list)
+
 
