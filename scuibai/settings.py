@@ -11,11 +11,12 @@ load_dotenv()
 BASE_DIR = Path(__file__).resolve().parent.parent
 
 # SECURITY WARNING: keep the secret key used in production secret!
-# SECRET_KEY = os.getenv("SECRET_KEY")
+SECRET_KEY = os.getenv("SECRET_KEY")
 SECRET_KEY = "django-insecure-_)bt2+o-)hm$!m7z$wvxhnfuf@w&9o-w2i@b)_6p-z(2z*c67o"
 
 # SECURITY WARNING: don't run with debug turned on in production!
-# DEBUG = os.getenv("DEBUG")
+DEBUG = os.getenv("DEBUG")
+SECRET_KEY = "django-insecure-_)bt2+o-)hm$!m7z$wvxhnfuf@w&9o-w2i@b)_6p-z(2z*c67o"
 DEBUG = True
 
 ALLOWED_HOSTS = ['*']
@@ -165,8 +166,8 @@ EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
 EMAIL_HOST = 'smtp.gmail.com'
 EMAIL_USE_TLS = True
 EMAIL_PORT = 587
-EMAIL_HOST_USER = "cyrile450@gmail.com"
-EMAIL_HOST_PASSWORD = "myles2005cyril"
+EMAIL_HOST_USER = os.environ["EMAIL_HOST_USER"]
+EMAIL_HOST_PASSWORD = os.environ["EMAIL_HOST_PASSWORD"]
 
 JWT_AUTH_HTTPONLY = False
 
@@ -178,7 +179,7 @@ ACCOUNT_LOGOUT_ON_GET = True
 
 
 cloudinary.config(
-    cloud_name="dkvj3fbg9",
-    api_key="255264913314912",
-    api_secret="rGTI_GG2jN8MUI96vjYur0ZtQeE"
+    cloud_name=os.environ["CLOUD_NAME"],
+    api_key=os.environ["API_KEY"],
+    api_secret=os.environ["API_SECRET"]
 )
