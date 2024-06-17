@@ -1,0 +1,52 @@
+owner,title,description,location,min_salary,max_salary,currency_type,employment_type,experience_level,skills
+1,Software Engineer,PHP Software Engineer needed,California,90,110,USD,Hybrid,LEAD,HTML;CSS;PHP
+2,Data Analyst,Analyze data and generate insights,New York,70,90,USD,Remote,ENTRY,Excel;SQL;Python
+3,Project Manager,Manage project timelines and deliverables,London,85,105,EUR,Onsite,MID,Agile;Scrum;Leadership
+4,UX Designer,Design user interfaces for web and mobile,San Francisco,80,100,USD,Remote,SENIOR,Sketch;Figma;Adobe XD
+5,System Administrator,Maintain and support IT infrastructure,Chicago,75,95,NGN,Hybrid,LEAD,Windows Server;Linux;Networking
+6,Backend Developer,Develop server-side logic and databases,Austin,100,120,USD,Onsite,ENTRY,Python;Django;PostgreSQL
+7,Marketing Specialist,Develop and execute marketing campaigns,Miami,65,85,EUR,Remote,MID,SEO;Google Analytics;Content Marketing
+8,DevOps Engineer,Automate and optimize CI/CD processes,Dallas,110,130,USD,Hybrid,SENIOR,Jenkins;Docker;Kubernetes
+9,HR Manager,Oversee HR operations and strategies,Boston,60,80,NGN,Onsite,LEAD,Recruitment;Payroll;Employee Relations
+10,Full Stack Developer,Develop front-end and back-end solutions,Seattle,95,115,USD,Remote,ENTRY,JavaScript;React;Node.js
+11,Graphic Designer,Create visual concepts and graphics,Los Angeles,55,75,EUR,Hybrid,MID,Adobe Photoshop;Illustrator;InDesign
+12,Data Engineer,Build and maintain data pipelines,Denver,105,125,USD,Onsite,SENIOR,Hadoop;Spark;SQL
+13,Product Owner,Define product vision and roadmap,Atlanta,88,108,NGN,Remote,LEAD,Product Management;Agile;Scrum
+14,Mobile Developer,Develop mobile applications for iOS and Android,Las Vegas,77,97,USD,Hybrid,ENTRY,Swift;Kotlin;React Native
+15,Business Analyst,Analyze business requirements and processes,San Diego,82,102,EUR,Onsite,MID,Business Analysis;SQL;UML
+16,Network Engineer,Design and implement network solutions,Portland,72,92,USD,Remote,SENIOR,Cisco;Firewall;VPN
+17,Sales Manager,Drive sales strategies and performance,Charlotte,68,88,NGN,Hybrid,LEAD,Salesforce;CRM;Negotiation
+18,Data Scientist,Extract insights from complex data sets,Orlando,102,122,USD,Onsite,ENTRY,Python;R;Machine Learning
+19,Customer Support,Provide customer service and support,San Antonio,50,70,EUR,Remote,MID,Customer Service;Zendesk;Communication
+20,IT Consultant,Advise on IT solutions and strategies,Phoenix,93,113,USD,Hybrid,SENIOR,ITIL;Project Management;Consulting
+21,Security Analyst,Monitor and respond to security threats,Columbus,83,103,NGN,Onsite,LEAD,Security Analysis;SIEM;Incident Response
+22,QA Engineer,Ensure software quality and testing,Indianapolis,58,78,USD,Remote,ENTRY,Test Automation;Selenium;Manual Testing
+23,Cloud Architect,Design and deploy cloud solutions,Detroit,110,130,EUR,Hybrid,MID,AWS;Azure;GCP
+24,Technical Writer,Create technical documentation and manuals,Memphis,63,83,USD,Onsite,SENIOR,Technical Writing;Documentation;Manuals
+25,Finance Manager,Oversee financial planning and analysis,Baltimore,78,98,NGN,Remote,LEAD,Financial Analysis;Budgeting;Forecasting
+26,Operations Manager,Manage day-to-day operations,Kansas City,80,100,USD,Hybrid,ENTRY,Operations Management;Supply Chain;Process Improvement
+27,Web Developer,Develop and maintain websites,San Jose,67,87,EUR,Onsite,MID,HTML;CSS;JavaScript
+28,Content Creator,Develop content for various platforms,Nashville,70,90,USD,Remote,SENIOR,Content Creation;SEO;Social Media
+29,Recruiter,Source and recruit candidates for job openings,Oklahoma City,60,80,NGN,Hybrid,LEAD,Recruiting;Talent Acquisition;Interviewing
+30,Technical Support,Provide technical assistance to customers,Milwaukee,55,75,USD,Onsite,ENTRY,Technical Support;Troubleshooting;Customer Service
+31,Software Architect,Design software architecture and frameworks,Albuquerque,100,120,EUR,Remote,MID,Software Architecture;Microservices;Design Patterns
+32,IT Manager,Manage IT projects and teams,Honolulu,87,107,USD,Hybrid,SENIOR,IT Management;Project Management;Leadership
+33,Data Analyst,Perform data analysis and reporting,New Orleans,69,89,NGN,Onsite,LEAD,Data Analysis;SQL;Tableau
+34,SEO Specialist,Optimize website for search engines,Omaha,62,82,USD,Remote,ENTRY,SEO;Google Analytics;Keyword Research
+35,AI Engineer,Develop AI models and algorithms,Raleigh,120,140,EUR,Hybrid,MID,Machine Learning;Deep Learning;Python
+36,Digital Marketer,Execute digital marketing strategies,Tulsa,66,86,USD,Onsite,SENIOR,Digital Marketing;Social Media;PPC
+37,Database Administrator,Manage and maintain databases,Minneapolis,81,101,NGN,Remote,LEAD,Database Management;SQL;Oracle
+38,IT Support,Provide IT support and troubleshooting,Wichita,54,74,USD,Hybrid,ENTRY,Technical Support;Help Desk;Troubleshooting
+39,Mobile Designer,Design interfaces for mobile applications,Arlington,75,95,EUR,Onsite,MID,UI Design;UX Design;Prototyping
+40,Blockchain Developer,Develop blockchain-based solutions,Bakersfield,115,135,USD,Remote,SENIOR,Blockchain;Ethereum;Smart Contracts
+41,Technical Analyst,Analyze technical requirements and systems,Durham,71,91,NGN,Hybrid,LEAD,System Analysis;Requirements Gathering;Technical Writing
+42,Social Media Manager,Manage social media accounts and campaigns,Chula Vista,59,79,USD,Onsite,ENTRY,Social Media Management;Content Creation;Analytics
+43,Game Developer,Develop video games for various platforms,Reno,105,125,EUR,Remote,MID,Unity;C#;Game Design
+44,Technical Recruiter,Recruit for technical roles,St. Petersburg,64,84,USD,Hybrid,SENIOR,Technical Recruiting;Interviewing;Candidate Sourcing
+45,Machine Learning Engineer,Develop machine learning models,Lexington,122,142,NGN,Onsite,LEAD,Machine Learning;Python;Data Science
+46,UI Developer,Develop user interfaces for applications,Henderson,73,93,USD,Remote,ENTRY,JavaScript;React;CSS
+47,Big Data Engineer,Handle large-scale data processing,Anchorage,108,128,EUR,Hybrid,MID,Hadoop;Spark;NoSQL
+48,Customer Success Manager,Ensure customer satisfaction and retention,Lubbock,67,87,USD,Onsite,SENIOR,Customer Success;Account Management;Customer Relations
+49,Front-End Developer,Develop front-end components and interfaces,Scottsdale,76,96,NGN,Remote,LEAD,JavaScript;HTML;CSS
+50,Network Administrator,Manage network infrastructure and security,Glendale,78,98,USD,Hybrid,ENTRY,Network Administration;Cisco;Firewall
+51,DevOps Specialist,Optimize development and operations workflow,Richmond,111,131,EUR,Onsite,MID,DevOps;CI/CD;Docker

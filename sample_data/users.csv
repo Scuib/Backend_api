@@ -1,0 +1,26 @@
+user,min_salary,max_salary,currency_type,location,job_location,skills,experience
+1,500,1000,EUR,Nigeria,Hybrid,Python;PHP;HTML,3
+2,400,800,USD,New York,Remote,SQL;Excel;Data Analysis,2
+3,600,1200,USD,San Francisco,Onsite,Project Management;Risk Management;Scrum,5
+4,700,1100,USD,Los Angeles,Remote,Adobe XD;Sketch;UI/UX Design,4
+5,450,900,NGN,Lagos,Hybrid,Windows Server;Linux;Networking,3
+6,550,1050,USD,Seattle,Onsite,Node.js;Python;MongoDB,3
+7,350,700,EUR,Paris,Remote,SEO;Content Marketing;Google Analytics,2
+8,800,1300,USD,Chicago,Onsite,Docker;Kubernetes;Jenkins,5
+9,300,600,NGN,Abuja,Hybrid,Recruitment;Employee Relations;HR Strategy,2
+10,650,1000,USD,Boston,Remote,React;JavaScript;GraphQL,4
+11,250,500,EUR,Berlin,Hybrid,Adobe Creative Suite;Illustration;Typography,2
+12,700,1300,USD,Dallas,Onsite,Big Data;Spark;ETL,5
+13,550,1050,NGN,Port Harcourt,Remote,Agile;Product Management;Scrum,3
+14,400,800,USD,Miami,Onsite,React Native;Swift;iOS Development,3
+15,500,950,EUR,Madrid,Remote,SQL;Business Analysis;Data Modeling,4
+16,350,750,USD,Denver,Onsite,Cisco;Network Security;Firewall,3
+17,300,600,NGN,Abuja,Hybrid,Salesforce;CRM;Negotiation,2
+18,800,1200,USD,San Diego,Remote,Machine Learning;Python;Data Mining,5
+19,250,500,EUR,London,Onsite,Zendesk;Customer Support;Communication,2
+20,700,1100,USD,San Francisco,Hybrid,Consulting;ITIL;Project Management,4
+21,400,900,NGN,Lagos,Remote,Security Analysis;SIEM;Incident Response,3
+22,300,700,USD,Seattle,Onsite,Selenium;Test Automation;Manual Testing,3
+23,600,1200,EUR,Paris,Hybrid,AWS;Azure;GCP,5
+24,450,850,USD,Chicago,Remote,Technical Writing;Documentation;Editing,3
+25,350,700,NGN,Abuja,Onsite,Financial Analysis;Budgeting;Forecasting,2
