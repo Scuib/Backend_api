@@ -3,7 +3,8 @@ import cloudinary.uploader
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 import cloudinary
 from scuibai.settings import BASE_DIR
-from .models import AllSkills, Image, Resume, User, Profile, UserSkills, EmailVerication_Keys, PasswordReset_keys, Jobs, Applicants
+from .models import (AllSkills, Image, Resume, User, Profile, UserSkills, 
+                     EmailVerication_Keys, PasswordReset_keys, Jobs, Applicants, CompanyProfile)
 
 from django.contrib.auth.hashers import make_password
 
@@ -39,27 +40,10 @@ class UserSerializer(serializers.ModelSerializer):
         # Create User
         user = User.objects.create(**validated_data)
         user.save()
-        print(user)
-        try:
-            # Save Default Skill English
-            skill = UserSkills.objects.create(user_id=user.id, name='english') # type: ignore
-            skill.save()
-            print(skill)
-            # Save profile
-            profile = Profile.objects.create(user=user, skills=skill)
-            profile.save()
-            print(profile)
-            # Save Defualt Pictures
-            file = cloudinary.uploader.upload(BASE_DIR / 'static/default.jpg')['public_id']
-            image = Image.objects.create(user=user, file=file)
-            image.save()
-            print(image)
-
-        except Exception as e:
-            user.delete()  # Clean up if there's an error
-            raise serializers.ValidationError(f"An error occurred: {e}")
-
+        # print(user)
         return user
+
+
 
 class MyTokenObtainPairSerializer(TokenObtainPairSerializer):
     @classmethod
@@ -69,7 +53,6 @@ class MyTokenObtainPairSerializer(TokenObtainPairSerializer):
         # Add custom claims
         token['username'] = user.username
         token['email'] = user.email
-        
 
         return token
 
@@ -125,3 +108,10 @@ class JobSerializer(ModelSerializer):
     class Meta:
         model = Jobs
         fields = '__all__'
+
+
+class CompanySerializer(ModelSerializer):
+    class Meta:
+        model = CompanyProfile
+        fields = '__all__'
+

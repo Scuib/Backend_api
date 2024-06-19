@@ -22,7 +22,9 @@ urlpatterns = [
     path('jobs/create/', views.job_create, name='job-create'),
     path('jobs/update/', views.job_update, name='job-update'),
     path('user/jobs/', views.user_jobs, name='user_jobs'),
-    path('jobs/', views.all_jobs, name='all_jobs'),
+    path('jobs/all', views.all_jobs, name='all_jobs'),
+    path('jobs/', views.user_jobs, name='user-jobs'),
+    path('apply/', views.applicant, name='apply')
 ]
 
 
