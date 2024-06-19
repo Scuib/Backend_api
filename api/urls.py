@@ -24,7 +24,9 @@ urlpatterns = [
     path('user/jobs/', views.user_jobs, name='user_jobs'),
     path('jobs/all', views.all_jobs, name='all_jobs'),
     path('jobs/', views.user_jobs, name='user-jobs'),
-    path('apply/', views.applicant, name='apply')
+    path('apply/', views.applicant, name='apply'),
+    path('company/update/', views.company_update, name='company-update'),
+    path('comapny/', views.company, name='company-profile')
 ]
 
 
