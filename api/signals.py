@@ -14,11 +14,9 @@ def create_user_signals(sender, instance, created, **kwargs):
             return ""
         # Create UserSkills
         skill = UserSkills.objects.create(user_id=instance.id, name='english')
-        skill.save()
 
         # Create UserCategories
         category = UserCategories.objects.create(user_id=instance.id, name='defualt')
-        category.save()
 
         # Create Profile
         profile = Profile.objects.create(
@@ -26,13 +24,11 @@ def create_user_signals(sender, instance, created, **kwargs):
             skills = skill,
             category = category
         )
-        profile.save()
 
         # Create Image Field
         # Save Defualt Pictures
         file = cloudinary.uploader.upload(BASE_DIR / 'static/default.jpg')['public_id']
         image = Image.objects.create(user=instance, file=file)
-        image.save()
 
         return "All Models created"
 
