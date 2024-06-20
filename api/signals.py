@@ -18,7 +18,7 @@ def create_user_signals(sender, instance, created, **kwargs):
         
         # Create UserCategories
         category = UserCategories.objects.create(user=instance.id, name='default')
-        categories = UserCategories.objects.filter(user_id=instance.id).values_list('name', flat=True)
+        categories = UserCategories.objects.filter(user=instance.id).values_list('name', flat=True)
         
         # Create Profile
         profile = Profile.objects.create(user=instance, skills=skills, categories=categories)

@@ -243,7 +243,7 @@ def profile_update(request):
                 profile.objects.update(skills=user_skill)
 
     if 'categories' in request.data:
-        categories = UserCategories.objects.filter(user_id=request.user.id).values_list('name', flat=True)
+        categories = UserCategories.objects.filter(user=request.user.id).values_list('name', flat=True)
         new_categories = request.data.pop('categories')
 
         for category in new_categories:
