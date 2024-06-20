@@ -6,49 +6,25 @@ import cloudinary.uploader
 from scuibai.settings import BASE_DIR
 
 
-# Throw signal when user is created and saved
 @receiver(post_save, sender=User)
-# def create_user_signals(sender, instance, created, **kwargs):
-#     if created:
-#         if not instance.company is False:
-#             return ""
-#         # Create UserSkills
-#         skill = UserSkills.objects.create(user_id=instance.id, name='english')
+def create_user_signals(sender, instance, created, **kwargs):
+    if created:
+        if instance.company:  # Check if the user is a company
+            return ""
+        
+        # Create UserSkills
+        skill = UserSkills.objects.create(user_id=instance.id, name='english')
+        skills = UserSkills.objects.filter(user_id=instance.id).values_list('name', flat=True)
+        
+        # Create UserCategories
+        category = UserCategories.objects.create(user=instance.id, name='default')
+        categories = UserCategories.objects.filter(user_id=instance.id).values_list('name', flat=True)
+        
+        # Create Profile
+        profile = Profile.objects.create(user=instance, skills=skills, categories=categories)
 
-#         # Create UserCategories
-#         category = UserCategories.objects.create(user_id=instance.id, name='defualt')
-
-#         # Create Profile
-#         profile = Profile.objects.create(
-#             user=instance,
-#             skills = skill,
-#             category = category
-#         )
-
-#         # Create Image Field
-#         # Save Defualt Pictures
-#         file = cloudinary.uploader.upload(BASE_DIR / 'static/default.jpg')['public_id']
-#         image = Image.objects.create(user=instance, file=file)
-
-#         return "All Models created"
-
-#     return ""
-
-
-@receiver(post_save, sender=User)
-def create_user_skills(sender, instance, created, **kwargs):
-    if created and not instance.company:
-        UserSkills.objects.create(user_id=instance.id, name='english')
-
-@receiver(post_save, sender=User)
-def create_user_categories(sender, instance, created, **kwargs):
-    if created and not instance.company:
-        UserCategories.objects.create(user_id=instance.id, name='default')
-
-@receiver(post_save, sender=User)
-def create_user_profile(sender, instance, created, **kwargs):
-    if created and not instance.company:
-        Profile.objects.create(user=instance)
+        return "All Models created"
+    return ""
 
 @receiver(post_save, sender=User)
 def create_user_image(sender, instance, created, **kwargs):
