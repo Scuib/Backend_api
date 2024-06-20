@@ -42,7 +42,7 @@ def register(request):
             user=user,
             email=user.email # type: ignore
         )
-        key, exp = VerifyEmail_key(user_id=user.id) # type: ignore Because it sees user as a list and can't access id, It can actually
+        key, exp = VerifyEmail_key(user.id)
 
         return Response({'detail': {'name': user.first_name, 'key': key, 'expires': exp} }, status=status.HTTP_201_CREATED) # type: ignore
     return Response(serialized_data.errors, status=status.HTTP_400_BAD_REQUEST)
