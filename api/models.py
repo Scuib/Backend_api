@@ -1,5 +1,6 @@
 from django.db import models
 from django.contrib.auth.models import AbstractUser, PermissionsMixin
+from django.urls import translate_url
 from django.utils.translation import gettext_lazy as _
 from .managers import CustomUserManager
 from cloudinary.models import CloudinaryField
@@ -85,8 +86,8 @@ class Profile(models.Model):
     bio = models.TextField(null=True, blank=True)
     location = models.CharField(max_length=100, null=True, blank=True)
     job_location = models.CharField(max_length=2, choices=JobLocationChoices.choices, default=JobLocationChoices.HYBRID)
-    max_salary = models.IntegerField()
-    min_salary = models.IntegerField()
+    max_salary = models.IntegerField(default=100)
+    min_salary = models.IntegerField(default=10)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -193,10 +194,10 @@ class Assits(models.Model):
 
     owner = models.ForeignKey(User, on_delete=models.CASCADE, related_name='assists')
     title = models.CharField(max_length=50)
-    description = models.TextField()
+    description = models.TextField(null=True, blank=True)
     location = models.CharField(max_length=255)
-    max_pay = models.IntegerField()
-    min_pay = models.IntegerField()
+    max_pay = models.IntegerField(default=100)
+    min_pay = models.IntegerField(default=10)
     currency_type = models.CharField(max_length=30, choices=CurrencyChoices.choices, default=CurrencyChoices.ngn)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
