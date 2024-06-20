@@ -38,12 +38,12 @@ from scuibai.settings import BASE_DIR
 @receiver(post_save, sender=User)
 def create_user_skills(sender, instance, created, **kwargs):
     if created and not instance.company:
-        UserSkills.objects.create(user=instance, name='english')
+        UserSkills.objects.create(user_id=instance.id, name='english')
 
 @receiver(post_save, sender=User)
 def create_user_categories(sender, instance, created, **kwargs):
     if created and not instance.company:
-        UserCategories.objects.create(user=instance, name='default')
+        UserCategories.objects.create(user_id=instance.id, name='default')
 
 @receiver(post_save, sender=User)
 def create_user_profile(sender, instance, created, **kwargs):
