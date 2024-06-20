@@ -234,21 +234,21 @@ def profile_update(request):
 
     # Update skills
     if 'skills' in request.data:
-        user_skills = UserSkills.objects.filter(user_id=request.user.id).values_list('name', flat=True)
+        user_skills = UserSkills.objects.filter(user=request.user).values_list('name', flat=True)
         new_skills = request.data.pop('skills')
 
         for skill in new_skills:
             if skill not in user_skills:
-                user_skill, created = UserSkills.objects.get_or_create(user_id=request.user.id, name=skill)
+                user_skill, created = UserSkills.objects.get_or_create(user=request.user, name=skill)
                 profile.objects.update(skills=user_skill)
 
     if 'categories' in request.data:
-        categories = UserCategories.objects.filter(user=request.user.id).values_list('name', flat=True)
+        categories = UserCategories.objects.filter(user=request.user).values_list('name', flat=True)
         new_categories = request.data.pop('categories')
 
         for category in new_categories:
             if category not in categories:
-                user_category, created = UserCategories.objects.get_or_create(user_id=request.user.id, name=category)
+                user_category, created = UserCategories.objects.get_or_create(user=request.user, name=category)
                 profile.objects.update(category=user_category)
 
     # Update profile with the remaining fields

@@ -13,15 +13,13 @@ def create_user_signals(sender, instance, created, **kwargs):
             return ""
         
         # Create UserSkills
-        skill = UserSkills.objects.create(user_id=instance.id, name='english')
-        skills = UserSkills.objects.filter(user_id=instance.id).values_list('name', flat=True)
+        skill = UserSkills.objects.create(user=instance, name='english')
         
         # Create UserCategories
-        category = UserCategories.objects.create(user=instance.id, name='default')
-        categories = UserCategories.objects.filter(user=instance.id).values_list('name', flat=True)
+        category = UserCategories.objects.create(user=instance, name='default')
         
         # Create Profile
-        profile = Profile.objects.create(user=instance, skills=skills, categories=categories)
+        profile = Profile.objects.create(user=instance)
 
         return "All Models created"
     return ""
