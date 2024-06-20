@@ -38,7 +38,7 @@ class AllSkills(models.Model):
 # Example: python, SQL
 # This model should have a limit 10
 class UserSkills(models.Model):
-    user_id = models.IntegerField()
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='skills')
     name = models.CharField(max_length=100)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -51,7 +51,7 @@ class UserSkills(models.Model):
 # Example: Backend Developer, Software Engineer
 # This model should have a limit 5
 class UserCategories(models.Model):
-    user = models.IntegerField()
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='categories')
     name = models.CharField(max_length=100)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -85,8 +85,6 @@ class Profile(models.Model):
     bio = models.TextField(null=True, blank=True)
     location = models.CharField(max_length=100, null=True, blank=True)
     job_location = models.CharField(max_length=2, choices=JobLocationChoices.choices, default=JobLocationChoices.HYBRID)
-    skills = models.ForeignKey(UserSkills, on_delete=models.CASCADE, related_name='skills')
-    categories = models.ForeignKey(UserCategories, on_delete=models.CASCADE, related_name='categories')
     max_salary = models.IntegerField()
     min_salary = models.IntegerField()
     created_at = models.DateTimeField(auto_now_add=True)
