@@ -64,7 +64,7 @@ class UserCategories(models.Model):
 
 class CompanyProfile(models.Model):
     owner = models.OneToOneField(User, on_delete=models.CASCADE, related_name='company_profile')
-    address = models.TextField()
+    address = models.TextField(blank=True, null=True)
     website = models.URLField(max_length=200, blank=True, null=True)
     description = models.TextField(blank=True, null=True)
     established_date = models.DateField(blank=True, null=True)
