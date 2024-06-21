@@ -152,7 +152,7 @@ class Jobs(models.Model):
         senior = 'SENIOR', 'Senior Level'
         lead = 'LEAD', 'Lead Level'
 
-    owner = models.ForeignKey(User, on_delete=models.CASCADE, related_name='jobs')
+    owner = models.ManyToManyField(User, related_name='jobs')
     title = models.CharField(max_length=50)
     description = models.TextField()
     location = models.CharField(max_length=255)
