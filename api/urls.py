@@ -7,6 +7,7 @@ from rest_framework_simplejwt.views import TokenRefreshView
 urlpatterns = [
     # path('', views.home, name='home'),
     path('auth/register/', views.register, name='register'),
+    path('/auth/resend-verify-email/', views.resend_verify_email, name='resend-verify-email'),
     path('auth/verify-email/', views.verify_email, name='verify_email'),
     path('auth/sign-in/', views.login, name='login'),
     path('logout/', views.logout, name="logout"),
@@ -22,11 +23,13 @@ urlpatterns = [
     path('jobs/create/', views.job_create, name='job-create'),
     path('jobs/update/', views.job_update, name='job-update'),
     path('user/jobs/', views.user_jobs, name='user_jobs'),
-    path('jobs/all', views.all_jobs, name='all_jobs'),
+    path('jobs/all/', views.all_jobs, name='all_jobs'),
     path('jobs/', views.user_jobs, name='user-jobs'),
-    path('apply/', views.applicant, name='apply'),
+    path('apply/job_id', views.applicant, name='apply'),
     path('company/update/', views.company_update, name='company-update'),
-    path('comapny/', views.company, name='company-profile')
+    path('comapny/', views.company, name='company-profile'),
+    path('assist/create', views.assist_create, name='assist-create'),
+    path('assist/update', views.assist_update, name='assist-update'),
 ]
 
 
