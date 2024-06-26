@@ -36,11 +36,14 @@ class UserSerializer(serializers.ModelSerializer):
 
     def create(self, validated_data):
         validated_data.pop('password2')  # Remove confirm_password from validated data
-        validated_data['password'] = make_password(validated_data['password'])
+        password = validated_data.pop('password')  # Remove confirm_password from validated data
+
+        # validated_data['password'] = make_password(validated_data['password'])
         # Create User
         user = User.objects.create(**validated_data)
-        user.save()
+        user.set_password(password)
         # print(user)
+        user.save()
         return user
 
 

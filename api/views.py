@@ -112,7 +112,7 @@ def login(request):
                 'first_name': user.first_name
             })
         else:
-            print(user.password)
+            print(check_password(user.password, password))
             return Response({'erro': 'Invalid email or password'}, status=status.HTTP_401_UNAUTHORIZED)
     else:
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
