@@ -592,9 +592,9 @@ def assist_update(request):
     return Response(ProfileSerializer(assist).data, status=status.HTTP_200_OK)
 
 
-@api_view(['GET'])
-@permission_classes([AllowAny])
-def assist(request):
+# @api_view(['GET'])
+# @permission_classes([AllowAny])
+# def assist(request):
 
 @api_view(['GET'])
 @permission_classes([AllowAny])
