@@ -191,14 +191,28 @@ class Assits(models.Model):
         ngn = 'NGN', 'Nigerian Naira'
         eur = 'EUR', 'Euros'
 
+    class EmploymentType(models.TextChoices):
+        REMOTE = 'R', 'Remote'
+        ONSITE = 'O', 'Onsite'
+        HYBRID = 'H', 'Hybrid'
+
 
     owner = models.ForeignKey(User, on_delete=models.CASCADE, related_name='assists')
     title = models.CharField(max_length=50)
     description = models.TextField(null=True, blank=True)
-    location = models.CharField(max_length=255)
     max_pay = models.IntegerField(default=100)
     min_pay = models.IntegerField(default=10)
+    employment_type = models.CharField(max_length=20, choices=EmploymentType.choices)
     currency_type = models.CharField(max_length=30, choices=CurrencyChoices.choices, default=CurrencyChoices.ngn)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
+
+class AssitSkills(models.Model):
+    assist = models.ForeignKey(Assits, on_delete=models.CASCADE, related_name='assist_skills')
+    name = models.CharField(max_length=100)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self) -> str:
+        return self.name
