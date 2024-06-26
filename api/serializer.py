@@ -3,7 +3,7 @@ import cloudinary.uploader
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 import cloudinary
 from scuibai.settings import BASE_DIR
-from .models import (AllSkills, Image, Resume, User, Profile, UserSkills, 
+from .models import (AllSkills, Image, Resume, User, Profile, UserSkills, Assits,
                      EmailVerication_Keys, PasswordReset_keys, Jobs, Applicants, CompanyProfile)
 
 from django.contrib.auth.hashers import make_password
@@ -113,5 +113,10 @@ class JobSerializer(ModelSerializer):
 class CompanySerializer(ModelSerializer):
     class Meta:
         model = CompanyProfile
+        fields = '__all__'
+
+class AssistSerializer(ModelSerializer):
+    class Meta:
+        model = Assits
         fields = '__all__'
 
