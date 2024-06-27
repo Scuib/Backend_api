@@ -246,7 +246,7 @@ def profile_detail(request):
         'min_salary': profile.min_salary
     }
 
-    return Response("data": profile_data, status=status.HTTP_200_OK)
+    return Response({"data": profile_data}, status=status.HTTP_200_OK)
 
 
 # Profile Update of Authenticated User
@@ -438,7 +438,7 @@ def job_update(request):
         if skill not in job_skills:
                 JobSkills.objects.get_or_create(job=job, name=skill)
 
-    return Response(ProfileSerializer(job).data, status=status.HTTP_200_OK)
+    return Response(job, status=status.HTTP_200_OK)
 
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
@@ -589,7 +589,7 @@ def assist_update(request):
         if skill not in assist_skills:
              AssitSkills.objects.get_or_create(assist=assist, name=skill)
 
-    return Response(ProfileSerializer(assist).data, status=status.HTTP_200_OK)
+    return Response(assist, status=status.HTTP_200_OK)
 
 
 # @api_view(['GET'])
