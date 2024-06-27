@@ -281,7 +281,7 @@ def profile_update(request):
         setattr(profile, attr, value)
     profile.save()
 
-    return Response(ProfileSerializer(profile).data, status=status.HTTP_200_OK)
+    return Response(profile, status=status.HTTP_200_OK)
 
 
 # Delete Authenticated User
