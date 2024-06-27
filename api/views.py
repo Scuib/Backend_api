@@ -239,6 +239,7 @@ def profile_detail(request):
     profile_data = {
         'name': f"{profile.user.first_name} {profile.user.last_name}",
         'bio': profile.bio,
+        'email': profile.user.email,
         'skills': skills,
         'categories': categories,
         'location': profile.location,
