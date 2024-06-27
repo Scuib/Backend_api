@@ -246,7 +246,7 @@ def profile_detail(request):
         'min_salary': profile.min_salary
     }
 
-    return JsonResponse(profile_data, status=status.HTTP_200_OK)
+    return Response("data": profile_data, status=status.HTTP_200_OK)
 
 
 # Profile Update of Authenticated User
