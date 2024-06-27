@@ -49,6 +49,7 @@ def register(request):
             user=user,
             email=user.email # type: ignore
         )
+        print(user.company)
         key, exp = VerifyEmail_key(user.id)
 
         return Response({'detail': {'name': user.first_name, 'key': key, 'expires': exp} }, status=status.HTTP_201_CREATED) # type: ignore

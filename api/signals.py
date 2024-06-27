@@ -35,11 +35,11 @@ def create_user_image(sender, instance, created, **kwargs):
 @receiver(post_save, sender=User)
 def create_company_signals(sender, instance, created, **kwargs):
     if created:
-        if instance.company is True:    
+        if instance.company is True:
             company_profile = CompanyProfile.objects.create(owner=instance)
             company_profile.save()
             
-            return instance.name
+            return instance.first_name
 
     return ""
 
