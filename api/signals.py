@@ -1,9 +1,10 @@
 from unicodedata import category
 from django.db.models.signals import post_save
-from .models import User, Profile, UserSkills, UserCategories, Image, CompanyProfile
+from .models import Jobs, User, Profile, UserSkills, UserCategories, Image, CompanyProfile
 from django.dispatch import receiver
 import cloudinary.uploader
 from scuibai.settings import BASE_DIR
+from .model.model import JobAppMatching
 
 
 @receiver(post_save, sender=User)
@@ -43,3 +44,11 @@ def create_company_signals(sender, instance, created, **kwargs):
 
     return ""
 
+
+@receiver(post_save, sender=Jobs)
+def create_applicants_signals(sender, instance, created, **kwargs):
+    if created:
+        job_matcher = JobAppMatching()
+        job_matcher.load_model()
+        recommended = job_matcher.recommend_applicants(job_id=instance.id, experience_level=instance.experience_level, job_type=instance.employment_type)
+        print(recommended)

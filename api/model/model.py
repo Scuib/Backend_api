@@ -1,4 +1,3 @@
-import sqlite3
 import pandas as pd
 import numpy as np
 from scipy.sparse import vstack, hstack
@@ -7,87 +6,116 @@ from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import LabelEncoder
 from sklearn.neural_network import MLPClassifier
 from sklearn.metrics import accuracy_score
+import joblib
+import os
 
-# # Connect to SQLite database
-# conn = sqlite3.connect('/mnt/data/jobs_applicants.db')
+# Importing the Django models
+from ..models import User, Jobs, AllSkills, UserSkills, UserCategories, CompanyProfile, Profile, Resume, Cover_Letter, Image, EmailVerication_Keys, PasswordReset_keys, JobSkills, Applicants, Assits, AssitSkills
 
-# # Read specific columns from the jobs table
-# jobs_df = pd.read_sql_query('SELECT job_id, title, skills, job_type, location, budget FROM jobs', conn)
-# # Read user DataFrame from SQLite
-# user_df = pd.read_sql_query('SELECT applicant_id, name, skills, experience_level, job_type, location, rating FROM applicants', conn)
+class JobAppMatching:
+    def __init__(self, model_path='model.pkl', vectorizer_path='vectorizer.pkl'):
+        self.model_path = model_path
+        self.vectorizer_path = vectorizer_path
+        self.vectorizer = None
+        self.model = None
+        self.label_encoder = None
 
-# Get the data directly from user models
-from api.models import (Jobs, User, UserSkills, UserCategories, CompanyProfile, Profile, Resume, Cover_Letter, Image, EmailVerication_Keys, PasswordReset_keys, Assits, AssitSkills)
+    def load_data(self, job_id):
+        try:
+            job = Jobs.objects.get(id=job_id)
+            applicants = User.objects.all()
+            job_skills = [skill.name for skill in job.job_skills.all()]
+            applicant_data = [{'id': applicant.id, 'skills': [skill.name for skill in applicant.skills.all()]} for applicant in applicants]
 
-# Read specific columns from the jobs table
-jobs_qs = Jobs.objects.all().values('id', 'title', 'description', 'employment_type', 'location', 'max_salary', 'min_salary', 'experience_level')
-jobs_df = pd.DataFrame.from_records(jobs_qs)
+            job_df = pd.DataFrame([{
+                'job_id': job.id,
+                'title': job.title,
+                'skills': " ".join(job_skills),
+                'job_type': job.employment_type,
+                'location': job.location,
+                'budget': (job.min_salary + job.max_salary) / 2
+            }])
 
-# Read user DataFrame from the applicants table
-user_qs = User.objects.filter(company=False).values('id', 'first_name', 'last_name', 'profile__bio', 'profile__location', 'profile__job_location', 'profile__max_salary', 'profile__min_salary')
-user_df = pd.DataFrame.from_records(user_qs)
-# Merge the new columns into the applicants_df
-# user_df = pd.merge(user_df, new_columns_df, on='applicant_id')
+            user_df = pd.DataFrame([{
+                'applicant_id': data['id'],
+                'skills': " ".join(data['skills']),
+                'experience_level': Profile.objects.get(user__id=data['id']).experience_level,
+                'job_type': Profile.objects.get(user__id=data['id']).job_location,
+                'location': Profile.objects.get(user__id=data['id']).location,
+                'rating': Profile.objects.get(user__id=data['id']).rating if hasattr(Profile.objects.get(user__id=data['id']), 'rating') else 0
+            } for data in applicant_data])
 
-# Function to vectorize skills using TF-IDF
-def vectorize_skills(skills):
-    vectorizer = TfidfVectorizer()
-    return vectorizer.fit_transform(skills)
+            return job_df, user_df
+        except Jobs.DoesNotExist:
+            print(f"No job found with job ID {job_id}")
+            return pd.DataFrame(), pd.DataFrame()
 
-# Vectorize job and user skills
-job_skill_matrix = vectorize_skills(jobs_df['skills'])
-user_skill_matrix = vectorize_skills(user_df['skills'])
+    def vectorize_skills(self, skills):
+        if not self.vectorizer:
+            self.vectorizer = TfidfVectorizer()
+            skill_matrix = self.vectorizer.fit_transform(skills)
+            joblib.dump(self.vectorizer, self.vectorizer_path)
+        else:
+            skill_matrix = self.vectorizer.transform(skills)
+        return skill_matrix
 
-# Encode job titles
-job_labels = np.tile(jobs_df['title'].values, len(user_df))
-le = LabelEncoder()
-job_labels_encoded = le.fit_transform(job_labels)
+    def prepare_data(self, job_df, user_df):
+        job_skill_matrix = self.vectorize_skills(job_df['skills'])
+        user_skill_matrix = self.vectorize_skills(user_df['skills'])
 
-# Ensure correct feature matrix construction
-features = hstack([vstack([user_skill_matrix] * len(jobs_df)), vstack([job_skill_matrix] * len(user_df))])
-labels = job_labels_encoded
+        self.label_encoder = LabelEncoder()
+        job_label = self.label_encoder.fit_transform(job_df['title'])[0]
 
-# Train-test split
-X_train, X_test, y_train, y_test = train_test_split(features, labels, test_size=0.2, random_state=42)
+        features = hstack([user_skill_matrix, vstack([job_skill_matrix] * len(user_df))])
+        labels = np.full(len(user_df), job_label)
 
-# Define the MLPClassifier model
-model = MLPClassifier(hidden_layer_sizes=(512, 256), activation='relu', solver='adam', max_iter=50, random_state=42)
+        return features, labels
 
-# Train the model
-model.fit(X_train, y_train)
+    def train_model(self, features, labels):
+        X_train, X_test, y_train, y_test = train_test_split(features, labels, test_size=0.2, random_state=42)
+        self.model = MLPClassifier(hidden_layer_sizes=(512, 256), activation='relu', max_iter=300)
+        self.model.fit(X_train, y_train)
+        joblib.dump(self.model, self.model_path)
 
-# Evaluate the model
-y_pred = model.predict(X_test)
-test_acc = accuracy_score(y_test, y_pred)
-print(f'Test accuracy: {test_acc}')
+        y_pred = self.model.predict(X_test)
+        accuracy = accuracy_score(y_test, y_pred)
+        print(f"Model training completed with accuracy: {accuracy}")
 
-# Function to get top applicants for a job
-def top_applicants_for_job(job_title, experience_level, job_type, model, le, applicant_skill_matrix, job_skill_matrix, applicants, jobs, top_n=3):
-    job_indices = jobs[(jobs['title'] == job_title) & (jobs['job_type'] == job_type)].index
-    if job_indices.empty:
-        print(f"No job found with title {job_title} and job type {job_type}")
-        return pd.DataFrame()
-    job_index = job_indices[0]
-    job_skills = vstack([job_skill_matrix[job_index]] * len(applicants))
-    features = hstack([applicant_skill_matrix, job_skills])
-    
-    # Filter applicants based on experience level and job type
-    filtered_applicants = applicants[(applicants['experience_level'] == experience_level) & (applicants['job_type'] == job_type)]
-    if filtered_applicants.empty:
-        print(f"No applicants found with experience level {experience_level} and job type {job_type}")
-        return pd.DataFrame()
-    
-    # Rebuild the feature matrix for filtered applicants
-    filtered_applicant_skill_matrix = applicant_skill_matrix[filtered_applicants.index]
-    features = hstack([filtered_applicant_skill_matrix, job_skills[:len(filtered_applicants)]])
-    
-    applicant_predictions = model.predict_proba(features)[:, 1]
-    top_applicants = np.argsort(applicant_predictions)[::-1][:top_n]  # Get top n applicant indices
-    recommended_applicants = filtered_applicants.iloc[top_applicants][['name', 'skills', 'experience_level', 'job_type', 'location', 'rating']]
-    return recommended_applicants
+    def load_model(self):
+        if os.path.exists(self.model_path) and os.path.exists(self.vectorizer_path):
+            self.model = joblib.load(self.model_path)
+            self.vectorizer = joblib.load(self.vectorizer_path)
+        else:
+            print("Model or vectorizer not found. Please train the model first.")
 
-# Example: Get top applicants for 'Data Scientist' job with 'Senior' experience level and 'Full-Time' job type
-top_applicants = top_applicants_for_job('Data Scientist', 'Senior', 'Full-Time', model, le, user_skill_matrix, job_skill_matrix, user_df, jobs_df)
-print("Top applicants for 'Data Scientist' (Senior level, Full-Time):")
-for _, row in top_applicants.iterrows():
-    print(f"{row['name']} (Skills: {row['skills']}, Experience Level: {row['experience_level']}, Job Type: {row['job_type']}, Location: {row['location']}, Rating: {row['rating']})")
+    def recommend_applicants(self, job_id, experience_level, job_type, top_n=3):
+        if not self.model:
+            print("Model not loaded. Please load the model first.")
+            return pd.DataFrame()
+
+        job_df, user_df = self.load_data(job_id)
+
+        if job_df.empty or user_df.empty:
+            return pd.DataFrame()
+
+        job_skills = vstack([self.vectorizer.transform([job_df.iloc[0]['skills']])] * len(user_df))
+
+        filtered_applicants = user_df[(user_df['experience_level'] == experience_level) & (user_df['job_type'] == job_type)]
+        if filtered_applicants.empty:
+            print(f"No applicants found with experience level {experience_level} and job type {job_type}")
+            return pd.DataFrame()
+
+        filtered_applicant_skill_matrix = self.vectorizer.transform(filtered_applicants['skills'])
+        features = hstack([filtered_applicant_skill_matrix, job_skills[:len(filtered_applicants)]])
+
+        applicant_predictions = self.model.predict_proba(features)[:, 1]
+        top_applicants = np.argsort(applicant_predictions)[::-1][:top_n]
+        recommended_applicants = filtered_applicants.iloc[top_applicants][['applicant_id', 'skills', 'experience_level', 'job_type', 'location', 'rating']]
+
+        return recommended_applicants
+
+# Example usage:
+# job_matcher = JobAppMatching()
+# job_matcher.load_model()
+# recommended = job_matcher.recommend_applicants(job_id=123, experience_level='Senior', job_type='R')
+# print(recommended)

@@ -245,7 +245,10 @@ def profile_detail(request):
         'location': profile.location,
         'job_location': profile.get_job_location_display(),
         'max_salary': profile.max_salary,
-        'min_salary': profile.min_salary
+        'min_salary': profile.min_salary,
+        'github': profile.github,
+        'linkedin': profile.linkedin,
+        'twitter':  profile.twitter
     }
 
     return Response({"data": profile_data}, status=status.HTTP_200_OK)
