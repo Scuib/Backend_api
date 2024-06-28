@@ -88,6 +88,9 @@ class Profile(models.Model):
     job_location = models.CharField(max_length=2, choices=JobLocationChoices.choices, default=JobLocationChoices.HYBRID)
     max_salary = models.IntegerField(default=100)
     min_salary = models.IntegerField(default=10)
+    github = models.CharField(max_length=100, null=True, blank=True)
+    linkedin = models.CharField(max_length=100, null=True, blank=True)
+    twitter = models.CharField(max_length=100, null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
