@@ -244,6 +244,8 @@ def profile_detail(request):
         'categories': categories,
         'location': profile.location,
         'job_location': profile.get_job_location_display(),
+        'experience': profile.experience,
+        'phonenumbers': profile.phonenumbers,
         'max_salary': profile.max_salary,
         'min_salary': profile.min_salary,
         'github': profile.github,
@@ -395,7 +397,7 @@ def job_create(request):
     if not user.company is True:
         return Response("Only Companies can create Jobs", status=status.HTTP_404_NOT_FOUND)
 
-    request.data['owner'] = request.user.id  # Ensure user is set correctly
+    request.data['owner'] = request.user.id
 
     new_skills = request.data.pop('skills', [])
     # print(new_skills)
@@ -430,18 +432,21 @@ def job_update(request):
     except Jobs.DoesNotExist:
         return Response(status=status.HTTP_404_NOT_FOUND)
 
-    skills = request.data.pop("skills")
+    if "skills" in request.data:
+        skills = request.data.pop("skills")
+
+        # Update skills    
+        job_skills = JobSkills.objects.filter(job=job).values_list('name', flat=True)
+
+        for skill in skills:
+            if skill not in job_skills:
+                JobSkills.objects.get_or_create(job=job, name=skill)
+
+
     # Update profile with the remaining fields
     for attr, value in request.data.items():
         setattr(job, attr, value)
     job.save()
-
-    # Update skills    
-    job_skills = JobSkills.objects.filter(job=job).values_list('name', flat=True)
-
-    for skill in skills:
-        if skill not in job_skills:
-                JobSkills.objects.get_or_create(job=job, name=skill)
 
     return Response(job, status=status.HTTP_200_OK)
 
