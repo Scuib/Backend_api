@@ -523,20 +523,24 @@ def applicant(request, job_id):
     else:
         return Response(serialized_data.errors, status=status.HTTP_400_BAD_REQUEST)
 
+from django.core.exceptions import ObjectDoesNotExist
 
-""" Comapny """
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
-def company(request, company_id):
-    """get the company's details """
-    owner = User.objects.get(id=company_id)
-    comapany = CompanyProfile.objects.get(owner=owner)
+def company(request):
+    """Get the company's details"""
+    owner = request.user
+    try:
+        company = CompanyProfile.objects.get(owner=owner)
+        serializer = CompanySerializer(company)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+    except ObjectDoesNotExist:
+        return Response({'error': 'CompanyProfile not found.'}, status=status.HTTP_404_NOT_FOUND)
 
-    return Response(CompanySerializer(company).data, status=status.HTTP_200_OK)
 
 @api_view(['PUT'])
 @permission_classes([IsAuthenticated])
-def company_update(request, company_id):
+def company_update(request):
     try:
         company_profile = CompanyProfile.objects.get(owner=request.user)
     except CompanyProfile.DoesNotExist:
