@@ -2,6 +2,7 @@ from django.db import models
 from django.contrib.auth.models import AbstractUser, PermissionsMixin
 from django.urls import translate_url
 from django.utils.translation import gettext_lazy as _
+import phonenumbers
 from .managers import CustomUserManager
 from cloudinary.models import CloudinaryField
 
@@ -88,6 +89,8 @@ class Profile(models.Model):
     job_location = models.CharField(max_length=2, choices=JobLocationChoices.choices, default=JobLocationChoices.HYBRID)
     max_salary = models.IntegerField(default=100)
     min_salary = models.IntegerField(default=10)
+    experience = models.IntegerField(default=1)
+    phonenumbers = models.CharField(max_length=255, blank=True, null=True)
     github = models.CharField(max_length=100, null=True, blank=True)
     linkedin = models.CharField(max_length=100, null=True, blank=True)
     twitter = models.CharField(max_length=100, null=True, blank=True)
@@ -155,7 +158,7 @@ class Jobs(models.Model):
         senior = 'SENIOR', 'Senior Level'
         lead = 'LEAD', 'Lead Level'
 
-    owner = models.ManyToManyField(User, related_name='jobs')
+    owner = models.ForeignKey(User, on_delete=models.CASCADE, related_name='jobs')
     title = models.CharField(max_length=50)
     description = models.TextField()
     location = models.CharField(max_length=255)
