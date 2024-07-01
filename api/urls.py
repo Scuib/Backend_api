@@ -11,7 +11,7 @@ urlpatterns = [
     path('auth/verify-email/', views.verify_email, name='verify_email'),
     path('auth/sign-in/', views.login, name='login'),
     path('logout/', views.logout, name="logout"),
-    path('auth/refresh-token', TokenRefreshView.as_view(), name="refresh-token"),
+    path('auth/refresh-token/', TokenRefreshView.as_view(), name="refresh-token"),
     path('password/reset/', views.reset_password, name='reset_password'),
     path('password/reset/confirm/<int:uid>/<str:key>/', views.confirm_reset_password, name='confirm_reset_password'),
     path('profile/', views.profile_detail, name='profile-detail'),
@@ -24,11 +24,11 @@ urlpatterns = [
     path('jobs/update/', views.job_update, name='job-update'),
     path('jobs/user/', views.user_jobs, name='user_jobs'),
     path('jobs/all/', views.all_jobs, name='all_jobs'),
-    path('apply/job_id', views.applicant, name='apply'),
+    path('apply/<int:job_id>/', views.applicant, name='apply'),
     path('company/update/', views.company_update, name='company-update'),
-    path('comapny/<int:company_id>', views.company, name='company-profile'),
-    path('assist/create', views.assist_create, name='assist-create'),
-    path('assist/update', views.assist_update, name='assist-update'),
+    path('comapny/', views.company, name='company-profile'),
+    path('assist/create/', views.assist_create, name='assist-create'),
+    path('assist/update/', views.assist_update, name='assist-update'),
 ]
 
 
