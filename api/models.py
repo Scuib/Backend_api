@@ -2,7 +2,6 @@ from django.db import models
 from django.contrib.auth.models import AbstractUser, PermissionsMixin
 from django.urls import translate_url
 from django.utils.translation import gettext_lazy as _
-import phonenumbers
 from .managers import CustomUserManager
 from cloudinary.models import CloudinaryField
 
