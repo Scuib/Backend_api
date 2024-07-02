@@ -632,12 +632,15 @@ def assist(request):
 @api_view(['POST'])
 @permission_classes([AllowAny])
 def waitlist(request):
-    try:
-        email = request.data['email']
-    except Exception:
-        return Response("Unsuccessful")
-
-    waitlist = WaitList(email=email)
-    waitlist.save()
+    email = request.data.get('email')  # Use .get() to avoid KeyError
     
-    return Response("Succesful")
+    if not email:
+        return Response({"detail": "Email is required"}, status=status.HTTP_400_BAD_REQUEST)
+    
+    try:
+        waitlist_entry = WaitList(email=email)
+        waitlist_entry.save()
+        return Response({"detail": "Successful"}, status=status.HTTP_201_CREATED)
+    except Exception as e:
+        # Log the exception if needed
+        return Response({"detail": "Unsuccessful", "error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
