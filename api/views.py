@@ -1,4 +1,3 @@
-import stat
 from django.http import JsonResponse
 import cloudinary.uploader
 from django.shortcuts import render, get_object_or_404
@@ -11,7 +10,7 @@ import cloudinary
 
 
 from .models import (CompanyProfile, Profile, User, EmailVerication_Keys, Assits,
-                     PasswordReset_keys, JobSkills, UserCategories, UserSkills,
+                     PasswordReset_keys, JobSkills, UserCategories, UserSkills, WaitList,
                      AllSkills, Cover_Letter, Resume, Image, Jobs, Applicants, AssitSkills)
 
 from .serializer import (CompanySerializer, MyTokenObtainPairSerializer, UserSerializer, ProfileSerializer, 
@@ -628,3 +627,17 @@ def assist(request):
         }
         assist_list.append(assist_data)
     return Response(assist_list)
+
+
+@api_view(['POST'])
+@permission_classes([AllowAny])
+def waitlist(request):
+    try:
+        email = request.data['email']
+    except Exception:
+        return 0
+
+    waitlist = WaitList(email=email)
+    waitlist.save()
+    
+    return Response("Succesful")

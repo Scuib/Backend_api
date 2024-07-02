@@ -221,3 +221,9 @@ class AssitSkills(models.Model):
 
     def __str__(self) -> str:
         return self.name
+
+
+class WaitList(models.Model):
+    email = models.EmailField()
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
