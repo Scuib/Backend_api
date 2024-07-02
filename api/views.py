@@ -635,7 +635,7 @@ def waitlist(request):
     try:
         email = request.data['email']
     except Exception:
-        return 0
+        return Response("Unsuccessful")
 
     waitlist = WaitList(email=email)
     waitlist.save()
