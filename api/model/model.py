@@ -24,8 +24,8 @@ class JobAppMatching:
         try:
             job = Jobs.objects.get(id=job_id)
             applicants = User.objects.all()
-            job_skills = [skill.name for skill in job.job_skills.all()]
-            applicant_data = [{'id': applicant.id, 'skills': [skill.name for skill in applicant.skills.all()]} for applicant in applicants]
+            job_skills = JobSkills.objects.filter(job=job).values_list('name' ,flat=True)
+            applicant_data = [{'id': applicant.id, 'skills': UserSkills.objects.filter(user=applicant).values_list('name' ,flat=True)} for applicant in applicants]
 
             job_df = pd.DataFrame([{
                 'job_id': job.id,
