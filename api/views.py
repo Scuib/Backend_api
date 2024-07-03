@@ -1,5 +1,3 @@
-from functools import partial
-from bson import is_valid
 from django.http import JsonResponse
 import cloudinary.uploader
 from django.shortcuts import render, get_object_or_404
