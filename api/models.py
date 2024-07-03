@@ -139,7 +139,6 @@ class PasswordReset_keys(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
 
 
-
 class Jobs(models.Model):
     class CurrencyChoices(models.TextChoices):
         usd = 'USD', 'United States Dollar'
@@ -151,12 +150,6 @@ class Jobs(models.Model):
         ONSITE = 'O', 'Onsite'
         HYBRID = 'H', 'Hybrid'
 
-    class ExperienceLevel(models.TextChoices):
-        entry = 'ENTRY', 'Entry Level'
-        mid = 'MID', 'Mid Level'
-        senior = 'SENIOR', 'Senior Level'
-        lead = 'LEAD', 'Lead Level'
-
     owner = models.ForeignKey(User, on_delete=models.CASCADE, related_name='jobs')
     title = models.CharField(max_length=50)
     description = models.TextField()
@@ -166,11 +159,10 @@ class Jobs(models.Model):
     min_salary = models.IntegerField()
     currency_type = models.CharField(max_length=30, choices=CurrencyChoices.choices, default=CurrencyChoices.ngn)
     employment_type = models.CharField(max_length=20, choices=EmploymentType.choices)
-    experience_level = models.CharField(max_length=20, choices=ExperienceLevel.choices)
+    max_experience = models.IntegerField()
+    min_experience = models.IntegerField()
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
-
-
 
 class JobSkills(models.Model):
     job = models.ForeignKey(Jobs, on_delete=models.CASCADE, related_name='job_skills')
