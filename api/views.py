@@ -434,13 +434,12 @@ def job_update(request):
     if "skills" in request.data:
         skills = request.data.pop("skills")
 
-        # Update skills    
+        # Update skills
         job_skills = JobSkills.objects.filter(job=job).values_list('name', flat=True)
 
         for skill in skills:
             if skill not in job_skills:
                 JobSkills.objects.get_or_create(job=job, name=skill)
-
 
     # Update profile with the remaining fields
     for attr, value in request.data.items():
@@ -466,7 +465,7 @@ def user_jobs(request):
             'min_salary': job.min_salary,
             'currency_type': job.currency_type,
             'employment_type': job.employment_type,
-            'experience_level': f"{job.min_experience} - {job.max_experience}",
+            'experience_level': f"{job.min_experience} - {job.max_experience}"
         }
         job_list.append(job_data)
     return Response(job_list)
