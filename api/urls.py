@@ -21,7 +21,7 @@ urlpatterns = [
     path('upload/resume/', views.upload_resume, name='upload-resume'),
     path('upload/cover-letter/', views.upload_cover_letter, name='upload-cover-letter'),
     path('jobs/create/', views.job_create, name='job-create'),
-    path('jobs/update/', views.job_update, name='job-update'),
+    path('jobs/update/<int:job_id>/', views.job_update, name='job-update'),
     path('jobs/user/', views.user_jobs, name='user_jobs'),
     path('jobs/all/', views.all_jobs, name='all_jobs'),
     path('apply/<int:job_id>/', views.applicant, name='apply'),
@@ -31,8 +31,3 @@ urlpatterns = [
     path('assist/update/', views.assist_update, name='assist-update'),
     path('waitlist/', views.waitlist, name='waitlist')
 ]
-
-
-
-
-

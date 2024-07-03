@@ -421,7 +421,7 @@ def job_create(request):
 
 @api_view(['POST', 'PUT'])
 @permission_classes([IsAuthenticated])
-def job_update(request):
+def job_update(request, job_id):
     user = request.user
     if not user.company is True:
         return Response("Only Companies can edit Jobs", status=status.HTTP_404_NOT_FOUND)
