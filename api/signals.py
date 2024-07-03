@@ -50,5 +50,8 @@ def create_applicants_signals(sender, instance, created, **kwargs):
     if created:
         job_matcher = JobAppMatching()
         job_matcher.load_model()
-        recommended = job_matcher.recommend_applicants(job_id=instance.id, experience_level=instance.experience_level, job_type=instance.employment_type)
+        recommended = job_matcher.recommend_applicants(job_id=instance.id,
+                                                       max_experience=instance.max_experience,
+                                                       min_experience=instance.min_experience,
+                                                       job_type=instance.employment_type)
         print(recommended)
