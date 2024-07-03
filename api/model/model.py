@@ -88,7 +88,7 @@ class JobAppMatching:
         else:
             print("Model or vectorizer not found. Please train the model first.")
 
-    def recommend_applicants(self, job_id, experience_level, job_type, top_n=3):
+    def recommend_applicants(self, job_id, max_experience, min_experience, job_type, top_n=3):
         if not self.model:
             print("Model not loaded. Please load the model first.")
             return pd.DataFrame()
@@ -100,9 +100,9 @@ class JobAppMatching:
 
         job_skills = vstack([self.vectorizer.transform([job_df.iloc[0]['skills']])] * len(user_df))
 
-        filtered_applicants = user_df[(user_df['experience_level'] == experience_level) & (user_df['job_type'] == job_type)]
+        filtered_applicants = user_df[(user_df['max_experience'] <= max_experience) & (user_df['min_experience'] >= min_experience) & (user_df['job_type'] == job_type)]
         if filtered_applicants.empty:
-            print(f"No applicants found with experience level {experience_level} and job type {job_type}")
+            print(f"No applicants found with experience level {min_experience + ' - ' + max_experience} and job type {job_type}")
             return pd.DataFrame()
 
         filtered_applicant_skill_matrix = self.vectorizer.transform(filtered_applicants['skills'])

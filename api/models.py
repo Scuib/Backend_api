@@ -159,8 +159,8 @@ class Jobs(models.Model):
     min_salary = models.IntegerField()
     currency_type = models.CharField(max_length=30, choices=CurrencyChoices.choices, default=CurrencyChoices.ngn)
     employment_type = models.CharField(max_length=20, choices=EmploymentType.choices)
-    max_experience = models.IntegerField()
-    min_experience = models.IntegerField()
+    max_experience = models.IntegerField(default=5)
+    min_experience = models.IntegerField(default=0)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 

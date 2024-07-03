@@ -156,6 +156,7 @@ REST_AUTH = {
 # cors headers
 CORS_ALLOWED_ORIGINS = [
     "http://localhost:5173",
+    "https://www.scuib.com"
 ]
 CORS_ALLOW_CREDENTIALS = True
 

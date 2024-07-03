@@ -466,7 +466,7 @@ def user_jobs(request):
             'min_salary': job.min_salary,
             'currency_type': job.currency_type,
             'employment_type': job.employment_type,
-            'experience_level': job.experience_level,
+            'experience_level': f"{job.min_experience} - {job.max_experience}",
         }
         job_list.append(job_data)
     return Response(job_list)
@@ -487,7 +487,7 @@ def all_jobs(request):
             'min_salary': job.min_salary,
             'currency_type': job.currency_type,
             'employment_type': job.employment_type,
-            'experience_level': job.experience_level,
+            'experience_level': f"{job.min_experience} - {job.max_experience}",
             'skills': JobSkills.objects.filter(job=job).values_list('name', flat=True),
         }
         job_list.append(job_data)
