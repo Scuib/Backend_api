@@ -427,7 +427,7 @@ def job_update(request):
         return Response("Only Companies can edit Jobs", status=status.HTTP_404_NOT_FOUND)
 
     try:
-        job = Jobs.objects.get(user=request.user)
+        job = Jobs.objects.get(owner=request.user)
     except Jobs.DoesNotExist:
         return Response(status=status.HTTP_404_NOT_FOUND)
 
