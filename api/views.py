@@ -1,3 +1,5 @@
+from functools import partial
+from bson import is_valid
 from django.http import JsonResponse
 import cloudinary.uploader
 from django.shortcuts import render, get_object_or_404
@@ -425,7 +427,6 @@ def job_update(request, job_id):
     user = request.user
     if not user.company is True:
         return Response("Only Companies can edit Jobs", status=status.HTTP_404_NOT_FOUND)
-
     try:
         job = Jobs.objects.get(owner=request.user, id=job_id)
     except Jobs.DoesNotExist:
@@ -442,9 +443,13 @@ def job_update(request, job_id):
                 JobSkills.objects.get_or_create(job=job, name=skill)
 
     # Update profile with the remaining fields
-    for attr, value in request.data.items():
-        setattr(job, attr, value)
-    job.save()
+    serialized_data = JobSerializer(job, data=request.data, partial=True)
+    # for attr, value in request.data.items():
+    #     setattr(job, attr, value)
+    if not serialized_data.is_valid():
+        return Response("Please send the correct fields")
+
+    serialized_data.save()
 
     return Response({"detail": "Successful"}, status=status.HTTP_200_OK)
 
