@@ -446,7 +446,7 @@ def job_update(request):
         setattr(job, attr, value)
     job.save()
 
-    return Response(job, status=status.HTTP_200_OK)
+    return Response({"detail": "Successful"}, status=status.HTTP_200_OK)
 
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
