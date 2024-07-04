@@ -44,7 +44,7 @@ class JobAppMatching:
                 'location': Profile.objects.get(user__id=data['id']).location,
                 'rating': Profile.objects.get(user__id=data['id']).rating if hasattr(Profile.objects.get(user__id=data['id']), 'rating') else 0
             } for data in applicant_data])
-
+            print(f"User_df: {user_df}\nJob_df: {job_df}")
             return job_df, user_df
         except Jobs.DoesNotExist:
             print(f"No job found with job ID {job_id}")
