@@ -623,7 +623,6 @@ def assist(request):
             'id': assist.id,
             'title': assist.title,
             'description': assist.description,
-            'location': assist.location,
             'max_salary': assist.max_pay,
             'min_salary': assist.min_pay,
             'currency_type': assist.currency_type,
