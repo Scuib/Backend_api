@@ -458,6 +458,7 @@ def user_jobs(request):
     jobs = Jobs.objects.filter(owner=user)
     job_list = []
     for job in jobs:
+        applicants = Applicants.objects.filter(job=job).values_list('applicant', flat=True)
         job_data = {
             'id': job.id,
             'title': job.title,
@@ -468,7 +469,8 @@ def user_jobs(request):
             'min_salary': job.min_salary,
             'currency_type': job.currency_type,
             'employment_type': job.employment_type,
-            'experience_level': f"{job.min_experience} - {job.max_experience}"
+            'experience_level': f"{job.min_experience} - {job.max_experience}",
+            'applicants': [{'id': applicant.applicant.id, 'first_name': applicant.applicant.first_name, 'last_name': applicant.applicant.last_name} for applicant in Applicants.objects.filter(job=job)]
         }
         job_list.append(job_data)
     return Response(job_list)
@@ -498,31 +500,31 @@ def all_jobs(request):
 
 """ Applicants  """
 
-@api_view(['GET'])
-@permission_classes([IsAuthenticated])
-def applicant(request, job_id):
-    try:
-        job = Jobs.objects.get(id=job_id)
-    except Jobs.DoesNotExist as e:
-        return Response({'error': 'Job not found.'}, status=status.HTTP_404_NOT_FOUND)
+# @api_view(['GET'])
+# @permission_classes([IsAuthenticated])
+# def applicant(request, job_id):
+#     try:
+#         job = Jobs.objects.get(id=job_id)
+#     except Jobs.DoesNotExist as e:
+#         return Response({'error': 'Job not found.'}, status=status.HTTP_404_NOT_FOUND)
 
-    data = request.data.copy()
-    data['job'] = job
-    data['applicant'] = request.user
+#     data = request.data.copy()
+#     data['job'] = job
+#     data['applicant'] = request.user
 
-    serialized_data = ApplicantSerializer(data=data)
-    if serialized_data.is_valid():
-        serialized_data.save()
+#     serialized_data = ApplicantSerializer(data=data)
+#     if serialized_data.is_valid():
+#         serialized_data.save()
 
-        response = {
-            "job_id": serialized_data.job.id,
-            "job_title": serialized_data.job.title,
-            "applicant_id": serialized_data.applicant.id,
-            "applicant_name": serialized_data.applicant.first_name,
-        }
-        return Response(response, status=status.HTTP_201_CREATED)
-    else:
-        return Response(serialized_data.errors, status=status.HTTP_400_BAD_REQUEST)
+#         response = {
+#             "job_id": serialized_data.job.id,
+#             "job_title": serialized_data.job.title,
+#             "applicant_id": serialized_data.applicant.id,
+#             "applicant_name": serialized_data.applicant.first_name,
+#         }
+#         return Response(response, status=status.HTTP_201_CREATED)
+#     else:
+#         return Response(serialized_data.errors, status=status.HTTP_400_BAD_REQUEST)
 
 from django.core.exceptions import ObjectDoesNotExist
 
