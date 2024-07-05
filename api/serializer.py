@@ -63,7 +63,7 @@ class MyTokenObtainPairSerializer(TokenObtainPairSerializer):
 class ProfileSerializer(ModelSerializer):
     class Meta:
         model = Profile
-        fields = ['bio', 'skills', 'location', 'job_location']
+        fields = '__all__'
 
 class ResumeSerializer(ModelSerializer):
     class Meta:

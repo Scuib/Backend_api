@@ -283,11 +283,14 @@ def profile_update(request):
                 UserCategories.objects.get_or_create(user=request.user, name=category)
 
     # Update profile with the remaining fields
-    for attr, value in request.data.items():
-        setattr(profile, attr, value)
-    profile.save()
+    serialized_data = ProfileSerializer(profile, data=request.data, partial=True)
+    # for attr, value in request.data.items():
+    #     setattr(profile, attr, value)
+    if serialized_data.is_valid():
+        serialized_data.save()
 
-    return Response({"_detail": "Succesful!"}, status=status.HTTP_200_OK)
+        return Response({"_detail": "Succesful!"}, status=status.HTTP_200_OK)
+    return Response({"_detail": "An error occured!"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
 # Delete Authenticated User
