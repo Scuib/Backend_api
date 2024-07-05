@@ -438,7 +438,8 @@ def job_update(request, job_id):
 
         for skill in skills:
             if skill not in job_skills:
-                JobSkills.objects.get_or_create(job=job, name=skill)
+                new_job_skills = JobSkills.objects.create(job=job, name=skill)
+                new_job_skills.save()
 
     # Update profile with the remaining fields
     serialized_data = JobSerializer(job, data=request.data, partial=True)
@@ -450,6 +451,7 @@ def job_update(request, job_id):
     serialized_data.save()
 
     return Response({"detail": "Successful"}, status=status.HTTP_200_OK)
+
 
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])

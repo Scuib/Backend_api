@@ -1,6 +1,6 @@
 
-from django.db.models.signals import post_save
-from .models import Jobs, User, Profile, UserSkills, UserCategories, Image, CompanyProfile, Applicants
+from django.db.models.signals import post_save, post_delete
+from .models import JobSkills, Jobs, User, Profile, UserSkills, UserCategories, Image, CompanyProfile, Applicants
 from django.dispatch import receiver
 import cloudinary.uploader
 from scuibai.settings import BASE_DIR
@@ -47,32 +47,50 @@ def create_company_signals(sender, instance, created, **kwargs):
 
 @receiver(post_save, sender=Jobs)
 def create_applicants_signals(sender, instance, created, **kwargs):
-    if created:
-        job_matcher = JobAppMatching()
-        job_matcher.load_model()
-        recommended = job_matcher.recommend_applicants(job_id=instance.id,
-                                                       max_experience=instance.max_experience,
-                                                       min_experience=instance.min_experience,
-                                                       job_type=instance.employment_type)
-        print(recommended)
-        for x in recommended:
-            applicant = User.objects.get(id=x['applicant_id'])
-            Applicants.objects.create(applicant=applicant, job=instance)
+    print(f"Job {instance.id} - {instance.title} has been {'created' if created else 'updated'}.")
+    
+    job_matcher = JobAppMatching()
+    job_matcher.load_model()
+    
+    recommended = job_matcher.recommend_applicants(
+        job_id=instance.id,
+        max_experience=instance.max_experience,
+        min_experience=instance.min_experience,
+        job_type=instance.employment_type
+    )
+    
+    print(f"Recommended applicants for job {instance.id}: {recommended}")
+    
+    Applicants.objects.filter(job=instance).delete()
+    print(f"Existing applicants for job {instance.id} deleted.")
 
-        return "Created!"
+    for x in recommended.itertuples():
+        applicant = User.objects.get(id=x.applicant_id)
+        Applicants.objects.create(applicant=applicant, job=instance)
+        print(f"Applicant {applicant.id} assigned to job {instance.id}.")
 
-    if not created:
-        job_matcher = JobAppMatching()
-        job_matcher.load_model()
-        recommended = job_matcher.recommend_applicants(job_id=instance.id,
-                                                       max_experience=instance.max_experience,
-                                                       min_experience=instance.min_experience,
-                                                       job_type=instance.employment_type)
-        print(recommended)
-        for x in recommended:
-            applicants = Applicants.objects.filter(job=instance).value_list('id', flat=True)
-            new_applicant = User.objects.get(id=x['applicant_id'])
-            if not new_applicant in applicants:
-                Applicants.objects.create(applicant=new_applicant, job=instance)
-        return "Updated"
-    return ""
+@receiver(post_save, sender=JobSkills)
+@receiver(post_delete, sender=JobSkills)
+def update_applicants_on_skills_change(sender, instance, **kwargs):
+    job = instance.job
+    print(f"Skills for job {job.id} - {job.title} have been {'created/updated' if isinstance == JobSkills else 'deleted'}.")
+
+    job_matcher = JobAppMatching()
+    job_matcher.load_model()
+    
+    recommended = job_matcher.recommend_applicants(
+        job_id=job.id,
+        max_experience=job.max_experience,
+        min_experience=job.min_experience,
+        job_type=job.employment_type
+    )
+    
+    print(f"Recommended applicants for job {job.id} after skills change: {recommended}")
+
+    Applicants.objects.filter(job=job).delete()
+    print(f"Existing applicants for job {job.id} deleted.")
+
+    for x in recommended.itertuples():
+        applicant = User.objects.get(id=x.applicant_id)
+        Applicants.objects.create(applicant=applicant, job=job)
+        print(f"Applicant {applicant.id} assigned to job {job.id}.")
