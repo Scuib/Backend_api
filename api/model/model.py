@@ -99,8 +99,10 @@ class JobAppMatching:
             return pd.DataFrame()
 
         job_skills = vstack([self.vectorizer.transform([job_df.iloc[0]['skills']])] * len(user_df))
+        print(f"Job skills found: {job_skills}")
 
-        filtered_applicants = user_df[(user_df['max_experience'] <= max_experience) & (user_df['min_experience'] >= min_experience) & (user_df['job_type'] == job_type)]
+        filtered_applicants = user_df[(user_df['max_experience'] <= max_experience) & (user_df['min_experience'] >= min_experience) & (user_df['job_location'] == job_type)]
+        print(filtered_applicants)
         if filtered_applicants.empty:
             print(f"No applicants found with experience level {min_experience + ' - ' + max_experience} and job type {job_type}")
             return pd.DataFrame()
