@@ -49,7 +49,9 @@ INSTALLED_APPS = [
     "api",
     # cloudinary
     "cloudinary",
-    "cloudinary_storage"
+    "cloudinary_storage",
+    # payments
+    'payments',
 ]
 
 MIDDLEWARE = [
@@ -85,6 +87,8 @@ TEMPLATES = [
 
 WSGI_APPLICATION = "scuibai.wsgi.application"
 
+# MAIN DATABASE
+# POSTGRES DATABASE
 
 DATABASES = {
     "default": {
@@ -96,6 +100,15 @@ DATABASES = {
         "PORT": 6543,
     }
 }
+
+# TEST DATABASE
+# SQLITE DATABASE
+# DATABASES = {
+#     'default': {
+#         'ENGINE': 'django.db.backends.sqlite3',
+#         'NAME': BASE_DIR / 'db.sqlite3',
+#     }
+# }
 
 
 AUTH_PASSWORD_VALIDATORS = [
@@ -129,7 +142,7 @@ ACCOUNT_EMAIL_REQUIRED = True
 ACCOUNT_AUTHENTICATION_METHOD = 'email'
 ACCOUNT_EMAIL_VERIFICATION = 'mandatory'
 
-# rest-framework
+# rest-frameworkj
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': (
         'dj_rest_auth.jwt_auth.JWTCookieAuthentication',
@@ -193,8 +206,8 @@ EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
 EMAIL_HOST = 'smtp.gmail.com'
 EMAIL_USE_TLS = True
 EMAIL_PORT = 587
-EMAIL_HOST_USER = os.environ["EMAIL_HOST_USER"]
-EMAIL_HOST_PASSWORD = os.environ["EMAIL_HOST_PASSWORD"]
+# EMAIL_HOST_USER = os.environ["EMAIL_HOST_USER"]
+# EMAIL_HOST_PASSWORD = os.environ["EMAIL_HOST_PASSWORD"]
 
 JWT_AUTH_HTTPONLY = False
 
@@ -210,3 +223,6 @@ cloudinary.config(
     api_key=os.environ["API_KEY"],
     api_secret=os.environ["API_SECRET"]
 )
+
+# PAYSTACK_SECRET_KEY
+PAYSTACK_SECRET_KEY = os.environ["PAYSTACK_SECRET_KEY"]
