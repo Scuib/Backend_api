@@ -51,7 +51,7 @@ INSTALLED_APPS = [
     "cloudinary",
     "cloudinary_storage",
     # payments
-    'payments',
+    # 'payments',
 ]
 
 MIDDLEWARE = [
