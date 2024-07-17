@@ -4,32 +4,28 @@ from ..models import User, Assits, AssitSkills, UserSkills, UserCategories
 
 class DataPreprocessor:
     def __init__(self):
-        self.job_postings = None
-        self.user_profiles = None
+        self.assist_postings = pd.DataFrame()
+        self.user_profiles = pd.DataFrame()
         self.vectorizer = TfidfVectorizer()
 
-    def load_data(self):
-        # Load assist data
-        assists = Assits.objects.all().values()
-        # assist_skills = AssitSkills.objects.all().values()
-        
-        assist_data = []
-        for assist in assists:
-            assist_instance = Assits.objects.get(id=assist['id'])
+    def load_data(self, assist_id):
+        # Load assist data for a specific assist ID
+        try:
+            assist_instance = Assits.objects.get(id=assist_id)
             assist_skills_list = list(AssitSkills.objects.filter(assist=assist_instance).values_list('name', flat=True))
-            assist_data.append({
-                'id': assist['id'],
-                'title': assist['title'],
-                'description': assist['description'],
+            assist_data = [{
+                'id': assist_instance.id,
+                'title': assist_instance.title,
+                'description': assist_instance.description,
                 'skills': ' '.join(assist_skills_list),
-                'employment_type': assist['employment_type'],
-                'currency_type': assist['currency_type']
-            })
-        
-        # Load user data
+                'employment_type': assist_instance.employment_type,
+                'currency_type': assist_instance.currency_type
+            }]
+        except Assits.DoesNotExist:
+            assist_data = []
+
+        # Load all user data
         users = User.objects.all().values()
-        # user_skills = UserSkills.objects.all().values()
-        # categories = UserCategories.objects.all().values()
         
         user_data = []
         for user in users:
@@ -48,8 +44,15 @@ class DataPreprocessor:
         return self.assist_postings, self.user_profiles
 
     def preprocess_data(self):
-        self.assist_tfidf_matrix = self.vectorizer.fit_transform(self.assist_postings['skills'])
-        self.user_tfidf_matrix = self.vectorizer.fit_transform(self.user_profiles['skills'])
+        if not self.assist_postings.empty and 'skills' in self.assist_postings.columns:
+            self.assist_tfidf_matrix = self.vectorizer.fit_transform(self.assist_postings['skills'])
+        else:
+            self.assist_tfidf_matrix = None
+
+        if not self.user_profiles.empty and 'skills' in self.user_profiles.columns:
+            self.user_tfidf_matrix = self.vectorizer.fit_transform(self.user_profiles['skills'])
+        else:
+            self.user_tfidf_matrix = None
 
     def get_feature_matrices(self):
         return self.user_tfidf_matrix, self.assist_tfidf_matrix

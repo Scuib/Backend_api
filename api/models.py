@@ -3,13 +3,12 @@ from django.contrib.auth.models import AbstractUser, PermissionsMixin
 from django.urls import translate_url
 from django.utils.translation import gettext_lazy as _
 
-from api.views import assist
 from .managers import CustomUserManager
 from cloudinary.models import CloudinaryField
 
 class User(AbstractUser):
     email = models.EmailField(unique=True)
-    # username = models.CharField(max_length=100, blank=True, null=True)
+    username = models.CharField(max_length=100, blank=True, null=True)
     first_name = models.CharField(_('First Name'), max_length=100)
     last_name = models.CharField(_('Last Name'), max_length=100, null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
@@ -141,6 +140,8 @@ class PasswordReset_keys(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
 
 
+from django.utils import timezone
+
 class Jobs(models.Model):
     class CurrencyChoices(models.TextChoices):
         usd = 'USD', 'United States Dollar'
@@ -157,12 +158,12 @@ class Jobs(models.Model):
     description = models.TextField()
     location = models.CharField(max_length=255)
     categories = models.TextField(null=True)
-    max_salary = models.IntegerField()
-    min_salary = models.IntegerField()
+    max_salary = models.IntegerField(default=5000)
+    min_salary = models.IntegerField(default=0)
     currency_type = models.CharField(max_length=30, choices=CurrencyChoices.choices, default=CurrencyChoices.ngn)
     employment_type = models.CharField(max_length=20, choices=EmploymentType.choices)
-    max_experience = models.IntegerField()
-    min_experience = models.IntegerField()
+    max_experience = models.IntegerField(default=2)
+    min_experience = models.IntegerField(default=1)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -217,7 +218,7 @@ class AssitSkills(models.Model):
         return self.name
 
 class AssistApplicants(models.Model):
-    applicants = models.ManyToManyField(User, related_name='applicants')
+    applicants = models.ManyToManyField(User, related_name='assist_applicants')
     assist = models.ForeignKey(Assits, on_delete=models.CASCADE, related_name='applicants')
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
