@@ -671,9 +671,9 @@ def initialize_payment(request):
         'Content-Type': 'application/json',
     }
 
-    if 'PLUS' is plan and amount < 100:
+    if 'PLUS' == plan and amount < 100:
         return Response({"detail": "Amount must be at least 100 for PLUS plan."}, status=status.HTTP_400_BAD_REQUEST)
-    elif 'PRO' is plan and amount < 1000:
+    elif 'PRO' == plan and amount < 1000:
         return Response({"detail": "Amount must be at least 1000 for PRO plan."}, status=status.HTTP_400_BAD_REQUEST)
 
     data = {
