@@ -1,3 +1,4 @@
+import requests
 from django.http import JsonResponse
 import cloudinary.uploader
 from django.shortcuts import render, get_object_or_404
@@ -9,8 +10,8 @@ from rest_framework import status
 import cloudinary
 
 
-from .models import (CompanyProfile, Profile, User, EmailVerication_Keys, Assits,
-                     PasswordReset_keys, JobSkills, UserCategories, UserSkills, WaitList,
+from .models import (CompanyProfile, Profile, User, EmailVerication_Keys, Assits, Subscription,
+                     PasswordReset_keys, JobSkills, UserCategories, UserSkills, WaitList, 
                      AllSkills, Cover_Letter, Resume, Image, Jobs, Applicants, AssitSkills)
 
 from .serializer import (CompanySerializer, MyTokenObtainPairSerializer, UserSerializer, ProfileSerializer, 
@@ -23,6 +24,8 @@ from .tools import VerifyEmail_key, ResetPassword_key
 from django.contrib.auth.hashers import make_password, check_password
 from allauth.account.models import EmailAddress
 from rest_framework_simplejwt.tokens import RefreshToken
+
+from django.conf import settings
 
 
 
@@ -290,6 +293,7 @@ def profile_update(request):
         serialized_data.save()
 
         return Response({"_detail": "Succesful!"}, status=status.HTTP_200_OK)
+
     return Response({"_detail": "An error occured!"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
@@ -463,7 +467,7 @@ def user_jobs(request):
     jobs = Jobs.objects.filter(owner=user)
     job_list = []
     for job in jobs:
-        applicants = Applicants.objects.filter(job=job).values_list('applicant', flat=True)
+        applications = Applicants.objects.get(job=job)
         job_data = {
             'id': job.id,
             'title': job.title,
@@ -475,7 +479,7 @@ def user_jobs(request):
             'currency_type': job.currency_type,
             'employment_type': job.employment_type,
             'experience_level': f"{job.min_experience} - {job.max_experience}",
-            'applicants': [{'id': applicant.applicant.id, 'first_name': applicant.applicant.first_name, 'last_name': applicant.applicant.last_name} for applicant in Applicants.objects.filter(job=job)]
+            'applicants': [{'id': applicant.id, 'first_name': applicant.first_name, 'last_name': applicant.last_name} for applicant in applications.applicants.all()]
         }
         job_list.append(job_data)
     return Response(job_list)
@@ -638,6 +642,7 @@ def assist(request):
 
 
 @api_view(['POST'])
+@permission_classes([IsAuthenticated])
 @permission_classes([AllowAny])
 def waitlist(request):
     email = request.data.get('email')  # Use .get() to avoid KeyError
@@ -652,3 +657,58 @@ def waitlist(request):
     except Exception as e:
         # Log the exception if needed
         return Response({"detail": "Unsuccessful", "error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def initialize_payment(request):
+    amount = int(request.data.get('amount'))
+    email = request.data.get('email')
+    plan = request.data.get('plan')
+
+    headers = {
+        'Authorization': f'Bearer {settings.PAYSTACK_SECRET_KEY}',
+        'Content-Type': 'application/json',
+    }
+
+    if 'PLUS' is plan and amount < 100:
+        return Response({"detail": "Amount must be at least 100 for PLUS plan."}, status=status.HTTP_400_BAD_REQUEST)
+    elif 'PRO' is plan and amount < 1000:
+        return Response({"detail": "Amount must be at least 1000 for PRO plan."}, status=status.HTTP_400_BAD_REQUEST)
+
+    data = {
+        'email': email,
+        'amount': amount * 100,  # Paystack expects the amount in kobo
+        'callback_url': 'http://yourdomain.com/payment/verify/'
+    }
+
+    response = requests.post('https://api.paystack.co/transaction/initialize', headers=headers, json=data)
+    response_data = response.json()
+
+    if response.status_code == 200:
+        return Response({'payment_url': response_data['data']['authorization_url']})
+    else:
+        return Response({'error': response_data['message']}, status=status.HTTP_400_BAD_REQUEST)
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def verify_payment(request):
+    reference = request.query_params.get('reference')
+    plan = request.query_params.get('plan')
+
+    headers = {
+        'Authorization': f'Bearer {settings.PAYSTACK_SECRET_KEY}',
+    }
+
+    response = requests.get(f'https://api.paystack.co/transaction/verify/{reference}', headers=headers)
+    response_data = response.json()
+
+    print(response_data)
+    if response_data['status'] == 'success':
+        amount = response_data['amount'] // 100
+        Subscription.objects.create(user=request.user, amount=amount, plan=plan)
+        return Response({'message': 'Payment successful'})
+    else:
+        return Response({'error': 'Payment verification failed'}, status=status.HTTP_400_BAD_REQUEST)
+
+

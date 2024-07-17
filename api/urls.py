@@ -29,5 +29,7 @@ urlpatterns = [
     path('company/', views.company, name='company-profile'),
     path('assist/create/', views.assist_create, name='assist-create'),
     path('assist/update/', views.assist_update, name='assist-update'),
-    path('waitlist/', views.waitlist, name='waitlist')
+    path('waitlist/', views.waitlist, name='waitlist'),
+    path('payment/initialize/', views.initialize_payment, name='initialize_payment'),
+    path('payment/verify/', views.verify_payment, name='verify_payment'),
 ]

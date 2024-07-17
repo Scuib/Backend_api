@@ -1,10 +1,12 @@
-
+from django.shortcuts import get_object_or_404, get_list_or_404
 from django.db.models.signals import post_save, post_delete
+from numpy import positive
 from .models import JobSkills, Jobs, User, Profile, UserSkills, UserCategories, Image, CompanyProfile, Applicants
 from django.dispatch import receiver
 import cloudinary.uploader
 from scuibai.settings import BASE_DIR
-from .model.model import JobAppMatching
+from .job_model.data_processing import DataPreprocessor
+from .job_model.job_recommender import JobRecommender
 
 
 @receiver(post_save, sender=User)
@@ -47,50 +49,78 @@ def create_company_signals(sender, instance, created, **kwargs):
 
 @receiver(post_save, sender=Jobs)
 def create_applicants_signals(sender, instance, created, **kwargs):
-    print(f"Job {instance.id} - {instance.title} has been {'created' if created else 'updated'}.")
-    
-    job_matcher = JobAppMatching()
-    job_matcher.load_model()
-    
-    recommended = job_matcher.recommend_applicants(
-        job_id=instance.id,
-        max_experience=instance.max_experience,
-        min_experience=instance.min_experience,
-        job_type=instance.employment_type
-    )
-    
-    print(f"Recommended applicants for job {instance.id}: {recommended}")
-    
-    Applicants.objects.filter(job=instance).delete()
-    print(f"Existing applicants for job {instance.id} deleted.")
 
-    for x in recommended.itertuples():
-        applicant = User.objects.get(id=x.applicant_id)
-        Applicants.objects.create(applicant=applicant, job=instance)
-        print(f"Applicant {applicant.id} assigned to job {instance.id}.")
+    # Load and preprocess data
+    data = DataPreprocessor()
+    job_postings, user_profiles = data.load_data(job_id=instance.id)
+    data.preprocess_data()
+    user_tfidf_matrix, job_tfidf_matrix = data.get_feature_matrices()
+
+    # Get positive pairs from application history
+    positive_pairs = list(Applicants.objects.filter(job=instance).values_list('applicants__id', 'job_id'))
+
+    # Train the recommender model
+    recommender = JobRecommender()
+    recommender.train(user_features=user_tfidf_matrix, job_features=job_tfidf_matrix, positive_pairs=positive_pairs)
+    recommender.save_model('job_recommender_model.pkl')
+
+    # Recommend users for the job
+    job_index = data.job_postings.index[data.job_postings['id'] == instance.id].tolist()[0]
+    recommended_user_indices = recommender.recommend(job_tfidf_matrix[job_index], user_tfidf_matrix, top_k=5)
+    recommended_users = data.user_profiles.iloc[recommended_user_indices]['id'].tolist()
+    print(recommended_users)
+
+    if recommended_users:
+        try:
+            application = Applicants.objects.get(job=instance)
+            # Update existing applicants
+            application.applicants.set(User.objects.filter(id__in=recommended_users))
+            application.save()
+        except Applicants.DoesNotExist:
+            # Create new applicants entry
+            application = Applicants.objects.create(job=instance)
+            application.applicants.set(User.objects.filter(id__in=recommended_users))
+    
+    # DEBUG
+    # print(recommender.load_model('job_recommender_model.pkl'))
+    # print("Job Posting Data: ", job_postings)
+    # print("User Profiles Data: ", user_profiles)
+    # print("User TF-IDF Matrix: ", user_tfidf_matrix)
+    # print("Job TF-IDF Matrix: ", job_tfidf_matrix)
 
 @receiver(post_save, sender=JobSkills)
 @receiver(post_delete, sender=JobSkills)
 def update_applicants_on_skills_change(sender, instance, **kwargs):
-    job = instance.job
-    print(f"Skills for job {job.id} - {job.title} have been {'created/updated' if isinstance == JobSkills else 'deleted'}.")
+    # Load and preprocess data
+    data = DataPreprocessor()
+    job_postings, user_profiles = data.load_data(job_id=instance.job.id)
+    data.preprocess_data()
+    user_tfidf_matrix, job_tfidf_matrix = data.get_feature_matrices()
 
-    job_matcher = JobAppMatching()
-    job_matcher.load_model()
-    
-    recommended = job_matcher.recommend_applicants(
-        job_id=job.id,
-        max_experience=job.max_experience,
-        min_experience=job.min_experience,
-        job_type=job.employment_type
-    )
-    
-    print(f"Recommended applicants for job {job.id} after skills change: {recommended}")
+    # Get positive pairs from application history
+    positive_pairs = list(Applicants.objects.filter(job=instance.job).values_list('applicants__id', 'job_id'))
 
-    Applicants.objects.filter(job=job).delete()
-    print(f"Existing applicants for job {job.id} deleted.")
+    # Train the recommender model
+    recommender = JobRecommender()
+    recommender.train(user_features=user_tfidf_matrix, job_features=job_tfidf_matrix, positive_pairs=positive_pairs)
+    recommender.save_model('job_recommender_model.pkl')
 
-    for x in recommended.itertuples():
-        applicant = User.objects.get(id=x.applicant_id)
-        Applicants.objects.create(applicant=applicant, job=job)
-        print(f"Applicant {applicant.id} assigned to job {job.id}.")
+    # Recommend users for the job
+    job_index = data.job_postings.index[data.job_postings['id'] == instance.id].tolist()[0]
+    recommended_user_indices = recommender.recommend(job_tfidf_matrix[job_index], user_tfidf_matrix, top_k=5)
+    recommended_users = data.user_profiles.iloc[recommended_user_indices]['id'].tolist()
+    print(recommended_users)
+
+    if recommended_users:
+        try:
+            application = Applicants.objects.get(job=instance.job)
+            # Update existing applicants
+            application.applicants.set(User.objects.filter(id__in=recommended_users))
+            application.save()
+        except Applicants.DoesNotExist:
+            # Create new applicants entry
+            application = Applicants.objects.create(job=instance.job)
+            application.applicants.set(User.objects.filter(id__in=recommended_users))
+
+
+

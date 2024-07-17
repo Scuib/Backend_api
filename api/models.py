@@ -2,12 +2,14 @@ from django.db import models
 from django.contrib.auth.models import AbstractUser, PermissionsMixin
 from django.urls import translate_url
 from django.utils.translation import gettext_lazy as _
+
+from api.views import assist
 from .managers import CustomUserManager
 from cloudinary.models import CloudinaryField
 
 class User(AbstractUser):
     email = models.EmailField(unique=True)
-    username = models.CharField(max_length=100, blank=True, null=True)
+    # username = models.CharField(max_length=100, blank=True, null=True)
     first_name = models.CharField(_('First Name'), max_length=100)
     last_name = models.CharField(_('Last Name'), max_length=100, null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
@@ -175,7 +177,7 @@ class JobSkills(models.Model):
 
 
 class Applicants(models.Model):
-    applicant = models.ForeignKey(User, on_delete=models.CASCADE, related_name='applicant')
+    applicants = models.ManyToManyField(User, related_name='applicants')
     job = models.ForeignKey(Jobs, on_delete=models.CASCADE, related_name='job')
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -214,8 +216,26 @@ class AssitSkills(models.Model):
     def __str__(self) -> str:
         return self.name
 
+class AssistApplicants(models.Model):
+    applicants = models.ManyToManyField(User, related_name='applicants')
+    assist = models.ForeignKey(Assits, on_delete=models.CASCADE, related_name='applicants')
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
 
 class WaitList(models.Model):
     email = models.EmailField()
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
+
+
+class Subscription(models.Model):
+    class SubscriptionPlans(models.TextChoices):
+        free = "FREE"
+        plus = "PLUS"
+        pro = "PRO"
+
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='subscription')
+    amount = models.IntegerField()
+    plan = models.CharField(max_length=10, choices=SubscriptionPlans.choices)
+    reference = models.CharField(max_length=100, unique=True)
