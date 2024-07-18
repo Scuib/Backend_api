@@ -86,9 +86,7 @@ def create_applicants_signals(sender, instance, created, **kwargs):
     # Recommend users for the job
     job_index = data.job_postings.index[data.job_postings['id'] == instance.id].tolist()[0]
 
-    if job_index.empty:
-        print(f"No Job Index found for id: {instance.id}")
-        return
+    print(f"No Job Index {job_index} found for id: {instance.id}")
 
     recommended_user_indices = recommender.recommend(job_tfidf_matrix[job_index], user_tfidf_matrix, top_k=5)
     recommended_users = data.user_profiles.iloc[recommended_user_indices]['id'].tolist()
