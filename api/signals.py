@@ -68,6 +68,10 @@ def create_applicants_signals(sender, instance, created, **kwargs):
     # Load and preprocess data
     data = DataPreprocessor()
     job_postings, user_profiles = data.load_data(job_id=instance.id)
+
+    if job_postings.empty:
+        print(f"No Job postings found for id: {instance.id}")
+        return
     data.preprocess_data()
     user_tfidf_matrix, job_tfidf_matrix = data.get_feature_matrices()
 
@@ -81,6 +85,11 @@ def create_applicants_signals(sender, instance, created, **kwargs):
 
     # Recommend users for the job
     job_index = data.job_postings.index[data.job_postings['id'] == instance.id].tolist()[0]
+
+    if job_index.empty:
+        print(f"No Job Index found for id: {instance.id}")
+        return
+
     recommended_user_indices = recommender.recommend(job_tfidf_matrix[job_index], user_tfidf_matrix, top_k=5)
     recommended_users = data.user_profiles.iloc[recommended_user_indices]['id'].tolist()
     print(recommended_users)
