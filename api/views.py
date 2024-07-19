@@ -11,7 +11,7 @@ import cloudinary
 
 
 from .models import (CompanyProfile, Profile, User, EmailVerication_Keys, Assits, Subscription,
-                     PasswordReset_keys, JobSkills, UserCategories, UserSkills, WaitList, 
+                     PasswordReset_keys, JobSkills, UserCategories, UserSkills, WaitList, AssistApplicants,
                      AllSkills, Cover_Letter, Resume, Image, Jobs, Applicants, AssitSkills)
 
 from .serializer import (CompanySerializer, MyTokenObtainPairSerializer, UserSerializer, ProfileSerializer, 
@@ -400,13 +400,15 @@ def upload_image(request):
 @permission_classes([IsAuthenticated])
 def job_create(request):
     user = request.user
+
     if not user.company is True:
         return Response("Only Companies can create Jobs", status=status.HTTP_404_NOT_FOUND)
 
     request.data['owner'] = request.user.id
+    print(request.data['skills'])
 
     new_skills = request.data.pop('skills', [])
-    # print(new_skills)
+    print(new_skills)
 
     serialized_data = JobSerializer(data=request.data)
     # print(serialized_data.is_valid())
@@ -418,7 +420,7 @@ def job_create(request):
         job = Jobs.objects.get(id=serialized_data.data['id'])
     
         for skill in new_skills:
-            job_skill, created = JobSkills.objects.get_or_create(job=job)
+            job_skill, created = JobSkills.objects.get_or_create(job=job, name=skill)
             job_skill.save()
 
         return Response({'detail': _("Job Successfully posted!")}, status=status.HTTP_201_CREATED)
@@ -467,7 +469,6 @@ def user_jobs(request):
     jobs = Jobs.objects.filter(owner=user)
     job_list = []
     for job in jobs:
-        applications = Applicants.objects.get(job=job)
         job_data = {
             'id': job.id,
             'title': job.title,
@@ -479,7 +480,7 @@ def user_jobs(request):
             'currency_type': job.currency_type,
             'employment_type': job.employment_type,
             'experience_level': f"{job.min_experience} - {job.max_experience}",
-            'applicants': [{'id': applicant.id, 'first_name': applicant.first_name, 'last_name': applicant.last_name} for applicant in applications.applicants.all()]
+            'applicants': Applicants.objects.filter(job=job).values_list('id', 'applicants__first_name', 'applicants__last_name')
         }
         job_list.append(job_data)
     return Response(job_list)
@@ -506,34 +507,6 @@ def all_jobs(request):
         job_list.append(job_data)
     return Response(job_list)
 
-
-""" Applicants  """
-
-# @api_view(['GET'])
-# @permission_classes([IsAuthenticated])
-# def applicant(request, job_id):
-#     try:
-#         job = Jobs.objects.get(id=job_id)
-#     except Jobs.DoesNotExist as e:
-#         return Response({'error': 'Job not found.'}, status=status.HTTP_404_NOT_FOUND)
-
-#     data = request.data.copy()
-#     data['job'] = job
-#     data['applicant'] = request.user
-
-#     serialized_data = ApplicantSerializer(data=data)
-#     if serialized_data.is_valid():
-#         serialized_data.save()
-
-#         response = {
-#             "job_id": serialized_data.job.id,
-#             "job_title": serialized_data.job.title,
-#             "applicant_id": serialized_data.applicant.id,
-#             "applicant_name": serialized_data.applicant.first_name,
-#         }
-#         return Response(response, status=status.HTTP_201_CREATED)
-#     else:
-#         return Response(serialized_data.errors, status=status.HTTP_400_BAD_REQUEST)
 
 from django.core.exceptions import ObjectDoesNotExist
 
@@ -642,7 +615,6 @@ def assist(request):
 
 
 @api_view(['POST'])
-@permission_classes([IsAuthenticated])
 @permission_classes([AllowAny])
 def waitlist(request):
     email = request.data.get('email')  # Use .get() to avoid KeyError
