@@ -3,7 +3,7 @@ import cloudinary.uploader
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 import cloudinary
 from scuibai.settings import BASE_DIR
-from .models import (AllSkills, Image, Resume, User, Profile, UserSkills, Assits,
+from .models import (JobSkills, Image, Resume, User, Profile, UserCategories, UserSkills, Assits,
                      EmailVerication_Keys, PasswordReset_keys, Jobs, Applicants, CompanyProfile)
 
 from django.contrib.auth.hashers import make_password
@@ -59,11 +59,31 @@ class MyTokenObtainPairSerializer(TokenObtainPairSerializer):
 
         return token
 
+class UserSkillSerializer(ModelSerializer):
+    class Meta:
+        model = UserSkills
+        fields = ['name']
+
+class UserCategoriesSerializer(ModelSerializer):
+    class Meta:
+        model = UserCategories
+        fields = ['name']
+
 
 class ProfileSerializer(ModelSerializer):
     class Meta:
         model = Profile
         fields = '__all__'
+
+class DisplayProfileSerializer(ModelSerializer):
+    skills = UserSkillSerializer(many=True)
+    categories = UserCategoriesSerializer(many=True)
+
+    class Meta:
+        model = Profile
+        fields = '__all__'
+
+
 
 class ResumeSerializer(ModelSerializer):
     class Meta:
@@ -81,14 +101,9 @@ class ImageSerializer(ModelSerializer):
         fields = ['file']
 
 
-class AllSkillSerializer(ModelSerializer):
+class JobSkillSerializer(ModelSerializer):
     class Meta:
-        model = AllSkills
-        fields = ['name']
-
-class UserSkillSerializer(ModelSerializer):
-    class Meta:
-        model = AllSkills
+        model = JobSkills
         fields = ['name']
 
 
@@ -108,6 +123,7 @@ class ApplicantSerializer(ModelSerializer):
         fields = '__all__'
 
 class JobSerializer(ModelSerializer):
+    skills = serializers.ListField(child=serializers.CharField(max_length=100), required=False)
     class Meta:
         model = Jobs
         fields = '__all__'
@@ -119,6 +135,7 @@ class CompanySerializer(ModelSerializer):
         fields = '__all__'
 
 class AssistSerializer(ModelSerializer):
+    skills = serializers.ListField(child=serializers.CharField(max_length=100), required=False)
     class Meta:
         model = Assits
         fields = '__all__'

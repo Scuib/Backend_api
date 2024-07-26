@@ -1,3 +1,5 @@
+from email.mime import application
+from pydantic import InstanceOf
 import requests
 from django.http import JsonResponse
 import cloudinary.uploader
@@ -12,9 +14,9 @@ import cloudinary
 
 from .models import (CompanyProfile, Profile, User, EmailVerication_Keys, Assits, Subscription,
                      PasswordReset_keys, JobSkills, UserCategories, UserSkills, WaitList, AssistApplicants,
-                     AllSkills, Cover_Letter, Resume, Image, Jobs, Applicants, AssitSkills)
+                     JobSkills, Cover_Letter, Resume, Image, Jobs, Applicants, AssitSkills)
 
-from .serializer import (CompanySerializer, MyTokenObtainPairSerializer, UserSerializer, ProfileSerializer, 
+from .serializer import (CompanySerializer, DisplayProfileSerializer, MyTokenObtainPairSerializer, UserSerializer, ProfileSerializer, 
                          EmailVerifySerializer, ApplicantSerializer, LoginSerializer, ResumeSerializer, 
                          ImageSerializer, CoverLetterSerializer, JobSerializer, CompanySerializer, AssistSerializer)
 
@@ -26,7 +28,7 @@ from allauth.account.models import EmailAddress
 from rest_framework_simplejwt.tokens import RefreshToken
 
 from django.conf import settings
-
+from .custom_signal import job_created, assist_created
 
 
 def home(request):
@@ -234,56 +236,167 @@ def profile_detail(request):
         profile = Profile.objects.get(user=request.user)
     except Profile.DoesNotExist:
         return Response(status=status.HTTP_404_NOT_FOUND)
-    
-    skills = UserSkills.objects.filter(user=request.user).values_list('name', flat=True)
-    categories = UserCategories.objects.filter(user=request.user).values_list('name', flat=True)
-
-    profile_data = {
-        'name': f"{profile.user.first_name} {profile.user.last_name}",
-        'bio': profile.bio,
-        'email': profile.user.email,
-        'skills': skills,
-        'categories': categories,
-        'location': profile.location,
-        'job_location': profile.get_job_location_display(),
-        'experience': profile.experience,
-        'phonenumbers': profile.phonenumbers,
-        'max_salary': profile.max_salary,
-        'min_salary': profile.min_salary,
-        'github': profile.github,
-        'linkedin': profile.linkedin,
-        'twitter':  profile.twitter
-    }
+    profile_data = DisplayProfileSerializer(profile).data
+    # Add first_name and last_name
+    profile_data['first_name'] = profile.user.first_name
+    profile_data['last_name'] = profile.user.last_name if profile.user.last_name else ''
 
     return Response({"data": profile_data}, status=status.HTTP_200_OK)
 
 
 # Profile Update of Authenticated User
-@api_view(['POST', 'PUT'])
+@api_view(['PUT'])
 @permission_classes([IsAuthenticated])
 def profile_update(request):
+    user = request.user
     # Check if the profile exists
     try:
-        profile = Profile.objects.get(user=request.user)
+        profile = Profile.objects.get(user=user)
     except Profile.DoesNotExist:
-        return Response(status=status.HTTP_404_NOT_FOUND)
+        return Response({"detail": "Profile does not exist"}, status=status.HTTP_404_NOT_FOUND)
 
-    # Update skills
+    # Handle first_name and last_name 
+    if 'first_name' in request.data:
+        first_name = request.data.pop('first_name')
+        profile.user.first_name = first_name
+
+    if 'last_name' in request.data:
+        last_name = request.data.pop('last_name')
+        profile.user.first_name = last_name
+
+    # Handle skill updates
     if 'skills' in request.data:
-        user_skills = UserSkills.objects.filter(user=request.user).values_list('name', flat=True)
         new_skills = request.data.pop('skills')
+        current_skills = set(profile.skills.values_list('name', flat=True))
+        new_skills_set = set(new_skills)
 
-        for skill in new_skills:
-            if skill not in user_skills:
-                UserSkills.objects.get_or_create(user=request.user, name=skill)
+        # Add new skills
+        for skill_name in new_skills_set - current_skills:
+            skill, created = UserSkills.objects.get_or_create(name=skill_name)
+            profile.skills.add(skill)
 
+        # Remove old skills
+        for skill_name in current_skills - new_skills_set:
+            skill = UserSkills.objects.get(name=skill_name)
+            profile.skills.remove(skill)
+
+    # Handle skill updates
     if 'categories' in request.data:
-        categories = UserCategories.objects.filter(user=request.user).values_list('name', flat=True)
         new_categories = request.data.pop('categories')
+        current_categories = set(profile.categories.values_list('name', flat=True))
+        new_categories_set = set(new_categories)
 
-        for category in new_categories:
-            if category not in categories:
-                UserCategories.objects.get_or_create(user=request.user, name=category)
+        # Add new skills
+        for category_name in new_categories_set - current_categories:
+            category, created = UserCategories.objects.get_or_create(name=category_name)
+            profile.categories.add(category)
+
+        # Remove old skills
+        for category_name in current_categories - new_categories_set:
+            category = UserCategories.objects.get(name=category_name)
+            profile.categories.remove(category)
+
+    if "image" in request.data:
+        image = get_object_or_404(Image, user=user)
+        if image:
+            image.file = cloudinary.uploader.upload(request.data['image'])['public_id'] # type: ignore
+            image.save()
+            request.data.pop('image')
+        else:
+            file = cloudinary.uploader.upload(request.data['image'])['public_id'] # type: ignore
+            Image.objects.create(user=user, file=file)
+            request.data.pop('image')
+
+    if "resume" in request.data:
+        resume = get_object_or_404(Resume, user=user)
+        if resume:
+            resume.file = cloudinary.uploader.upload(request.data['resume'])['public_id'] # type: ignore
+            resume.save()
+            request.data.pop('resume')
+        else:
+            file = cloudinary.uploader.upload(request.data['resume'])['public_id'] # type: ignore
+            Resume.objects.create(user=user, file=file)
+            request.data.pop('resume')
+
+
+    # Update profile with the remaining fields
+    serialized_data = ProfileSerializer(profile, data=request.data, partial=True)
+    # for attr, value in request.data.items():
+    #     setattr(profile, attr, value)
+    if serialized_data.is_valid():
+        serialized_data.save()
+
+        return Response({"_detail": "Succesful!"}, status=status.HTTP_200_OK)
+
+    return Response({"_detail": "An error occured!"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@api_view(['PUT'])
+@permission_classes([AllowAny])
+def onboarding(request, user_id):
+    # Check if the profile exists
+    user = get_object_or_404(User, id=user_id)
+    if not user:
+        return Response({"detail": "User does not exist"}, status=status.HTTP_404_NOT_FOUND)
+    try:
+        profile = Profile.objects.get(user=user)
+    except Profile.DoesNotExist:
+        return Response({"detail": "Profile does not exist"}, status=status.HTTP_404_NOT_FOUND)
+
+    # Handle skill updates
+    if 'skills' in request.data:
+        new_skills = request.data.pop('skills')
+        current_skills = set(profile.skills.values_list('name', flat=True))
+        new_skills_set = set(new_skills)
+
+        # Add new skills
+        for skill_name in new_skills_set - current_skills:
+            skill, created = UserSkills.objects.get_or_create(name=skill_name)
+            profile.skills.add(skill)
+
+        # Remove old skills
+        for skill_name in current_skills - new_skills_set:
+            skill = UserSkills.objects.get(name=skill_name)
+            profile.skills.remove(skill)
+
+    # Handle skill updates
+    if 'categories' in request.data:
+        new_categories = request.data.pop('categories')
+        current_categories = set(profile.categories.values_list('name', flat=True))
+        new_categories_set = set(new_categories)
+
+        # Add new skills
+        for category_name in new_categories_set - current_categories:
+            category, created = UserCategories.objects.get_or_create(name=category_name)
+            profile.categories.add(category)
+
+        # Remove old skills
+        for category_name in current_categories - new_categories_set:
+            category = UserCategories.objects.get(name=category_name)
+            profile.categories.remove(category)
+
+    if "image" in request.data:
+        image = get_object_or_404(Image, user=user)
+        if image:
+            image.file = cloudinary.uploader.upload(request.data['image'])['public_id'] # type: ignore
+            image.save()
+            request.data.pop('image')
+        else:
+            file = cloudinary.uploader.upload(request.data['image'])['public_id'] # type: ignore
+            Image.objects.create(user=user, file=file)
+            request.data.pop('image')
+
+    if "resume" in request.data:
+        resume = get_object_or_404(Resume, user=user)
+        if resume:
+            resume.file = cloudinary.uploader.upload(request.data['resume'])['public_id'] # type: ignore
+            resume.save()
+            request.data.pop('resume')
+        else:
+            file = cloudinary.uploader.upload(request.data['resume'])['public_id'] # type: ignore
+            Resume.objects.create(user=user, file=file)
+            request.data.pop('resume')
+
 
     # Update profile with the remaining fields
     serialized_data = ProfileSerializer(profile, data=request.data, partial=True)
@@ -319,81 +432,6 @@ def profile_delete(request):
         return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
-""" CLOUDINARY FILES VIEWS """
-
-# Upload Resume
-@api_view(['POST'])
-@permission_classes([IsAuthenticated])
-def upload_resume(request):
-    serialized_data = ResumeSerializer(data=request.data)
-    
-    if serialized_data.is_valid():
-        try:
-            # Check if resume exists for the user
-            resume = Resume.objects.get(user=request.user)
-            # Update the file field
-            resume.file = cloudinary.uploader.upload(serialized_data.validated_data['file'])['public_id'] # type: ignore
-            resume.save()
-            return Response("Resume updated successfully")
-        except Resume.DoesNotExist:
-            # Create a new resume if it does not exist
-            file= cloudinary.uploader.upload(serialized_data.validated_data['file'])['public_id'] # type: ignore
-            resume = Resume.objects.create(user=request.user, file=file)
-            resume.save()
-            return Response("Resume uploaded successfully")
-    else:
-        return Response(serialized_data.errors, status=400)
-
-
-# Upload Cover letter
-@api_view(['POST'])
-@permission_classes([IsAuthenticated])
-def upload_cover_letter(request):
-    serialized_data = CoverLetterSerializer(data=request.data)
-    
-    if serialized_data.is_valid():
-        try:
-            # Check if cover letter exists for the user
-            cover_letter = Cover_Letter.objects.get(user=request.user)
-            # Update the file field
-            cover_letter.file = cloudinary.uploader.upload(serialized_data.validated_data['file'])['public_id'] # type: ignore
-            cover_letter.save()
-            return Response("Resume updated successfully")
-        except Cover_Letter.DoesNotExist:
-            # Create a new resume if it does not exist
-            file= cloudinary.uploader.upload(serialized_data.validated_data['file'])['public_id'] # type: ignore
-            cover_letter = Cover_Letter.objects.create(user=request.user, file=file)
-            cover_letter.save()
-            return Response("Resume uploaded successfully")
-    else:
-        return Response(serialized_data.errors, status=400)
-
-
-# Upload Image
-@api_view(['POST'])
-@permission_classes([IsAuthenticated])
-def upload_image(request):
-    try:
-        image = Image.objects.get(user=request.user)
-    except Exception:
-        return Response("Image does not exist", status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-
-    serialized_data = ImageSerializer(data=request.data)
-
-    if serialized_data.is_valid():
-        file = cloudinary.uploader.upload(serialized_data.validated_data['file'])['public_id'] # type: ignore
-        image.file=file
-
-        image.save()
-
-        print(image)
-        return Response({'detail': _('Successfully updated!')},
-                        status=status.HTTP_404_NOT_FOUND)
-
-    return Response({'detail': _('Data Not Valid')},
-                        status=status.HTTP_404_NOT_FOUND)
-
-
 """ JOB VIEWS """
 
 @api_view(['POST'])
@@ -405,107 +443,115 @@ def job_create(request):
         return Response("Only Companies can create Jobs", status=status.HTTP_404_NOT_FOUND)
 
     request.data['owner'] = request.user.id
-    print(request.data['skills'])
 
     new_skills = request.data.pop('skills', [])
-    print(new_skills)
 
     serialized_data = JobSerializer(data=request.data)
-    # print(serialized_data.is_valid())
 
     if serialized_data.is_valid():
-        serialized_data.save()
+        job_instance = serialized_data.save()
 
         # Create JobSkills relationships
-        job = Jobs.objects.get(id=serialized_data.data['id'])
-    
         for skill in new_skills:
-            job_skill, created = JobSkills.objects.get_or_create(job=job, name=skill)
-            job_skill.save()
+            job_skill= JobSkills.objects.create(name=skill)
+            job_instance.skills.add(job_skill)
+        
+        job_created.send(sender=Jobs, instance=job_instance)
 
         return Response({'detail': _("Job Successfully posted!")}, status=status.HTTP_201_CREATED)
     
     return Response(serialized_data.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
-@api_view(['POST', 'PUT'])
+@api_view(['PUT'])
 @permission_classes([IsAuthenticated])
 def job_update(request, job_id):
     user = request.user
-    if not user.company is True:
-        return Response("Only Companies can edit Jobs", status=status.HTTP_404_NOT_FOUND)
-    try:
-        job = Jobs.objects.get(owner=request.user, id=job_id)
-    except Jobs.DoesNotExist:
-        return Response(status=status.HTTP_404_NOT_FOUND)
+    job_instance = get_object_or_404(Jobs, id=job_id)
 
-    if "skills" in request.data:
-        skills = request.data.pop("skills")
+    if job_instance.owner != user:
+        return Response("You do not have permission to update this job", status=status.HTTP_403_FORBIDDEN)
 
-        # Update skills
-        job_skills = JobSkills.objects.filter(job=job).values_list('name', flat=True)
+    # Check if skills are being updated
+    skills_update = 'skills' in request.data
+    new_skills = request.data.pop('skills', [])
 
-        for skill in skills:
-            if skill not in job_skills:
-                new_job_skills = JobSkills.objects.create(job=job, name=skill)
-                new_job_skills.save()
+    serialized_data = JobSerializer(job_instance, data=request.data, partial=True)
+    if serialized_data.is_valid():
+        serialized_data.save()
 
-    # Update profile with the remaining fields
-    serialized_data = JobSerializer(job, data=request.data, partial=True)
-    # for attr, value in request.data.items():
-    #     setattr(job, attr, value)
-    if not serialized_data.is_valid():
-        return Response("Please send the correct fields")
+        if skills_update:
+            # Handle skill updates
+            current_skills = set(job_instance.skills.values_list('name', flat=True))
+            new_skills_set = set(new_skills)
 
-    serialized_data.save()
+            # Add new skills
+            for skill_name in new_skills_set - current_skills:
+                skill, created = JobSkills.objects.get_or_create(name=skill_name)
+                job_instance.skills.add(skill)
 
-    return Response({"detail": "Successful"}, status=status.HTTP_200_OK)
+            # Remove old skills
+            for skill_name in current_skills - new_skills_set:
+                skill = JobSkills.objects.get(name=skill_name)
+                job_instance.skills.remove(skill)
+
+            # Manually trigger the custom signal
+            job_created.send(sender=Jobs, instance=job_instance)
+
+        return Response({'detail': _("Job Successfully updated!")}, status=status.HTTP_200_OK)
+
+    return Response(serialized_data.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])  # Optional: Remove if you want this to be publicly accessible
+def jobs_all(request):
+    jobs = Jobs.objects.all()
+    serialized_jobs = JobSerializer(jobs, many=True)
+    return Response(serialized_jobs.data, status=status.HTTP_200_OK)
 
 
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
-def user_jobs(request):
-    user = request.user
-    jobs = Jobs.objects.filter(owner=user)
-    job_list = []
+def jobs_user(request):
+    jobs = Jobs.objects.filter(owner=request.user)
+    data = []
     for job in jobs:
-        job_data = {
-            'id': job.id,
-            'title': job.title,
-            'description': job.description,
-            'location': job.location,
-            'skills': JobSkills.objects.filter(job=job).values_list('name', flat=True),
-            'max_salary': job.max_salary,
-            'min_salary': job.min_salary,
-            'currency_type': job.currency_type,
-            'employment_type': job.employment_type,
-            'experience_level': f"{job.min_experience} - {job.max_experience}",
-            'applicants': Applicants.objects.filter(job=job).values_list('id', 'applicants__first_name', 'applicants__last_name')
-        }
-        job_list.append(job_data)
-    return Response(job_list)
+        applicants = Applicants.objects.filter(job=job)
+        # print([User.objects.get(email=users.applicants) for users in applicants])
+        print(applicant.user.values_list('first_name') for applicant in applicants)
+        data.append({
+            "job": {
+                'job_id': job.id,
+                'role': job.categories,
+                'type': job.employment_type,
+                'skills': job.skills.values_list('name', flat=True),
+                'location': job.location,
+                'pay_range': f"{job.min_salary} - {job.max_salary}",
+                'experience': f"{job.min_experience} - {job.max_experience}"
+            },
+            "applicants": [{
+                'applicant_id': user.id,
+                'first_name': user.first_name,
+                'last_name': user.last_name if user.last_name else '',
+                'email': user.email,
+                'phone_number': user.profile.phonenumbers} for applicant in applicants for user in applicant.user.all()]
+        })
+    return Response(data, status=status.HTTP_200_OK)
 
+@api_view(['DELETE'])
+@permission_classes([IsAuthenticated])
+def delete_job(request, job_id):
+    job = Jobs.objects.get(id=job_id)
+    # Check if job exists
+    if not job:
+        return Response({"detail": f"Job {job_id} does not exist"}, status=status.HTTP_404_NOT_FOUND)
 
-@api_view(['GET'])
-@permission_classes([AllowAny])
-def all_jobs(request):
-    jobs = Jobs.objects.all()
-    job_list = []
-    for job in jobs:
-        job_data = {
-            'id': job.id,
-            'title': job.title,
-            'description': job.description,
-            'location': job.location,
-            'max_salary': job.max_salary,
-            'min_salary': job.min_salary,
-            'currency_type': job.currency_type,
-            'employment_type': job.employment_type,
-            'experience_level': f"{job.min_experience} - {job.max_experience}",
-            'skills': JobSkills.objects.filter(job=job).values_list('name', flat=True),
-        }
-        job_list.append(job_data)
-    return Response(job_list)
+    # Check if the authenticated user is the owner of job post
+    if request.user == job.owner:
+        return Response({"detail": f"User is not permitted to delete this job"}, status=status.HTTP_401_UNAUTHORIZED)
+    job.delete()
+    return Response({"detail": "Job deleted Successfully"}, status=status.HTTP_200_OK)
 
 
 from django.core.exceptions import ObjectDoesNotExist
@@ -518,6 +564,8 @@ def company(request):
     try:
         company = CompanyProfile.objects.get(owner=owner)
         serializer = CompanySerializer(company)
+        # Add the company name
+        serializer.data['company_name'] = company.owner.first_name
         return Response(serializer.data, status=status.HTTP_200_OK)
     except ObjectDoesNotExist:
         return Response({'error': 'CompanyProfile not found.'}, status=status.HTTP_404_NOT_FOUND)
@@ -533,6 +581,11 @@ def company_update(request):
 
     if request.user.id != company_profile.owner.id:
         return Response({'error': 'You do not have permission to edit this profile.'}, status=status.HTTP_403_FORBIDDEN)
+    
+    # Edit company name
+    if "company_name" in request.data:
+        company_name = request.data.pop('company_name')
+        company_profile.owner.first_name = company_name
 
     serializer = CompanySerializer(company_profile, data=request.data, partial=True)
     if serializer.is_valid():
@@ -540,6 +593,15 @@ def company_update(request):
         return Response(serializer.data, status=status.HTTP_200_OK)
     return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
+@api_view(['DELETE'])
+@permission_classes([IsAuthenticated])
+def delete_user(request):
+    user=request.user
+    user.delete()
+    return Response({"detail": "User deleted Successfully"}, status=status.HTTP_200_OK)
+
+
+"""ASSIST MODELS"""
 
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
@@ -547,72 +609,99 @@ def assist_create(request):
     request.data['owner'] = request.user.id  # Ensure user is set correctly
 
     new_skills = request.data.pop('skills', [])
-    # print(new_skills)
+    # skill = AssitSkills.objects.create(name='default')
+    # request.data['skills'] = [skill]
 
     serialized_data = AssistSerializer(data=request.data)
-    # print(serialized_data.is_valid())
 
+    if serialized_data.is_valid():
+        assist_instance = serialized_data.save()
+
+        # Create AssistSkills relationships
+        # assist_instance.skills.clear()  # Clear the default skill
+
+        for skill in new_skills:
+            assist_skill, created = AssitSkills.objects.get_or_create(name=skill)
+            assist_instance.skills.add(assist_skill)
+
+        print("Compiler: Hey I got here 👋😊")
+        assist_created.send(sender=Assits, instance=assist_instance)
+
+        return Response({'detail': _("Assist Successfully posted!")}, status=status.HTTP_201_CREATED)
+
+    return Response(serialized_data.errors, status=status.HTTP_400_BAD_REQUEST)
+
+@api_view(['PUT'])
+@permission_classes([IsAuthenticated])
+def assist_update(request, assist_id):
+    assist_instance = get_object_or_404(Assits, id=assist_id)
+
+    # Check if the user owns the assist
+    if assist_instance.owner != request.user:
+        return Response("You do not have permission to update this assist", status=status.HTTP_403_FORBIDDEN)
+
+    # Check if skills are being updated
+    skills_update = 'skills' in request.data
+    new_skills = request.data.pop('skills', [])
+
+    serialized_data = AssistSerializer(assist_instance, data=request.data, partial=True)
     if serialized_data.is_valid():
         serialized_data.save()
 
-        # Create AssistSkills relationships
-        assist = Assits.objects.get(id=serialized_data.data['id'])
-    
-        for skill in new_skills:
-            assist_skill, created = AssitSkills.objects.get_or_create(assist=assist)
-            assist_skill.save()
+        if skills_update:
+            # Handle skill updates
+            current_skills = set(assist_instance.skills.values_list('name', flat=True))
+            new_skills_set = set(new_skills)
 
-        return Response({'detail': _("Assist Successfully posted!")}, status=status.HTTP_201_CREATED)
-    
+            # Add new skills
+            for skill_name in new_skills_set - current_skills:
+                skill, created = AssitSkills.objects.get_or_create(name=skill_name)
+                assist_instance.skills.add(skill)
+
+            # Remove old skills
+            for skill_name in current_skills - new_skills_set:
+                skill = AssitSkills.objects.get(name=skill_name)
+                assist_instance.skills.remove(skill)
+
+        # job_created.send()
+
+        return Response({'detail': _("Assist Successfully updated!")}, status=status.HTTP_200_OK)
+
     return Response(serialized_data.errors, status=status.HTTP_400_BAD_REQUEST)
 
-
-@api_view(['POST', 'PUT'])
-@permission_classes([IsAuthenticated])
-def assist_update(request):
-    try:
-        assist = Assits.objects.get(user=request.user)
-    except Assits.DoesNotExist:
-        return Response(status=status.HTTP_404_NOT_FOUND)
-
-    skills = request.data.pop("skills")
-    # Update profile with the remaining fields
-    for attr, value in request.data.items():
-        setattr(assist, attr, value)
-    assist.save()
-
-    # Update skills    
-    assist_skills = AssitSkills.objects.filter(assist=assist).values_list('name', flat=True)
-
-    for skill in skills:
-        if skill not in assist_skills:
-             AssitSkills.objects.get_or_create(assist=assist, name=skill)
-
-    return Response(assist, status=status.HTTP_200_OK)
-
-
-# @api_view(['GET'])
-# @permission_classes([AllowAny])
-# def assist(request):
-
 @api_view(['GET'])
-@permission_classes([AllowAny])
-def assist(request):
-    assists = Assits.objects.all()
-    assist_list = []
-    for assist in assists:
-        assist_data = {
-            'id': assist.id,
-            'title': assist.title,
-            'description': assist.description,
-            'max_salary': assist.max_pay,
-            'min_salary': assist.min_pay,
-            'currency_type': assist.currency_type,
-            'skills': AssitSkills.objects.filter(assist=assist).values_list('name', flat=True),
-        }
-        assist_list.append(assist_data)
-    return Response(assist_list)
-
+@permission_classes([IsAuthenticated])
+def assist_for_you(request):
+    query = AssistApplicants.objects.all()
+    assists = []
+    try:
+        for assist in query:
+            if request.user in assist.applicants:
+                assists.append({
+                    'first_name': assist.assist.owner.first_name,
+                    'last_name': assist.assist.owner.last_name if assist.assist.owner.first_name else '', # last_name is null return an empty string
+                    'title': assist.assist.title,
+                    'description': assist.assist.description,
+                    'skills': assist.assist.skills.values_list('name', flat=True),
+                    'max_pay': assist.assist.max_pay,
+                    'min_pay': assist.assist.min_pay
+                })
+        return Response({"detail": assists}, status=status.HTTP_200_OK)
+    except Exception as e:
+        return Response({"detail": f"An error occured {e}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+    
+@api_view(['DELETE'])
+@permission_classes([IsAuthenticated])
+def delete_assist(request, assist_id):
+    # Check if assist actually exists
+    assist = get_object_or_404(Assits, id=assist_id)
+    if not assist:
+        return Response({"detail": "Assist doesn't exist"}, status=status.HTTP_404_NOT_FOUND)
+    # Check if the authenticated user is owner of the assist post
+    if not request.user == assist.owner:
+        return Response({"detail": f"This User is not permitted to delete assist {assist_id}"}, status=status.HTTP_401_UNAUTHORIZED)
+    assist.delete()
+    return Response({"detail": "Assist delete"}, status=status.HTTP_200_OK)
 
 @api_view(['POST'])
 @permission_classes([AllowAny])
@@ -630,7 +719,7 @@ def waitlist(request):
         # Log the exception if needed
         return Response({"detail": "Unsuccessful", "error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
-
+""" PAYMENT """
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 def initialize_payment(request):

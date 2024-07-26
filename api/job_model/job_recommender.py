@@ -8,7 +8,6 @@ class JobRecommender:
 
     def train(self, user_features, job_features, positive_pairs):
         num_users = user_features.shape[0]
-        num_jobs = job_features.shape[0]
         
         # Create training data by combining user and job features
         X = []
@@ -16,32 +15,30 @@ class JobRecommender:
 
         if not positive_pairs:
             for user_index in range(num_users):
-                for job_index in range(num_jobs):
-                    combined_features = user_features[user_index].toarray()[0].tolist() + job_features[job_index].toarray()[0].tolist()
-                    X.append(combined_features)
-                    y.append(1 if np.random.rand() > 0.5 else 0)  # Random positive/negative labels
+                combined_features = user_features[user_index].toarray()[0].tolist() + job_features[0].toarray()[0].tolist()
+                X.append(combined_features)
+                y.append(1 if np.random.rand() > 0.5 else 0)  # Random positive/negative labels
         else:
             for user_index in range(num_users):
-                for job_index in range(num_jobs):
-                    combined_features = user_features[user_index].toarray()[0].tolist() + job_features[job_index].toarray()[0].tolist()
-                    X.append(combined_features)
-                    y.append(1 if (user_index, job_index) in positive_pairs else 0)
+                combined_features = user_features[user_index].toarray()[0].tolist() + job_features[0].toarray()[0].tolist()
+                X.append(combined_features)
+                y.append(1 if (user_index, 0) in positive_pairs else 0)
 
         X = np.array(X)
         y = np.array(y)
 
         self.model.fit(X, y)
 
-    def recommend(self, user_feature, job_features, top_k=5):
+    def recommend(self, user_features, job_feature, top_k=5):
         X = []
 
-        for job_feature in job_features:
-            combined_features = user_feature.toarray()[0].tolist() + job_feature.toarray()[0].tolist()
+        for user_feature in user_features:
+            combined_features = user_feature.toarray()[0].tolist() + job_feature[0].toarray()[0].tolist()
             X.append(combined_features)
 
         probabilities = self.model.predict_proba(X)[:, 1]
-        job_indices = probabilities.argsort()[-top_k:][::-1]
-        return job_indices
+        user_indices = probabilities.argsort()[-top_k:][::-1]
+        return user_indices
 
     def save_model(self, file_name):
         joblib.dump(self.model, file_name)
@@ -51,4 +48,5 @@ class JobRecommender:
         recommender = cls()
         recommender.model = joblib.load(file_name)
         return recommender
+    
 

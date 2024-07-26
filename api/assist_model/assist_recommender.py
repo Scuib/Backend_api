@@ -15,11 +15,16 @@ class AssistRecommender:
         X = []
         y = []
 
-        for user_index in range(num_users):
-            for assist_index in range(num_assists):
-                combined_features = user_features[user_index].toarray()[0].tolist() + assist_features[assist_index].toarray()[0].tolist()
+        if not positive_pairs:
+            for user_index in range(num_users):
+                combined_features = user_features[user_index].toarray()[0].tolist() + assist_features[0].toarray()[0].tolist()
                 X.append(combined_features)
-                y.append(1 if (user_index, assist_index) in positive_pairs else 0)
+                y.append(1 if np.random.rand() > 0.5 else 0)  # Random positive/negative labels
+        else:
+            for user_index in range(num_users):
+                combined_features = user_features[user_index].toarray()[0].tolist() + assist_features[0].toarray()[0].tolist()
+                X.append(combined_features)
+                y.append(1 if (user_index, 0) in positive_pairs else 0)
 
         X = np.array(X)
         y = np.array(y)

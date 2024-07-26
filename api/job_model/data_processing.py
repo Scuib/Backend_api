@@ -1,62 +1,80 @@
 import pandas as pd
 from sklearn.feature_extraction.text import TfidfVectorizer
+from django.shortcuts import get_object_or_404
+
+from api.views import company
 
 from ..models import Jobs, JobSkills, User, UserCategories, UserSkills, Profile
 from ..serializer import JobSerializer, ProfileSerializer, UserSerializer
 
+
 class DataPreprocessor:
     def __init__(self):
-        self.job_postings = None
+        self.job_posting = None
         self.user_profiles = None
         self.vectorizer = TfidfVectorizer()
 
     def load_data(self, job_id):
         # Query only the specific job using job_id
         job = Jobs.objects.get(id=job_id)
-        job_skills_list = list(JobSkills.objects.filter(job=job).values_list('name', flat=True))
-        
         job_data = [{
             'id': job.id,
             'description': job.description,
-            'skills': ' '.join(job_skills_list),
-            'category': job.categories
+            'skills': ' '.join(list(job.skills.values_list('name', flat=True))),
+            'category': ' '.join([cat for cat in [job.categories] if cat])
         }]
-        
-        users = User.objects.all().values()
-        user_skills = UserSkills.objects.all().values()
-        categories = UserCategories.objects.all().values()
-        
+        print(f"List of Job Data \n {job_data}")
+
+        users = User.objects.filter(company=False)
+
         user_data = []
         for user in users:
-            user_instance = User.objects.get(id=user['id'])
-            user_skills_list = list(UserSkills.objects.filter(user=user_instance).values_list('name', flat=True))
-            user_categories_list = list(UserCategories.objects.filter(user=user_instance).values_list('name', flat=True))
-            user_data.append({
-                'id': user['id'],
-                'skills': ' '.join(user_skills_list),
-                'category': ' '.join(user_categories_list)
-            })
+            profile = get_object_or_404(Profile, user=user)
+            # profile = Profile.objects.get(user=user)
+            if profile:
+                 user_data.append({
+                    'id': user.id,
+                    'skills': ' '.join(profile.skills.values_list('name', flat=True)),
+                    'category': ' '.join(profile.categories.values_list('name', flat=True))
+                })
         
-        self.job_postings = pd.DataFrame(job_data)
+        self.job_posting = pd.DataFrame(job_data)
         self.user_profiles = pd.DataFrame(user_data)
 
-        return self.job_postings, self.user_profiles
+        return self.job_posting, self.user_profiles
 
     def preprocess_data(self):
-        if 'description' not in self.job_postings.columns or 'skills' not in self.user_profiles.columns:
-            raise ValueError("Missing required columns in data files.")
+        print(f"Job Post Columns: {self.job_posting.columns}")
+        print(f"User Profiles Columns: {self.user_profiles.columns}")
 
-        self.job_postings['description'] = self.job_postings['description'].fillna('')
+        if 'description' not in self.job_posting.columns or 'skills' not in self.user_profiles.columns:
+            raise ValueError("Missing required columns in data files.")
+        
+        # Convert lists in 'skills' column to strings
+        self.job_posting['skills'] = self.job_posting['skills'].apply(lambda x: ' '.join(x) if isinstance(x, list) else x)
+        self.user_profiles['skills'] = self.user_profiles['skills'].apply(lambda x: ' '.join(x) if isinstance(x, list) else x)
+
+        self.job_posting['description'] = self.job_posting['description'].fillna('')
         self.user_profiles['skills'] = self.user_profiles['skills'].fillna('')
 
-        self.job_postings['combined'] = (self.job_postings['skills'] + ' ' + 
-                                         self.job_postings['category'] + ' ' + 
-                                         self.job_postings['description'])
+        # Convert 'category' to string if it's a list
+        self.job_posting['category'] = self.job_posting['category'].apply(lambda x: ' '.join(x) if isinstance(x, list) else x)
+        self.user_profiles['category'] = self.user_profiles['category'].apply(lambda x: ' '.join(x) if isinstance(x, list) else x)
+
+        # Concatenate the strings
+        self.job_posting['combined'] = (self.job_posting['skills'] + ' ' + 
+                                         self.job_posting['category'] + ' ' + 
+                                         self.job_posting['description'])
         self.user_profiles['combined'] = (self.user_profiles['skills'] + ' ' + 
                                           self.user_profiles['category'])
 
-        self.job_tfidf_matrix = self.vectorizer.fit_transform(self.job_postings['combined'])
+        # Print the dataframe to check
+        print(self.job_posting)
+        print(self.user_profiles)
+
+        self.job_tfidf_matrix = self.vectorizer.fit_transform(self.job_posting['combined'])
         self.user_tfidf_matrix = self.vectorizer.transform(self.user_profiles['combined'])
 
     def get_feature_matrices(self):
         return self.user_tfidf_matrix, self.job_tfidf_matrix
+

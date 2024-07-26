@@ -1,3 +1,5 @@
+from os import name
+from unicodedata import category
 from django.db import models
 from django.contrib.auth.models import AbstractUser, PermissionsMixin
 from django.urls import translate_url
@@ -25,22 +27,9 @@ class User(AbstractUser):
         return self.email
 
 
-# Model for all skills.
-# Example: python, SQL
-class AllSkills(models.Model):
-    name = models.CharField(max_length=100)
-    created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(auto_now=True)
 
-    def __str__(self) -> str:
-        return self.name
-
-
-# Model for user skills.
-# Example: python, SQL
-# This model should have a limit 10
+"""INDIVIDUAL USERS SKILLS MODEL"""
 class UserSkills(models.Model):
-    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='skills')
     name = models.CharField(max_length=100)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -48,12 +37,7 @@ class UserSkills(models.Model):
     def __str__(self) -> str:
         return self.name
 
-
-# Model for user categories.
-# Example: Backend Developer, Software Engineer
-# This model should have a limit 5
 class UserCategories(models.Model):
-    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='categories')
     name = models.CharField(max_length=100)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -62,7 +46,40 @@ class UserCategories(models.Model):
         return self.name
 
 
+"""INDIVIDUAL USERS PROFILE MODEL"""
+class Profile(models.Model):
+    class JobLocationChoices(models.TextChoices):
+        REMOTE = 'R', 'Remote'
+        ONSITE = 'O', 'Onsite'
+        HYBRID = 'H', 'Hybrid'
+    class JobEmploymentChoices(models.TextChoices):
+        Full_Time = 'F', 'Full-Time'
+        Part_Time = 'P', 'Part-Time'
+        Contract = 'C', 'Contract'
 
+    user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='profile')
+    bio = models.TextField(null=True, blank=True)
+    location = models.CharField(max_length=100, null=True, blank=True)
+    job_location = models.CharField(max_length=2, choices=JobLocationChoices.choices, default=JobLocationChoices.REMOTE)
+    employment_type = models.CharField(max_length=2, choices=JobEmploymentChoices.choices, default=JobEmploymentChoices.Full_Time)
+    max_salary = models.IntegerField(default=100)
+    min_salary = models.IntegerField(default=10)
+    experience = models.IntegerField(default=1)
+    phonenumbers = models.CharField(max_length=255, blank=True, null=True)
+    github = models.CharField(max_length=100, null=True, blank=True)
+    portfolio = models.CharField(max_length=100, null=True, blank=True)
+    linkedin = models.CharField(max_length=100, null=True, blank=True)
+    twitter = models.CharField(max_length=100, null=True, blank=True)
+    skills = models.ManyToManyField(UserSkills)
+    categories = models.ManyToManyField(UserCategories)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return self.user.first_name
+
+
+"""COMPANY PROFILE MODEL"""
 class CompanyProfile(models.Model):
     owner = models.OneToOneField(User, on_delete=models.CASCADE, related_name='company_profile')
     address = models.TextField(blank=True, null=True)
@@ -73,48 +90,24 @@ class CompanyProfile(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
 
     def __str__(self):
-        return self.owner.first_name # This will be taken as the company's name. 
-                                        # If business is True
+        return self.owner.first_name # This will be taken as the company's name.                                         # If business is True
 
 
-class Profile(models.Model):
-    class JobLocationChoices(models.TextChoices):
-        REMOTE = 'R', 'Remote'
-        ONSITE = 'O', 'Onsite'
-        HYBRID = 'H', 'Hybrid'
-
-    user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='profile')
-    bio = models.TextField(null=True, blank=True)
-    location = models.CharField(max_length=100, null=True, blank=True)
-    job_location = models.CharField(max_length=2, choices=JobLocationChoices.choices, default=JobLocationChoices.HYBRID)
-    max_salary = models.IntegerField(default=100)
-    min_salary = models.IntegerField(default=10)
-    experience = models.IntegerField(default=1)
-    phonenumbers = models.CharField(max_length=255, blank=True, null=True)
-    github = models.CharField(max_length=100, null=True, blank=True)
-    linkedin = models.CharField(max_length=100, null=True, blank=True)
-    twitter = models.CharField(max_length=100, null=True, blank=True)
-    created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(auto_now=True)
-
-    def __str__(self):
-        return self.user.first_name
-
-
+"""RESUME MODEL"""
 class Resume(models.Model):
     user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='resume')
     file = CloudinaryField('resume')
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
-
+"""COVER LETTER MODEL"""
 class Cover_Letter(models.Model):
     user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='cover_letter')
     file = CloudinaryField('cover_letter')
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
-
+"""IMAGE MODEL"""
 class Image(models.Model):
     user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='image')
     file = CloudinaryField('image')
@@ -122,6 +115,7 @@ class Image(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
 
 
+"""EMAIL VERIFICATION MODEL"""
 # This is to store every email verification key issued 
 class EmailVerication_Keys(models.Model):
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='keys')
@@ -131,6 +125,7 @@ class EmailVerication_Keys(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
 
 
+"""PASSWORD RESET KEYS MDOEL"""
 # This is to store every password reset token issued
 class PasswordReset_keys(models.Model):
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='pwd_keys')
@@ -142,6 +137,18 @@ class PasswordReset_keys(models.Model):
 
 from django.utils import timezone
 
+""" JOB SKILLS """
+
+class JobSkills(models.Model):
+    name = models.CharField(max_length=100)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self) -> str:
+        return self.name
+
+
+""" JOBS MODEL """
 class Jobs(models.Model):
     class CurrencyChoices(models.TextChoices):
         usd = 'USD', 'United States Dollar'
@@ -158,6 +165,7 @@ class Jobs(models.Model):
     description = models.TextField()
     location = models.CharField(max_length=255)
     categories = models.TextField(null=True)
+    skills = models.ManyToManyField(JobSkills)
     max_salary = models.IntegerField(default=5000)
     min_salary = models.IntegerField(default=0)
     currency_type = models.CharField(max_length=30, choices=CurrencyChoices.choices, default=CurrencyChoices.ngn)
@@ -167,8 +175,16 @@ class Jobs(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
-class JobSkills(models.Model):
-    job = models.ForeignKey(Jobs, on_delete=models.CASCADE, related_name='job_skills')
+""" JOB APPLICANTS MODEL """
+class Applicants(models.Model):
+    user = models.ManyToManyField(User, related_name='applications')
+    job = models.ForeignKey(Jobs, on_delete=models.CASCADE, related_name='applicants')
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+
+""" ASSIST SKILLS MODEL"""
+class AssitSkills(models.Model):
     name = models.CharField(max_length=100)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -176,15 +192,7 @@ class JobSkills(models.Model):
     def __str__(self) -> str:
         return self.name
 
-
-class Applicants(models.Model):
-    applicants = models.ManyToManyField(User, related_name='applicants')
-    job = models.ForeignKey(Jobs, on_delete=models.CASCADE, related_name='job')
-    created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(auto_now=True)
-
-
-
+""" ASSIST MODEL """
 class Assits(models.Model):
     class CurrencyChoices(models.TextChoices):
         usd = 'USD', 'United States Dollar'
@@ -200,23 +208,16 @@ class Assits(models.Model):
     owner = models.ForeignKey(User, on_delete=models.CASCADE, related_name='assists')
     title = models.CharField(max_length=50)
     description = models.TextField(null=True, blank=True)
+    skills = models.ManyToManyField(AssitSkills)
     max_pay = models.IntegerField(default=100)
     min_pay = models.IntegerField(default=10)
-    employment_type = models.CharField(max_length=20, choices=EmploymentType.choices)
+    employment_type = models.CharField(max_length=20, choices=EmploymentType.choices, default=EmploymentType.REMOTE)
     currency_type = models.CharField(max_length=30, choices=CurrencyChoices.choices, default=CurrencyChoices.ngn)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
 
-class AssitSkills(models.Model):
-    assist = models.ForeignKey(Assits, on_delete=models.CASCADE, related_name='assist_skills')
-    name = models.CharField(max_length=100)
-    created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(auto_now=True)
-
-    def __str__(self) -> str:
-        return self.name
-
+""" ASSIST APPLICANTS MODEL """
 class AssistApplicants(models.Model):
     applicants = models.ManyToManyField(User, related_name='assist_applicants')
     assist = models.ForeignKey(Assits, on_delete=models.CASCADE, related_name='applicants')
@@ -224,12 +225,14 @@ class AssistApplicants(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
 
 
+""" WAITLIST MODEL """
 class WaitList(models.Model):
     email = models.EmailField()
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
 
+""" SUBSCRIPTION MODEL """
 class Subscription(models.Model):
     class SubscriptionPlans(models.TextChoices):
         free = "FREE"
