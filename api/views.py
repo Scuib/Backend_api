@@ -84,9 +84,9 @@ def logout(request):
         token = RefreshToken(refresh_token)
         token.blacklist()
 
-        return Response(status=status.HTTP_205_RESET_CONTENT)
+        return Response({"detail": "LogOut Successful"}, status=status.HTTP_205_RESET_CONTENT)
     except Exception as e:
-        return Response(status=status.HTTP_400_BAD_REQUEST)
+        return Response({"success": "fail", "detail": "LogOut UnSuccessful"}, status=status.HTTP_400_BAD_REQUEST)
 
 @api_view(['POST'])
 @permission_classes([AllowAny])
@@ -237,9 +237,14 @@ def profile_detail(request):
     except Profile.DoesNotExist:
         return Response(status=status.HTTP_404_NOT_FOUND)
     profile_data = DisplayProfileSerializer(profile).data
-    # Add first_name and last_name
+    # Add other fields
+    resume = get_object_or_404(Resume, user=profile.user)
+    image = get_object_or_404(Image, user=request.user)
+
     profile_data['first_name'] = profile.user.first_name
     profile_data['last_name'] = profile.user.last_name if profile.user.last_name else ''
+    profile_data['image'] = image.file if image else None
+    profile_data['resume'] = resume.file if resume else None
 
     return Response({"data": profile_data}, status=status.HTTP_200_OK)
 
@@ -343,6 +348,13 @@ def onboarding(request, user_id):
     except Profile.DoesNotExist:
         return Response({"detail": "Profile does not exist"}, status=status.HTTP_404_NOT_FOUND)
 
+    # Handle user fields (first_name and last_name)
+    if 'first_name' in request.data:
+        user.first_name = request.data.pop('first_name')
+
+    if 'last_name' in request.data:
+        user.last_name = request.data.pop('last_name')
+
     # Handle skill updates
     if 'skills' in request.data:
         new_skills = request.data.pop('skills')
@@ -377,6 +389,7 @@ def onboarding(request, user_id):
 
     if "image" in request.data:
         image = get_object_or_404(Image, user=user)
+        print("Image",image)
         if image:
             image.file = cloudinary.uploader.upload(request.data['image'])['public_id'] # type: ignore
             image.save()
@@ -388,6 +401,7 @@ def onboarding(request, user_id):
 
     if "resume" in request.data:
         resume = get_object_or_404(Resume, user=user)
+        print("Resume",resume)
         if resume:
             resume.file = cloudinary.uploader.upload(request.data['resume'])['public_id'] # type: ignore
             resume.save()
@@ -404,6 +418,7 @@ def onboarding(request, user_id):
     #     setattr(profile, attr, value)
     if serialized_data.is_valid():
         serialized_data.save()
+        print("DATA: ", serialized_data.data)
 
         return Response({"_detail": "Succesful!"}, status=status.HTTP_200_OK)
 
