@@ -30,6 +30,7 @@ def VerifyEmail_key(user_id: int):
             break
 
     expriation = datetime.now() + timedelta(hours=24)
+    print(f"Expiration Time: {expriation}")
     EmailVerication_Keys.objects.create(
         user = user,
         key = unique_key,

@@ -131,12 +131,15 @@ def verify_email(request):
         This method verifies the use email exists by Matching the user Unique Key that was sent to the email
         request.data - ['key']
     """
+    print(request.data)
     serialized_data = EmailVerifySerializer(data=request.data)
     if serialized_data.is_valid():
         # print(serialized_data.data)
         key = serialized_data.data['key'] # type: ignore It works just pylance Type list errors
         try:
             unique_key = get_object_or_404(EmailVerication_Keys, key=key)
+            if not unique_key:
+                return Response({"detail": _("Key doesn't exist or Key has been used before")}, status=status.HTTP_404_NOT_FOUND)
             if unique_key.exp <= timezone.now():
                 return Response({'detail': _('Key has expired.')}, status=status.HTTP_404_NOT_FOUND)
             user = unique_key.user
@@ -738,8 +741,14 @@ def waitlist(request):
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 def initialize_payment(request):
+    user = get_object_or_404(User, id=request.user.id)
+
+    if user.company:
+        return Response({"detail": _("Subscription does not support a company")}, status=status.HTTP_403_FORBIDDEN)
+
+    print(request.data.get('amount'), type(request.data.get('amount')))
     amount = int(request.data.get('amount'))
-    email = request.data.get('email')
+    email = user.email
     plan = request.data.get('plan')
 
     headers = {
@@ -755,7 +764,7 @@ def initialize_payment(request):
     data = {
         'email': email,
         'amount': amount * 100,  # Paystack expects the amount in kobo
-        'callback_url': 'http://yourdomain.com/payment/verify/'
+        'callback_url': 'https://www.scuib.com/payment/verify/'
     }
 
     response = requests.post('https://api.paystack.co/transaction/initialize', headers=headers, json=data)
@@ -765,6 +774,8 @@ def initialize_payment(request):
         return Response({'payment_url': response_data['data']['authorization_url']})
     else:
         return Response({'error': response_data['message']}, status=status.HTTP_400_BAD_REQUEST)
+
+
 
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
