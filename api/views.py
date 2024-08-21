@@ -241,13 +241,18 @@ def profile_detail(request):
         return Response(status=status.HTTP_404_NOT_FOUND)
     profile_data = DisplayProfileSerializer(profile).data
     # Add other fields
-    resume = get_object_or_404(Resume, user=profile.user)
+    resume = None
+    try:
+        resume = Resume.objects.get(user=profile.user)
+        profile_data['resume'] = resume.file.url
+    except Resume.DoesNotExist:
+        pass  # Resume is not found, continue without raising an error
+
     image = get_object_or_404(Image, user=request.user)
 
     profile_data['first_name'] = profile.user.first_name
     profile_data['last_name'] = profile.user.last_name if profile.user.last_name else ''
-    profile_data['image'] = image.file if image else None
-    profile_data['resume'] = resume.file if resume else None
+    profile_data['image'] = image.file.url if image else None
 
     return Response({"data": profile_data}, status=status.HTTP_200_OK)
 
@@ -316,16 +321,17 @@ def profile_update(request):
             request.data.pop('image')
 
     if "resume" in request.data:
-        resume = get_object_or_404(Resume, user=user)
-        if resume:
+        resume = None
+        try:
+            resume = Resume.objects.get(user=profile.user)
             resume.file = cloudinary.uploader.upload(request.data['resume'])['public_id'] # type: ignore
             resume.save()
             request.data.pop('resume')
-        else:
+
+        except Resume.DoesNotExist:
             file = cloudinary.uploader.upload(request.data['resume'])['public_id'] # type: ignore
             Resume.objects.create(user=user, file=file)
             request.data.pop('resume')
-
 
     # Update profile with the remaining fields
     serialized_data = ProfileSerializer(profile, data=request.data, partial=True)
