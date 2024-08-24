@@ -272,10 +272,12 @@ def profile_update(request):
     if 'first_name' in request.data:
         first_name = request.data.pop('first_name')
         profile.user.first_name = first_name
+        profile.user.save()
 
     if 'last_name' in request.data:
         last_name = request.data.pop('last_name')
-        profile.user.first_name = last_name
+        profile.user.last_name = last_name
+        profile.user.save()
 
     # Handle skill updates
     if 'skills' in request.data:
@@ -333,14 +335,25 @@ def profile_update(request):
             Resume.objects.create(user=user, file=file)
             request.data.pop('resume')
 
+    # Save edits
+    profile.save()
+
     # Update profile with the remaining fields
     serialized_data = ProfileSerializer(profile, data=request.data, partial=True)
     # for attr, value in request.data.items():
     #     setattr(profile, attr, value)
     if serialized_data.is_valid():
         serialized_data.save()
-
-        return Response({"_detail": "Succesful!"}, status=status.HTTP_200_OK)
+        data = serialized_data.data
+        print(User.objects.get(id=user.id).first_name)
+        data['first_name'], data['last_name'] = profile.user.first_name, profile.user.last_name
+        data['resume'] = Resume.objects.get(user=user).file.url
+        data['image'] = Image.objects.get(user=user).file.url
+        data['skills'] = set(profile.skills.values_list('name', flat=True))
+        data['categories'] = set(profile.categories.values_list('name', flat=True))
+        # curr_user = User.objects.get(id=user.id)
+    
+        return Response({"_detail": "Succesful!", "data": data}, status=status.HTTP_200_OK)
 
     return Response({"_detail": "An error occured!"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
@@ -480,9 +493,15 @@ def job_create(request):
             job_skill= JobSkills.objects.create(name=skill)
             job_instance.skills.add(job_skill)
         
+        data = job_instance.copy()
         job_created.send(sender=Jobs, instance=job_instance)
 
-        return Response({'detail': _("Job Successfully posted!")}, status=status.HTTP_201_CREATED)
+        job= Jobs.objects.get(owner=user)
+        data['job_id'] = job.id
+        data['owner_id'] = job.owner.id
+        data['company_name'] = job.owner.first_name
+
+        return Response({'detail': _("Job Successfully posted!"), "data": data}, status=status.HTTP_201_CREATED)
     
     return Response(serialized_data.errors, status=status.HTTP_400_BAD_REQUEST)
 
@@ -572,7 +591,7 @@ def delete_job(request, job_id):
         return Response({"detail": f"Job {job_id} does not exist"}, status=status.HTTP_404_NOT_FOUND)
 
     # Check if the authenticated user is the owner of job post
-    if request.user == job.owner:
+    if not request.user.id == job.owner.id:
         return Response({"detail": f"User is not permitted to delete this job"}, status=status.HTTP_401_UNAUTHORIZED)
     job.delete()
     return Response({"detail": "Job deleted Successfully"}, status=status.HTTP_200_OK)
@@ -589,8 +608,9 @@ def company(request):
         company = CompanyProfile.objects.get(owner=owner)
         serializer = CompanySerializer(company)
         # Add the company name
-        serializer.data['company_name'] = company.owner.first_name
-        return Response(serializer.data, status=status.HTTP_200_OK)
+        data = serializer.data.copy()
+        data['company_name'] = company.owner.first_name
+        return Response(data, status=status.HTTP_200_OK)
     except ObjectDoesNotExist:
         return Response({'error': 'CompanyProfile not found.'}, status=status.HTTP_404_NOT_FOUND)
 
