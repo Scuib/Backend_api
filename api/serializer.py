@@ -122,11 +122,15 @@ class ApplicantSerializer(ModelSerializer):
         model = Applicants
         fields = '__all__'
 
-class JobSerializer(ModelSerializer):
-    skills = serializers.ListField(child=serializers.CharField(max_length=100), required=False)
+class JobSerializer(serializers.ModelSerializer):
+    skills = serializers.SerializerMethodField()
+
     class Meta:
         model = Jobs
         fields = '__all__'
+
+    def get_skills(self, obj):
+        return obj.skills.values_list('name', flat=True)
 
 
 class CompanySerializer(ModelSerializer):

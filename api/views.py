@@ -114,7 +114,8 @@ def login(request):
                 'refresh': str(refresh),
                 'access': str(refresh.access_token), # type: ignore
                 'user_id': user.id, # type: ignore
-                'first_name': user.first_name
+                'first_name': user.first_name,
+                'is_company': user.company
             })
         else:
             print(check_password(user.password, password))
@@ -246,10 +247,11 @@ def profile_detail(request):
         resume = Resume.objects.get(user=profile.user)
         profile_data['resume'] = resume.file.url
     except Resume.DoesNotExist:
-        pass  # Resume is not found, continue without raising an error
+        profile_data['resume'] = ''
 
     image = get_object_or_404(Image, user=request.user)
 
+    profile_data['email'] = profile.user.email
     profile_data['first_name'] = profile.user.first_name
     profile_data['last_name'] = profile.user.last_name if profile.user.last_name else ''
     profile_data['image'] = image.file.url if image else None
@@ -262,6 +264,10 @@ def profile_detail(request):
 @permission_classes([IsAuthenticated])
 def profile_update(request):
     user = request.user
+
+    # Check if email is in field
+    if 'email' in request.data:
+        request.data.pop('email')
     # Check if the profile exists
     try:
         profile = Profile.objects.get(user=user)
@@ -476,10 +482,10 @@ def profile_delete(request):
 def job_create(request):
     user = request.user
 
-    if not user.company is True:
+    if not user.company:
         return Response("Only Companies can create Jobs", status=status.HTTP_404_NOT_FOUND)
 
-    request.data['owner'] = request.user.id
+    request.data['owner'] = user.id
 
     new_skills = request.data.pop('skills', [])
 
@@ -490,19 +496,29 @@ def job_create(request):
 
         # Create JobSkills relationships
         for skill in new_skills:
-            job_skill= JobSkills.objects.create(name=skill)
+            job_skill = JobSkills.objects.create(name=skill)
             job_instance.skills.add(job_skill)
-        
-        data = job_instance.copy()
+
+        # Manually create the data dictionary
+        data = {
+            'job_id': job_instance.id,
+            'owner_id': job_instance.owner.id,
+            'company_name': job_instance.owner.first_name,
+            'company_email': job_instance.owner.email,
+            'title': job_instance.title,
+            'description': job_instance.description,
+            'location': job_instance.location,
+            'employment_type': job_instance.employment_type,
+            'max_salary': job_instance.max_salary,
+            'min_salary': job_instance.min_salary,
+            'currency_type': job_instance.currency_type,
+        }
+
+        # Signal that the job was created
         job_created.send(sender=Jobs, instance=job_instance)
 
-        job= Jobs.objects.get(owner=user)
-        data['job_id'] = job.id
-        data['owner_id'] = job.owner.id
-        data['company_name'] = job.owner.first_name
-
         return Response({'detail': _("Job Successfully posted!"), "data": data}, status=status.HTTP_201_CREATED)
-    
+
     return Response(serialized_data.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
@@ -515,7 +531,6 @@ def job_update(request, job_id):
     if job_instance.owner != user:
         return Response("You do not have permission to update this job", status=status.HTTP_403_FORBIDDEN)
 
-    # Check if skills are being updated
     skills_update = 'skills' in request.data
     new_skills = request.data.pop('skills', [])
 
@@ -524,24 +539,25 @@ def job_update(request, job_id):
         serialized_data.save()
 
         if skills_update:
-            # Handle skill updates
             current_skills = set(job_instance.skills.values_list('name', flat=True))
             new_skills_set = set(new_skills)
 
             # Add new skills
             for skill_name in new_skills_set - current_skills:
-                skill, created = JobSkills.objects.get_or_create(name=skill_name)
+                skill = JobSkills.objects.filter(name=skill_name).first()
+                if not skill:
+                    skill = JobSkills.objects.create(name=skill_name)
                 job_instance.skills.add(skill)
 
             # Remove old skills
             for skill_name in current_skills - new_skills_set:
-                skill = JobSkills.objects.get(name=skill_name)
-                job_instance.skills.remove(skill)
+                skills_to_remove = JobSkills.objects.filter(name=skill_name).distinct()
+                job_instance.skills.remove(*skills_to_remove)
 
-            # Manually trigger the custom signal
             job_created.send(sender=Jobs, instance=job_instance)
 
-        return Response({'detail': _("Job Successfully updated!")}, status=status.HTTP_200_OK)
+        data = serialized_data.data
+        return Response({'detail': _("Job Successfully updated!"), 'data': data}, status=status.HTTP_200_OK)
 
     return Response(serialized_data.errors, status=status.HTTP_400_BAD_REQUEST)
 
