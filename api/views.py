@@ -505,7 +505,7 @@ def job_create(request):
             'owner_id': job_instance.owner.id,
             'company_name': job_instance.owner.first_name,
             'company_email': job_instance.owner.email,
-            'skills': job_instance.skills,
+            'skills': Jobs.objects.get(owner=user).skills.values_list('name', flat=True),
             'category': job_instance.categories,
             'title': job_instance.title,
             'description': job_instance.description,
