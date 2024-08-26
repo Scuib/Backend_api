@@ -505,6 +505,8 @@ def job_create(request):
             'owner_id': job_instance.owner.id,
             'company_name': job_instance.owner.first_name,
             'company_email': job_instance.owner.email,
+            'skills': job_instance.skills.value_list('name', flat=True),
+            'category': job_instance.categories,
             'title': job_instance.title,
             'description': job_instance.description,
             'location': job_instance.location,
