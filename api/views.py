@@ -565,7 +565,7 @@ def job_update(request, job_id):
 
 
 @api_view(['GET'])
-@permission_classes([AllowAny])
+@permission_classes([AllowAny])ss
 def jobs_all(request):
     jobs = Jobs.objects.all()
     serialized_jobs = JobSerializer(jobs, many=True)
@@ -592,7 +592,7 @@ def jobs_user(request):
                 'location': job.location,
                 'pay_range': f"{job.min_salary} - {job.max_salary}",
                 'experience': f"{job.min_experience} - {job.max_experience}",
-                'employment_type': job.employment_type.get_employment_type.display(),
+                'employment_type': job.get_employment_type.display(),
                 'created_at': job.created_at
             },
             "applicants": [{
