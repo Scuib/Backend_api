@@ -592,7 +592,7 @@ def jobs_user(request):
                 'location': job.location,
                 'pay_range': f"{job.min_salary} - {job.max_salary}",
                 'experience': f"{job.min_experience} - {job.max_experience}",
-                'employment_type': job.get_employment_type.display(),
+                'employment_type': job.get_employment_type_display(),
                 'created_at': job.created_at
             },
             "applicants": [{
@@ -602,9 +602,9 @@ def jobs_user(request):
                 'email': user.email,
                 # Profile fields
                 'phonenumber': user.profile.phonenumbers,
-                'image': user.profile.image.file.url,
-                'skills': user.profile.skills.value,
-                'categories': user.profile.categories.value,
+                'image': user.profile.user.image.file.url,
+                'skills': user.profile.skills.values_list(),
+                'categories': user.profile.categories.values_list(),
                 'experience': user.profile.experience }\
                     for applicant in applicants for user in applicant.user.all()]
         })
