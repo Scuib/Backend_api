@@ -565,7 +565,7 @@ def job_update(request, job_id):
 
 
 @api_view(['GET'])
-@permission_classes([AllowAny])ss
+@permission_classes([AllowAny])
 def jobs_all(request):
     jobs = Jobs.objects.all()
     serialized_jobs = JobSerializer(jobs, many=True)
