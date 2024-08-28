@@ -565,7 +565,7 @@ def job_update(request, job_id):
 
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated])  # Optional: Remove if you want this to be publicly accessible
+@permission_classes([AllowAny])
 def jobs_all(request):
     jobs = Jobs.objects.all()
     serialized_jobs = JobSerializer(jobs, many=True)
@@ -584,19 +584,29 @@ def jobs_user(request):
         data.append({
             "job": {
                 'job_id': job.id,
+                'description': job.description,
+                'location': job.location,
                 'role': job.categories,
                 'type': job.employment_type,
                 'skills': job.skills.values_list('name', flat=True),
                 'location': job.location,
                 'pay_range': f"{job.min_salary} - {job.max_salary}",
-                'experience': f"{job.min_experience} - {job.max_experience}"
+                'experience': f"{job.min_experience} - {job.max_experience}",
+                'employment_type': job.employment_type.get_employment_type.display(),
+                'created_at': job.created_at
             },
             "applicants": [{
                 'applicant_id': user.id,
                 'first_name': user.first_name,
                 'last_name': user.last_name if user.last_name else '',
                 'email': user.email,
-                'phone_number': user.profile.phonenumbers} for applicant in applicants for user in applicant.user.all()]
+                # Profile fields
+                'phonenumber': user.profile.phonenumbers,
+                'image': user.profile.image.file.url,
+                'skills': user.profile.skills.value,
+                'categories': user.profile.categories.value,
+                'experience': user.profile.experience }\
+                    for applicant in applicants for user in applicant.user.all()]
         })
     return Response(data, status=status.HTTP_200_OK)
 
@@ -738,10 +748,10 @@ def assist_for_you(request):
     assists = []
     try:
         for assist in query:
-            if request.user in assist.applicants:
+            if request.user.id in assist.applicants.values_list('id'):
                 assists.append({
                     'first_name': assist.assist.owner.first_name,
-                    'last_name': assist.assist.owner.last_name if assist.assist.owner.first_name else '', # last_name is null return an empty string
+                    'last_name': assist.assist.owner.last_name if assist.assist.owner.last_name else '', # last_name is null return an empty string
                     'title': assist.assist.title,
                     'description': assist.assist.description,
                     'skills': assist.assist.skills.values_list('name', flat=True),
@@ -751,7 +761,7 @@ def assist_for_you(request):
         return Response({"detail": assists}, status=status.HTTP_200_OK)
     except Exception as e:
         return Response({"detail": f"An error occured {e}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-    
+
 @api_view(['DELETE'])
 @permission_classes([IsAuthenticated])
 def delete_assist(request, assist_id):
