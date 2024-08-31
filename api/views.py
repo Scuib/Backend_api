@@ -352,8 +352,12 @@ def profile_update(request):
         serialized_data.save()
         data = serialized_data.data
         print(User.objects.get(id=user.id).first_name)
+        try:
+            resume = Resume.objects.get(user=profile.user)
+            data['resume'] = resume.file.url
+        except Resume.DoesNotExist:
+            data['resume'] = ''
         data['first_name'], data['last_name'] = profile.user.first_name, profile.user.last_name
-        data['resume'] = Resume.objects.get(user=user).file.url
         data['image'] = Image.objects.get(user=user).file.url
         data['skills'] = set(profile.skills.values_list('name', flat=True))
         data['categories'] = set(profile.categories.values_list('name', flat=True))
@@ -603,8 +607,8 @@ def jobs_user(request):
                 # Profile fields
                 'phonenumber': user.profile.phonenumbers,
                 'image': user.profile.user.image.file.url,
-                'skills': user.profile.skills.values_list(),
-                'categories': user.profile.categories.values_list(),
+                'skills': user.profile.skills.values_list('name', flat=True),
+                'categories': user.profile.categories.values_list('name', flat=True),
                 'experience': user.profile.experience }\
                     for applicant in applicants for user in applicant.user.all()]
         })
