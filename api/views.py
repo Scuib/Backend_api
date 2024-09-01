@@ -1,7 +1,4 @@
-from email.mime import application
-from pydantic import InstanceOf
 import requests
-from django.http import JsonResponse
 import cloudinary.uploader
 from django.shortcuts import render, get_object_or_404
 from rest_framework.decorators import api_view, permission_classes
@@ -320,6 +317,7 @@ def profile_update(request):
     if "image" in request.data:
         image = get_object_or_404(Image, user=user)
         if image:
+            cloudinary.uploader.destroy(image.file)
             image.file = cloudinary.uploader.upload(request.data['image'])['public_id'] # type: ignore
             image.save()
             request.data.pop('image')
@@ -332,6 +330,7 @@ def profile_update(request):
         resume = None
         try:
             resume = Resume.objects.get(user=profile.user)
+            cloudinary.uploader.destroy(resume.file)
             resume.file = cloudinary.uploader.upload(request.data['resume'])['public_id'] # type: ignore
             resume.save()
             request.data.pop('resume')
@@ -554,11 +553,13 @@ def job_update(request, job_id):
                 if not skill:
                     skill = JobSkills.objects.create(name=skill_name)
                 job_instance.skills.add(skill)
+                job_instance.save()
 
             # Remove old skills
             for skill_name in current_skills - new_skills_set:
                 skills_to_remove = JobSkills.objects.filter(name=skill_name).distinct()
                 job_instance.skills.remove(*skills_to_remove)
+                job_instance.save()
 
             job_created.send(sender=Jobs, instance=job_instance)
 
