@@ -15,6 +15,7 @@ urlpatterns = [
     path('password/reset/', views.reset_password, name='reset_password'),
     path('password/reset/confirm/<int:uid>/<str:key>/', views.confirm_reset_password, name='confirm_reset_password'),
     path('profile/', views.profile_detail, name='profile-detail'),
+    path('profile/<int:user_id>/', views.profile_detail_by_id, name='profile-detail-id'),
     path('profile/update/', views.profile_update, name='profile-update'),
     path('onboarding/<int:user_id>/', views.onboarding, name='onboarding'),
     path('profile/delete/', views.profile_delete, name='delete-user'),

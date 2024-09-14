@@ -227,6 +227,40 @@ def confirm_reset_password(request, uid, key):
 
 
 """ PROFILE VIEWS """
+@api_view(['GET'])
+@permission_classes([AllowAny])
+def profile_detail_by_id(request, user_id):
+    # Check if user exist
+    user = get_object_or_404(User, id=user_id)
+    if not user:
+        return Response({'detail': 'User Id does not exist'}, status=status.HTTP_400_BAD_REQUEST)
+    # Check if the profile exists
+    try:
+        profile = Profile.objects.get(user=user)
+    except Profile.DoesNotExist:
+        return Response(status=status.HTTP_404_NOT_FOUND)
+    profile_data = DisplayProfileSerializer(profile).data
+
+    # Add other fields
+    resume = None
+    try:
+        resume = Resume.objects.get(user=profile.user)
+        profile_data['resume'] = resume.file.url
+    except Resume.DoesNotExist:
+        profile_data['resume'] = ''
+
+    image = get_object_or_404(Image, user=profile.user)
+
+    profile_data['email'] = profile.user.email
+    profile_data['first_name'] = profile.user.first_name
+    profile_data['last_name'] = profile.user.last_name if profile.user.last_name else ''
+    profile_data['image'] = image.file.url if image else None
+    profile_data['skills'] = profile.skills.values_list('name', flat=True)
+    profile_data['categories'] = profile.categories.values_list('name', flat=True)
+
+    return Response({"data": profile_data}, status=status.HTTP_200_OK)
+
+
 
 # Profile Details of Authenticated User
 @api_view(['GET'])
