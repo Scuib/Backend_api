@@ -76,12 +76,12 @@ class ProfileSerializer(ModelSerializer):
         fields = '__all__'
 
 class DisplayProfileSerializer(ModelSerializer):
-    skills = UserSkillSerializer(many=True)
-    categories = UserCategoriesSerializer(many=True)
+    # skills = UserSkillSerializer(many=True)
+    # categories = UserCategoriesSerializer(many=True)
 
     class Meta:
         model = Profile
-        fields = '__all__'
+        fields = ['location', 'job_location', 'employment_type', 'min_salary', 'max_salary', 'experience', 'phonenumbers', 'github', 'portfolio', 'linkedin', 'twitter']
 
 
 

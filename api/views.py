@@ -238,6 +238,7 @@ def profile_detail(request):
     except Profile.DoesNotExist:
         return Response(status=status.HTTP_404_NOT_FOUND)
     profile_data = DisplayProfileSerializer(profile).data
+
     # Add other fields
     resume = None
     try:
@@ -252,6 +253,8 @@ def profile_detail(request):
     profile_data['first_name'] = profile.user.first_name
     profile_data['last_name'] = profile.user.last_name if profile.user.last_name else ''
     profile_data['image'] = image.file.url if image else None
+    profile_data['skills'] = profile.skills.values_list('name', flat=True)
+    profile_data['categories'] = profile.categories.values_list('name', flat=True)
 
     return Response({"data": profile_data}, status=status.HTTP_200_OK)
 
@@ -315,30 +318,69 @@ def profile_update(request):
             profile.categories.remove(category)
 
     if "image" in request.data:
-        image = get_object_or_404(Image, user=user)
-        if image:
-            cloudinary.uploader.destroy(image.file)
+        image = None
+        try:
+            # Attempt to retrieve the existing image
+            image = Image.objects.get(user=profile.user)
+            
+            # Debugging: Check if the image file is a string or CloudinaryResource
+            public_id = image.file.public_id if hasattr(image.file, 'public_id') else image.file
+            print(f"Existing image public_id: {public_id}")
+
+            # Delete the existing image from Cloudinary
+            cloudinary.uploader.destroy(public_id)
+
+            # Upload the new image and update the file field
             image.file = cloudinary.uploader.upload(request.data['image'])['public_id'] # type: ignore
             image.save()
+            
+            # Remove image from request data after processing
             request.data.pop('image')
-        else:
-            file = cloudinary.uploader.upload(request.data['image'])['public_id'] # type: ignore
-            Image.objects.create(user=user, file=file)
+
+        except Image.DoesNotExist:
+            # If the image does not exist, upload the new image and create a new Image object
+            file = uploader.upload(request.data['image'])['public_id'] # type: ignore
+            Image.objects.create(user=profile.user, file=file)
+            
+            # Remove image from request data after processing
             request.data.pop('image')
+
+        except Exception as e:
+            # Handle any other exceptions, such as issues with Cloudinary credentials 
+            print(f"Failed to delete or upload image: {e}")
 
     if "resume" in request.data:
         resume = None
+    
         try:
+            # Attempt to retrieve the existing resume
             resume = Resume.objects.get(user=profile.user)
-            cloudinary.uploader.destroy(resume.file)
+
+            # Debugging: Check if the resume file is a string or Cloudinary Resource
+            public_id = resume.file.public_id if hasattr(resume.file, 'public_id') else resume.file
+            print(f"Existing resume public_id: {public_id}")
+
+            # Delete the existing resume from Cloudinary
+            cloudinary.uploader.destroy(public_id)
+            
+            # Upload the new resume and update the file field
             resume.file = cloudinary.uploader.upload(request.data['resume'])['public_id'] # type: ignore
             resume.save()
+            
+            # Remove resume from request data after processing
             request.data.pop('resume')
 
         except Resume.DoesNotExist:
+            # If the resume does not exist, upload the new resume and create a new Resume object
             file = cloudinary.uploader.upload(request.data['resume'])['public_id'] # type: ignore
-            Resume.objects.create(user=user, file=file)
+            Resume.objects.create(user=profile.user, file=file)
+            
+            # Remove resume from request data after processing
             request.data.pop('resume')
+
+        except Exception as e:
+            # Handle any other exceptions, such as issues with Cloudinary credentials
+            print(f"Failed to delete or upload resume: {e}")
 
     # Save edits
     profile.save()
