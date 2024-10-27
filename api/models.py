@@ -74,6 +74,7 @@ class Profile(models.Model):
     categories = models.ManyToManyField(UserCategories)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
+    notifications = models.JSONField(default=None, null=True, blank=True)
 
     def __str__(self):
         return self.user.first_name
@@ -140,7 +141,7 @@ from django.utils import timezone
 """ JOB SKILLS """
 
 class JobSkills(models.Model):
-    name = models.CharField(max_length=100)
+    name = models.CharField(max_length=100, unique=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -243,3 +244,12 @@ class Subscription(models.Model):
     amount = models.IntegerField()
     plan = models.CharField(max_length=10, choices=SubscriptionPlans.choices)
     reference = models.CharField(max_length=100, unique=True)
+
+""""AI BINARY TRAINIGNG MODEL"""
+class RecommenderModel(models.Model):
+    name = models.CharField(max_length=255)
+    model_data = models.BinaryField()  # This will store the serialized model
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return self.name

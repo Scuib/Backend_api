@@ -6,6 +6,7 @@ from rest_framework_simplejwt.views import TokenObtainPairView
 from rest_framework.permissions import IsAuthenticated, AllowAny
 from rest_framework.response import Response
 from rest_framework import status
+from uuid import uuid4
 import cloudinary
 
 
@@ -19,13 +20,21 @@ from .serializer import (CompanySerializer, DisplayProfileSerializer, MyTokenObt
 
 from django.utils import timezone
 from django.utils.translation import gettext_lazy as _
-from .tools import VerifyEmail_key, ResetPassword_key
+from .tools import VerifyEmail_key, ResetPassword_key, cleanup_duplicate_skills
 from django.contrib.auth.hashers import make_password, check_password
+from django.template.loader import get_template
 from allauth.account.models import EmailAddress
 from rest_framework_simplejwt.tokens import RefreshToken
 
 from django.conf import settings
 from .custom_signal import job_created, assist_created
+from api.job_model.data_processing import DataPreprocessor
+import resend
+from scuibai.settings import RESEND_API_KEY
+
+
+# Activate the resend with the api key
+resend.api_key = RESEND_API_KEY
 
 
 def home(request):
@@ -50,11 +59,37 @@ def register(request):
             user=user,
             email=user.email # type: ignore
         )
-        print(user.company)
+        # print(user.company)
+
         key, exp = VerifyEmail_key(user.id)
 
-        return Response({'detail': {'name': user.first_name, 'key': key, 'expires': exp} }, status=status.HTTP_201_CREATED) # type: ignore
-    return Response(serialized_data.errors, status=status.HTTP_400_BAD_REQUEST)
+        template = get_template('register/verify_email.html')
+        context = {"user": user, "otp": key, "expirary_date": exp}
+        html = template.render(context)
+
+        params: resend.Emails.SendParams = {
+            "from": "Welcome <Onboarding@scuib.com>",
+            "to": [user.email],
+            "subject": "VERIFY YOUR EMAIL",
+            "html": html,
+        }
+
+        try:
+            r = resend.Emails.send(params)
+        except Exception as e:
+            print(f"Error: {e}")
+            user.delete()
+            return Response({"message": "Registration Failed: Failed to send OTP. Please try again"},
+                            status=status.HTTP_501_NOT_IMPLEMENTED)
+
+        return Response({'message': "User Registered Successfully, Check email for otp code",
+                         "data": {"key": key, "exp": exp} },
+                         status=status.HTTP_201_CREATED)
+
+    print(f"Serializer Error: {serialized_data.errors}, Data: {request.data}")
+
+    return Response(serialized_data.errors,
+                    status=status.HTTP_400_BAD_REQUEST)
 
 
 # Verify Email Here
@@ -289,8 +324,17 @@ def profile_detail(request):
     profile_data['image'] = image.file.url if image else None
     profile_data['skills'] = profile.skills.values_list('name', flat=True)
     profile_data['categories'] = profile.categories.values_list('name', flat=True)
+    profile_data['notifications'] = profile.notifications
 
     return Response({"data": profile_data}, status=status.HTTP_200_OK)
+
+# Get all notifications
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def get_notifications(request):
+    profile =get_object_or_404(Profile, user=request.user)
+
+    return Response({"data": profile.notifications}, status=status.HTTP_200_OK)
 
 
 # Profile Update of Authenticated User
@@ -375,7 +419,7 @@ def profile_update(request):
             # If the image does not exist, upload the new image and create a new Image object
             file = uploader.upload(request.data['image'])['public_id'] # type: ignore
             Image.objects.create(user=profile.user, file=file)
-            
+
             # Remove image from request data after processing
             request.data.pop('image')
 
@@ -578,6 +622,22 @@ def job_create(request):
             job_skill = JobSkills.objects.create(name=skill)
             job_instance.skills.add(job_skill)
 
+        # Get job skills
+        job_skills = list(job_instance.skills.values_list('name', flat=True))
+
+        # Prepare notification data
+        notification = {
+            "id": str(uuid4()),
+            "type": "job",
+            "message": "You have been matched to a job",
+            "datetime": timezone.now().isoformat(),
+            "details": {
+                "job_name": job_instance.title,
+                "job_description": job_instance.description,
+                "job_skills": job_skills
+            }
+        }
+
         # Manually create the data dictionary
         data = {
             'job_id': job_instance.id,
@@ -598,9 +658,37 @@ def job_create(request):
         # Signal that the job was created
         job_created.send(sender=Jobs, instance=job_instance)
 
+        # Fetch the recommended applicants and add them to the data dictionary
+        # Assuming you have a function to get recommended applicants based on the job instance
+        recommended_applicant = Applicants.objects.filter(job=job_instance)
+        
+        for applicant in recommended_applicant:
+            # Get all users for this applicant
+            for user in applicant.user.all():  # Use .all() to get all related users
+                try:
+                    profile = Profile.objects.get(user=user)
+                    
+                    # Initialize notifications list if it doesn't exist
+                    if not profile.notifications:
+                        profile.notifications = []
+                    
+                    # Add new notification
+                    current_notifications = profile.notifications
+                    current_notifications.append(notification)
+                    
+                    # Update profile
+                    profile.notifications = current_notifications
+                    profile.save()
+                except Profile.DoesNotExist:
+                    print(f"Profile not found for user {user.email}")
+                    continue
+
+        recommended_applicants = Applicants.objects.filter(job=job_instance).values('user__id', 'user__first_name', 'user__email')  # Adjust fields as needed
+        data['recommended_applicants'] = list(recommended_applicants)
+
         return Response({'detail': _("Job Successfully posted!"), "data": data}, status=status.HTTP_201_CREATED)
 
-    return Response(serialized_data.errors, status=status.HTTP_400_BAD_REQUEST)
+    return Response(f"Error: {serialized_data.errors}", status=status.HTTP_400_BAD_REQUEST)
 
 
 @api_view(['PUT'])
@@ -643,6 +731,80 @@ def job_update(request, job_id):
         return Response({'detail': _("Job Successfully updated!"), 'data': data}, status=status.HTTP_200_OK)
 
     return Response(serialized_data.errors, status=status.HTTP_400_BAD_REQUEST)
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def get_new_applicants(request, job_id):
+    user = request.user
+    job_instance = get_object_or_404(Jobs, id=job_id)
+
+    if job_instance.owner != user:
+        return Response("You do not have permission to update this job", status=status.HTTP_403_FORBIDDEN)
+
+    job_created.send(sender=Jobs, instance=job_instance)
+
+    data = {
+            'job_id': job_instance.id,
+            'owner_id': job_instance.owner.id,
+            'company_name': job_instance.owner.first_name,
+            'company_email': job_instance.owner.email,
+            'skills': Jobs.objects.get(id=job_instance.id).skills.values_list('name', flat=True),
+            'category': job_instance.categories,
+            'title': job_instance.title,
+            'description': job_instance.description,
+            'location': job_instance.location,
+            'employment_type': job_instance.employment_type,
+            'max_salary': job_instance.max_salary,
+            'min_salary': job_instance.min_salary,
+            'currency_type': job_instance.currency_type,
+        }
+    # Get job skills
+    job_skills = list(job_instance.skills.values_list('name', flat=True))
+
+    # Prepare notification data
+    notification = {
+        "id": str(uuid4()),
+        "type": "job",
+        "message": "You have been matched to a job",
+        "datetime": timezone.now().isoformat(),
+        "details": {
+            "job_name": job_instance.title,
+            "job_description": job_instance.description,
+            "job_skills": job_skills
+        }
+    }
+
+
+    # Fetch the recommended applicants and add them to the data dictionary
+    # Assuming you have a function to get recommended applicants based on the job instance
+    recommended_applicant = Applicants.objects.filter(job=job_instance)
+
+    for applicant in recommended_applicant:
+            # Get all users for this applicant
+            for user in applicant.user.all():  # Use .all() to get all related users
+                try:
+                    profile = Profile.objects.get(user=user)
+                    
+                    # Initialize notifications list if it doesn't exist
+                    if not profile.notifications:
+                        profile.notifications = []
+                    
+                    # Add new notification
+                    current_notifications = profile.notifications
+                    current_notifications.append(notification)
+                    
+                    # Update profile
+                    profile.notifications = current_notifications
+                    profile.save()
+                except Profile.DoesNotExist:
+                    print(f"Profile not found for user {user.email}")
+                    continue
+
+    recommended_applicants = Applicants.objects.filter(job=job_instance).values('user__id', 'user__first_name', 'user__email')  # Adjust fields as needed
+    data['recommended_applicants'] = list(recommended_applicants)
+
+    return Response({'detail': _("Job Successfully posted!"), "data": data}, status=status.HTTP_201_CREATED)
+
 
 
 @api_view(['GET'])
@@ -777,8 +939,8 @@ def assist_create(request):
             assist_skill, created = AssitSkills.objects.get_or_create(name=skill)
             assist_instance.skills.add(assist_skill)
 
-        print("Compiler: Hey I got here 👋😊")
-        assist_created.send(sender=Assits, instance=assist_instance)
+        # print("Compiler: Hey I got here 👋😊")
+        # assist_instance.save()
 
         return Response({'detail': _("Assist Successfully posted!")}, status=status.HTTP_201_CREATED)
 
@@ -932,5 +1094,8 @@ def verify_payment(request):
         return Response({'message': 'Payment successful'})
     else:
         return Response({'error': 'Payment verification failed'}, status=status.HTTP_400_BAD_REQUEST)
+
+
+
 
 

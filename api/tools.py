@@ -1,9 +1,9 @@
 from random import randint
-from .models import EmailVerication_Keys, User, PasswordReset_keys
+from .models import EmailVerication_Keys, User, PasswordReset_keys, JobSkills
 from django.shortcuts import get_object_or_404
 from datetime import datetime, timedelta
 from django.utils import timezone
-
+from django.db.models import Count
 
 import random
 import string
@@ -59,3 +59,25 @@ def ResetPassword_key(email: int):
         exp = expriation
     )
     return unique_key, user.id # type: ignore Pylance warning
+
+
+def cleanup_duplicate_skills():
+    # Find all skills with duplicate names
+    duplicates = JobSkills.objects.values('name').annotate(
+        count=Count('id')).filter(count__gt=1)
+    
+    for duplicate in duplicates:
+        skills = JobSkills.objects.filter(name=duplicate['name']).order_by('id')
+        # Keep the first one
+        primary_skill = skills.first()
+        # Get all other duplicates
+        duplicate_skills = skills.exclude(id=primary_skill.id)
+        
+        # Update all jobs using duplicate skills to use the primary skill
+        for skill in duplicate_skills:
+            # Update all relationships to point to the primary skill
+            skill.jobs_set.all().update(skills=primary_skill)
+            # Delete the duplicate skill
+            skill.delete()
+
+    print("Cleanup complete!")

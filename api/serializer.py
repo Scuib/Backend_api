@@ -122,6 +122,7 @@ class ApplicantSerializer(ModelSerializer):
         model = Applicants
         fields = '__all__'
 
+
 class JobSerializer(serializers.ModelSerializer):
     skills = serializers.SerializerMethodField()
 
@@ -130,7 +131,7 @@ class JobSerializer(serializers.ModelSerializer):
         fields = '__all__'
 
     def get_skills(self, obj):
-        return obj.skills.values_list('name', flat=True)
+        return list(obj.skills.values_list('name', flat=True))
 
 
 class CompanySerializer(ModelSerializer):

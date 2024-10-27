@@ -21,6 +21,7 @@ urlpatterns = [
     path('profile/delete/', views.profile_delete, name='delete-user'),
     path('job/create/', views.job_create, name='job-create'),
     path('job/update/<int:job_id>/', views.job_update, name='job-update'),
+    path('job/applicants/new/<int:job_id>/', views.get_new_applicants, name='get-new-applicants'),
     path('job/user/', views.jobs_user, name='user_jobs'),
     path('job/all/', views.jobs_all, name='all_jobs'),
     path('job/delete/<int:job_id>', views.delete_job, name='job-delete'),
@@ -33,4 +34,5 @@ urlpatterns = [
     path('waitlist/', views.waitlist, name='waitlist'),
     path('payment/initialize/', views.initialize_payment, name='initialize_payment'),
     path('payment/verify/', views.verify_payment, name='verify_payment'),
+    path('notifications/', views.get_notifications, name='notifications'),
 ]

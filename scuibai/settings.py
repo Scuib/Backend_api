@@ -226,3 +226,4 @@ cloudinary.config(
 
 # PAYSTACK_SECRET_KEY
 PAYSTACK_SECRET_KEY = os.environ["PAYSTACK_SECRET_KEY"]
+RESEND_API_KEY = os.environ["RESEND_API_KEY"]
