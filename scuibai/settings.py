@@ -91,15 +91,16 @@ WSGI_APPLICATION = "scuibai.wsgi.application"
 # POSTGRES DATABASE
 
 DATABASES = {
-    "default": {
-        "ENGINE": "django.db.backends.postgresql",
-        "NAME": "postgres",
-        "USER": "postgres.lcdflzbtuwavyohtibvn",
-        "PASSWORD": "AN2nWAKl6egttj6S",
-        "HOST": "aws-0-eu-central-1.pooler.supabase.com",
-        "PORT": 6543,
+    'default': {
+        'ENGINE': 'django.db.backends.postgresql',
+        'NAME': 'scuib_db',  # Database name
+        'USER': 'scuib_db_user',  # Username
+        'PASSWORD': 'I0PbemwOkRe779NquAerJh07Venzm8lu',  # Replace with your database password
+        'HOST': 'dpg-cthlisjqf0us73dl95tg-a.oregon-postgres.render.com',  # Hostname
+        'PORT': '5432',  # Port
     }
 }
+
 
 # TEST DATABASE
 # SQLITE DATABASE
