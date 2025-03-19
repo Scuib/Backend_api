@@ -48,11 +48,6 @@ urlpatterns = [
     path("payment/initialize/", views.initialize_payment, name="initialize_payment"),
     path("payment/verify/", views.verify_payment, name="verify_payment"),
     path("notifications/", views.get_notifications, name="notifications"),
-    path("create/", views.new_job_create, name="latest-job"),
-    path(
-        "profile/bulk-update/", views.bulk_profile_update, name="update-bulk-profiles"
-    ),
-    path("users/register/", views.bulk_create_users, name="create-bulk-users"),
     path("users/", views.list_users, name="get all users"),
     path("profiles/", views.all_profiles, name="get all profiles"),
 ]

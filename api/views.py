@@ -3,7 +3,7 @@ import cloudinary.uploader
 from django.shortcuts import render, get_object_or_404
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework_simplejwt.views import TokenObtainPairView
-from rest_framework.permissions import IsAuthenticated, AllowAny
+from rest_framework.permissions import IsAuthenticated, AllowAny, IsAdminUser
 from rest_framework.response import Response
 from rest_framework import status
 from uuid import uuid4
@@ -732,22 +732,78 @@ def job_create(request):
 
     request.data["owner"] = user.id
 
+    # Extract skills from request
     new_skills = request.data.pop("skills", [])
 
+    # Serialize and save job data
     serialized_data = JobSerializer(data=request.data)
 
     if serialized_data.is_valid():
         job_instance = serialized_data.save()
 
-        # Create JobSkills relationships
+        # Create and associate job skills
         for skill in new_skills:
-            job_skill = JobSkills.objects.create(name=skill)
+            job_skill, created = JobSkills.objects.get_or_create(name=skill)
             job_instance.skills.add(job_skill)
 
         # Get job skills
         job_skills = list(job_instance.skills.values_list("name", flat=True))
 
-        # Prepare notification data
+        # Prepare job data for the response
+        data = {
+            "job_id": job_instance.id,
+            "owner_id": job_instance.owner.id,
+            "company_name": job_instance.owner.first_name,
+            "company_email": job_instance.owner.email,
+            "skills": job_skills,
+            "category": job_instance.categories,
+            "title": job_instance.title,
+            "description": job_instance.description,
+            "location": job_instance.location,
+            "employment_type": job_instance.employment_type,
+            "max_salary": job_instance.max_salary,
+            "min_salary": job_instance.min_salary,
+            "currency_type": job_instance.currency_type,
+        }
+
+        # Send job creation signal (if applicable)
+        # job_created.send(sender=Jobs, instance=job_instance)
+
+        # Use the recommendation system to find suitable applicants
+        matcher = JobAppMatching()
+
+        # Get top 5 matching applicants
+        # recommended_users = matcher.recommend_jobs(job_id=job_instance.id, top_n=12)
+
+        job_data = matcher.load_job_from_db(job_instance.id)
+
+        if not job_data:
+            return Response(
+                {"error": "Job data could not be retrieved."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # Convert job data into Pandas DataFrame format
+        job_df = pd.DataFrame([job_data])
+
+        matcher.enrich_jobs_with_currency(job_df)
+        # Load all users as potential candidates
+        user_profiles = matcher.load_users_from_db()
+
+        if user_profiles.empty:
+            return Response(
+                {
+                    "detail": _("Job successfully posted!"),
+                    "data": data,
+                    "recommended_applicants": [],
+                },
+                status=status.HTTP_201_CREATED,
+            )
+
+        # Get top 5 matching applicants using the recommendation function
+        recommended_users = matcher.recommend_users(job_data, user_profiles)
+
+        # Prepare notification
         notification = {
             "id": str(uuid4()),
             "type": "job",
@@ -760,65 +816,54 @@ def job_create(request):
             },
         }
 
-        # Manually create the data dictionary
-        data = {
-            "job_id": job_instance.id,
-            "owner_id": job_instance.owner.id,
-            "company_name": job_instance.owner.first_name,
-            "company_email": job_instance.owner.email,
-            "skills": Jobs.objects.get(id=job_instance.id).skills.values_list(
-                "name", flat=True
-            ),
-            "category": job_instance.categories,
-            "title": job_instance.title,
-            "description": job_instance.description,
-            "location": job_instance.location,
-            "employment_type": job_instance.employment_type,
-            "max_salary": job_instance.max_salary,
-            "min_salary": job_instance.min_salary,
-            "currency_type": job_instance.currency_type,
-        }
+        recommended_applicants_list = []
 
-        # Signal that the job was created
-        job_created.send(sender=Jobs, instance=job_instance)
+        for user_data in recommended_users:
+            try:
+                user_id = user_data["user_id"]
+                profile = Profile.objects.get(user__id=user_id)
 
-        # Fetch the recommended applicants and add them to the data dictionary
-        # Assuming you have a function to get recommended applicants based on the job instance
-        recommended_applicant = Applicants.objects.filter(job=job_instance)
+                # Ensure applicants are linked to the job
+                applicant, created = Applicants.objects.get_or_create(job=job_instance)
+                applicant.user.add(profile.user)
 
-        for applicant in recommended_applicant:
-            # Get all users for this applicant
-            for user in applicant.user.all():  # Use .all() to get all related users
-                try:
-                    profile = Profile.objects.get(user=user)
+                # Collect recommended applicant info
+                recommended_applicants_list.append(
+                    {
+                        "user_id": profile.user.id,
+                        "user_name": profile.user.first_name,
+                        "user_email": profile.user.email,
+                        "match_score": user_data["match_score"],
+                        "years_of_experience": profile.years_of_experience,
+                        "salary_range": user_data["salary_range"],
+                        "location": profile.location,
+                        "skills": list(profile.skills.values_list("name", flat=True)),
+                    }
+                )
 
-                    # Initialize notifications list if it doesn't exist
-                    if not profile.notifications:
-                        profile.notifications = []
+                # Add notifications if not already present
+                if not profile.notifications:
+                    profile.notifications = []
 
-                    # Add new notification
-                    current_notifications = profile.notifications
-                    current_notifications.append(notification)
-
-                    # Update profile
-                    profile.notifications = current_notifications
+                if notification not in profile.notifications:
+                    profile.notifications.append(notification)
                     profile.save()
-                except Profile.DoesNotExist:
-                    print(f"Profile not found for user {user.email}")
-                    continue
 
-        recommended_applicants = Applicants.objects.filter(job=job_instance).values(
-            "user__id", "user__first_name", "user__email"
-        )  # Adjust fields as needed
-        data["recommended_applicants"] = list(recommended_applicants)
+            except Profile.DoesNotExist:
+                print(f"Profile not found for user ID {user_id}")
+                continue
+
+        # Add recommended applicants to response
+        data["recommended_applicants"] = recommended_applicants_list
 
         return Response(
-            {"detail": _("Job Successfully posted!"), "data": data},
+            {"detail": _("Job successfully posted!"), "data": data},
             status=status.HTTP_201_CREATED,
         )
 
+    # Handle invalid data
     return Response(
-        f"Error: {serialized_data.errors}", status=status.HTTP_400_BAD_REQUEST
+        {"error": serialized_data.errors}, status=status.HTTP_400_BAD_REQUEST
     )
 
 
@@ -1315,267 +1360,8 @@ def verify_payment(request):
         )
 
 
-@api_view(["POST"])
-@permission_classes([IsAuthenticated])
-def new_job_create(request):
-    user = request.user
-
-    if not user.company:
-        return Response(
-            "Only Companies can create Jobs", status=status.HTTP_404_NOT_FOUND
-        )
-
-    request.data["owner"] = user.id
-
-    # Extract skills from request
-    new_skills = request.data.pop("skills", [])
-
-    # Serialize and save job data
-    serialized_data = JobSerializer(data=request.data)
-
-    if serialized_data.is_valid():
-        job_instance = serialized_data.save()
-
-        # Create and associate job skills
-        for skill in new_skills:
-            job_skill, created = JobSkills.objects.get_or_create(name=skill)
-            job_instance.skills.add(job_skill)
-
-        # Get job skills
-        job_skills = list(job_instance.skills.values_list("name", flat=True))
-
-        # Prepare job data for the response
-        data = {
-            "job_id": job_instance.id,
-            "owner_id": job_instance.owner.id,
-            "company_name": job_instance.owner.first_name,
-            "company_email": job_instance.owner.email,
-            "skills": job_skills,
-            "category": job_instance.categories,
-            "title": job_instance.title,
-            "description": job_instance.description,
-            "location": job_instance.location,
-            "employment_type": job_instance.employment_type,
-            "max_salary": job_instance.max_salary,
-            "min_salary": job_instance.min_salary,
-            "currency_type": job_instance.currency_type,
-        }
-
-        # Send job creation signal (if applicable)
-        # job_created.send(sender=Jobs, instance=job_instance)
-
-        # Use the recommendation system to find suitable applicants
-        matcher = JobAppMatching()
-
-        # Get top 5 matching applicants
-        # recommended_users = matcher.recommend_jobs(job_id=job_instance.id, top_n=12)
-
-        job_data = matcher.load_job_from_db(job_instance.id)
-
-        if not job_data:
-            return Response(
-                {"error": "Job data could not be retrieved."},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-
-        # Convert job data into Pandas DataFrame format
-        job_df = pd.DataFrame([job_data])
-
-        matcher.enrich_jobs_with_currency(job_df)
-        # Load all users as potential candidates
-        user_profiles = matcher.load_users_from_db()
-
-        if user_profiles.empty:
-            return Response(
-                {
-                    "detail": _("Job successfully posted!"),
-                    "data": data,
-                    "recommended_applicants": [],
-                },
-                status=status.HTTP_201_CREATED,
-            )
-
-        # Get top 5 matching applicants using the recommendation function
-        recommended_users = matcher.recommend_users(job_data, user_profiles)
-
-        # Prepare notification
-        notification = {
-            "id": str(uuid4()),
-            "type": "job",
-            "message": "You have been matched to a job",
-            "datetime": timezone.now().isoformat(),
-            "details": {
-                "job_name": job_instance.title,
-                "job_description": job_instance.description,
-                "job_skills": job_skills,
-            },
-        }
-
-        recommended_applicants_list = []
-
-        for user_data in recommended_users:
-            try:
-                user_id = user_data["user_id"]
-                profile = Profile.objects.get(user__id=user_id)
-
-                # Ensure applicants are linked to the job
-                applicant, created = Applicants.objects.get_or_create(job=job_instance)
-                applicant.user.add(profile.user)
-
-                # Collect recommended applicant info
-                recommended_applicants_list.append(
-                    {
-                        "user_id": profile.user.id,
-                        "user_name": profile.user.first_name,
-                        "user_email": profile.user.email,
-                        "match_score": user_data["match_score"],
-                        "years_of_experience": profile.years_of_experience,
-                        "salary_range": user_data["salary_range"],
-                        "location": profile.location,
-                        "skills": list(profile.skills.values_list("name", flat=True)),
-                    }
-                )
-
-                # Add notifications if not already present
-                if not profile.notifications:
-                    profile.notifications = []
-
-                if notification not in profile.notifications:
-                    profile.notifications.append(notification)
-                    profile.save()
-
-            except Profile.DoesNotExist:
-                print(f"Profile not found for user ID {user_id}")
-                continue
-
-        # Add recommended applicants to response
-        data["recommended_applicants"] = recommended_applicants_list
-
-        return Response(
-            {"detail": _("Job successfully posted!"), "data": data},
-            status=status.HTTP_201_CREATED,
-        )
-
-    # Handle invalid data
-    return Response(
-        {"error": serialized_data.errors}, status=status.HTTP_400_BAD_REQUEST
-    )
-
-
-@api_view(["PUT"])
-# @permission_classes([IsAuthenticated])
-def bulk_profile_update(request):
-    """
-    Updates multiple user profiles based on the provided list of user data.
-    """
-    if not isinstance(request.data, list):  # Ensure request data is a list
-        return Response(
-            {"error": "Invalid data format. Expected a list."},
-            status=status.HTTP_400_BAD_REQUEST,
-        )
-
-    updated_users = []
-    errors = []
-
-    for user_data in request.data:
-        user_id = user_data.get("user")
-        if not user_id:
-            errors.append({"user_id": None, "error": "Missing user ID"})
-            continue
-
-        try:
-            user = User.objects.get(id=user_id)
-        except User.DoesNotExist:
-            errors.append({"user_id": user_id, "error": "User not found"})
-            continue
-
-        try:
-            profile = Profile.objects.get(user=user)
-
-            # Prevent updating email
-            user_data.pop("email", None)
-
-            # Update first_name and last_name if provided
-            if "first_name" in user_data:
-                user.first_name = user_data.pop("first_name")
-            if "last_name" in user_data:
-                user.last_name = user_data.pop("last_name")
-            user.save()
-
-            # Update skills
-            if "skills" in user_data:
-                skill_names = user_data.pop("skills", [])
-                skills = [
-                    UserSkills.objects.get_or_create(name=name, user=user)[0]
-                    for name in skill_names
-                ]
-                profile.skills.set(skills)  # Set skills directly
-
-            # Update categories
-            if "categories" in user_data:
-                category_names = user_data.pop("categories", [])
-                categories = [
-                    UserCategories.objects.get_or_create(name=name)[0]
-                    for name in category_names
-                ]
-                profile.categories.set(categories)  # Set categories directly
-
-            # Update other profile fields
-            serialized_data = ProfileSerializer(profile, data=user_data, partial=True)
-            if serialized_data.is_valid():
-                serialized_data.save()
-                updated_users.append(user_id)
-            else:
-                errors.append({"user_id": user_id, "error": serialized_data.errors})
-
-        except Profile.DoesNotExist:
-            errors.append({"user_id": user_id, "error": "Profile not found"})
-        except Exception as e:
-            errors.append({"user_id": user_id, "error": str(e)})
-
-    return Response(
-        {"updated_users": updated_users, "errors": errors},
-        status=status.HTTP_200_OK if updated_users else status.HTTP_400_BAD_REQUEST,
-    )
-
-
-@api_view(["POST"])
-# @permission_classes([IsAuthenticated])
-def bulk_create_users(request):
-    """
-    Creates multiple users from a JSON file upload or direct JSON array.
-    Expects a list of user objects in request.data or a JSON file with key "file".
-    """
-
-    # Check if a file was uploaded
-    users_data = request.data  # Directly get JSON data from request
-
-    # Validate input type
-    if not isinstance(users_data, list):
-        return Response(
-            {"detail": "Invalid data format, expected a list of users"},
-            status=status.HTTP_400_BAD_REQUEST,
-        )
-
-    # Serialize the data
-    serialized_data = UserSerializer(data=users_data, many=True)
-
-    if serialized_data.is_valid():
-        users = serialized_data.save()  # Bulk create users
-
-        # Create EmailAddress entries
-        email_objects = [EmailAddress(user=user, email=user.email) for user in users]
-        EmailAddress.objects.bulk_create(email_objects)
-
-        return Response(
-            {"message": f"{len(users)} users created successfully"},
-            status=status.HTTP_201_CREATED,
-        )
-
-    return Response(serialized_data.errors, status=status.HTTP_400_BAD_REQUEST)
-
-
 @api_view(["GET"])
+@permission_classes([IsAdminUser])
 def list_users(request):
     users = User.objects.all()
     serializer = DisplayUsers(users, many=True)
@@ -1583,6 +1369,7 @@ def list_users(request):
 
 
 @api_view(["GET"])
+@permission_classes([IsAdminUser])
 def all_profiles(request):
     users = Profile.objects.all()
     serializer = DisplayProfileSerializer(users, many=True)

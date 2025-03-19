@@ -4,24 +4,3 @@ db.sqlite3
 env/
 **/migrations/
 *.pyc
-
-
-
-
- modified:   api/__pycache__/__init__.cpython-312.pyc
-        
-        
-        modified:   
-        modified:   
-        modified:   
-        modified:   
-        modified:   
-        modified:
-        modified:   
-        modified:   
-        modified:   api/assist_model/__pycache__/assist_recommender.cpython-312.pyc
-        modified:   api/assist_model/__pycache__/data_processing.cpython-312.pyc
-        modified:   api/assist_model/data_processing.py
-        modified:   api/job_model/__pycache__/__init__.cpython-312.pyc
-        modified:   api/job_model/__pycache__/data_processing.cpython-312.pyc
-        modified:   api/job_model/__pycache__/job_recommender.cpython-312.pyc
