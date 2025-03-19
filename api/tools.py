@@ -29,7 +29,7 @@ def VerifyEmail_key(user_id: int):
         if not EmailVerication_Keys.objects.filter(key=unique_key).exists():
             break
 
-    expriation = datetime.now() + timedelta(hours=24)
+    expriation = timezone.now() + timezone.timedelta(days=1)
     print(f"Expiration Time: {expriation}")
     EmailVerication_Keys.objects.create(
         user = user,
@@ -52,7 +52,7 @@ def ResetPassword_key(email: int):
         if not PasswordReset_keys.objects.filter(key=unique_key).exists():
             break
 
-    expriation = timezone.now() + timedelta(hours=1)
+    expriation = timezone.now() + timezone.timedelta(hours=1)
     PasswordReset_keys.objects.create(
         user = user,
         key = unique_key,
