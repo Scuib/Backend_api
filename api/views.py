@@ -769,9 +769,6 @@ def job_create(request):
         # Use the recommendation system to find suitable applicants
         matcher = JobAppMatching()
 
-        # Get top 5 matching applicants
-        # recommended_users = matcher.recommend_jobs(job_id=job_instance.id, top_n=12)
-
         job_data = matcher.load_job_from_db(job_instance.id)
 
         if not job_data:
