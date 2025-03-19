@@ -227,7 +227,6 @@ class JobAppMatching:
 
         # Get top 5 users
         top_users = user_data.iloc[np.argsort(scores)[-5:][::-1]]
-        print(top_users)
 
         # Format recommendations
         recommendations = []
