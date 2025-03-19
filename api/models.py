@@ -11,6 +11,11 @@ from cloudinary.models import CloudinaryField
 
 
 class User(AbstractUser):
+    AUTH_PROVIDERS = [
+        ("email", "Email"),
+        ("google", "Google"),
+    ]
+
     email = models.EmailField(unique=True)
     username = models.CharField(max_length=100, blank=True, null=True)
     first_name = models.CharField(_("First Name"), max_length=100)
@@ -19,6 +24,9 @@ class User(AbstractUser):
     last_login = models.DateTimeField(auto_now=True)
     verified = models.BooleanField(default=False)
     company = models.BooleanField(default=False)
+    auth_provider = models.CharField(
+        max_length=10, choices=AUTH_PROVIDERS, default="email"
+    )
 
     USERNAME_FIELD = "email"
     REQUIRED_FIELDS = ["first_name"]

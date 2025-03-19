@@ -50,6 +50,7 @@ from .serializer import (
     CompanySerializer,
     AssistSerializer,
     DisplayUsers,
+    GoogleAuthSerializer,
 )
 
 from django.utils import timezone
@@ -182,6 +183,8 @@ def logout(request):
 @permission_classes([AllowAny])
 def login(request):
     serializer = LoginSerializer(data=request.data)
+    if user.auth_provider == "google":
+        return Response({"error": "Use Google login"})
     if serializer.is_valid():
         email = serializer.validated_data["email"]  # type: ignore
         password = serializer.validated_data["password"]  # type: ignore
@@ -200,9 +203,7 @@ def login(request):
         #     )
 
         if check_password(password, user.password):
-            # print(user.password)
             refresh = RefreshToken.for_user(user)
-            # update_last_login(None, user)
 
             return Response(
                 {
@@ -214,7 +215,6 @@ def login(request):
                 }
             )
         else:
-            print(check_password(user.password, password))
             return Response(
                 {"erro": "Invalid email or password"},
                 status=status.HTTP_401_UNAUTHORIZED,
@@ -311,11 +311,12 @@ def confirm_reset_password(request, uid, key):
     """
     try:
         user = get_object_or_404(User, id=uid)
+        if user.auth_provider == "google":
+            return Response({"error": "Use Google login"})
         reset_pwd_object = get_object_or_404(PasswordReset_keys, user=user, key=key)
 
         # Check if key has expired
-        print(reset_pwd_object.exp)
-        # print(timezone.now())
+
         if reset_pwd_object.exp <= timezone.now():
             return Response(
                 {"detail": _("Key has expired.")}, status=status.HTTP_404_NOT_FOUND
@@ -323,8 +324,6 @@ def confirm_reset_password(request, uid, key):
 
         password = request.data.get("password")
         password2 = request.data.get("password2")
-        # print(password)
-        # print(password2)
 
         # Check if passwords match
         if password != password2:
@@ -334,10 +333,8 @@ def confirm_reset_password(request, uid, key):
             )
 
         # Update the user's password
-        print(f"Old password: {user.password}")
         user.set_password(password)
         user.save()
-        print(f"New password: {user.password}")
 
         return Response(
             {"detail": _("Password Successfully changed.")},
@@ -1374,3 +1371,53 @@ def all_profiles(request):
     users = Profile.objects.all()
     serializer = DisplayProfileSerializer(users, many=True)
     return Response(serializer.data, status=status.HTTP_200_OK)
+
+
+@api_view(["POST"])
+@permission_classes([AllowAny])
+def google_auth(request):
+    serializer = GoogleAuthSerializer(data=request.data)
+    if not serializer.is_valid():
+        return Response(serializer.errors, status=400)
+
+    email = serializer.validated_data["email"]
+    first_name = serializer.validated_data["first_name"]
+    last_name = serializer.validated_data["last_name"]
+
+    try:
+        user = User.objects.get(email=email)
+        if user.auth_provider != "google":
+            return Response(
+                {"error": "Please login using your email and password"},
+                status=status.HTTP_401_UNAUTHORIZED,
+            )
+    except User.DoesNotExist:
+        user_data = {
+            "email": email,
+            "first_name": first_name,
+            "last_name": last_name,
+            "password": settings.SOCIAL_SECRET_KEY,
+            "password2": settings.SOCIAL_SECRET_KEY,
+            "auth_provider": "google",
+            "company": False,
+        }
+
+        user_serializer = UserSerializer(data=user_data)
+        if user_serializer.is_valid():
+            user = user_serializer.save()
+            user.email_verified = True
+            user.save()
+        else:
+            return Response(user_serializer.errors, status=400)
+
+    # Generate tokens
+    refresh = RefreshToken.for_user(user)
+    return Response(
+        {
+            "refresh": str(refresh),
+            "access": str(refresh.access_token),
+            "user_id": user.id,
+            "first_name": user.first_name,
+            "is_company": user.company,
+        }
+    )

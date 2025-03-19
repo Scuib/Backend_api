@@ -1,7 +1,10 @@
 import cloudinary.uploader
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 import cloudinary
-from scuibai.settings import BASE_DIR
+from scuibai.settings import BASE_DIR, GOOGLE_CLIENT_ID
+from google.oauth2 import id_token
+from google.auth.transport import requests
+
 from .models import (
     JobSkills,
     Image,
@@ -201,3 +204,22 @@ class DisplayUsers(ModelSerializer):
             "last_name",
             "company",
         ]
+
+
+class GoogleAuthSerializer(serializers.Serializer):
+    token = serializers.CharField(required=True)
+    first_name = serializers.CharField(required=False)
+    last_name = serializers.CharField(required=False)
+
+    def validate(self, attrs):
+        token = attrs.get("token")
+        try:
+            id_info = id_token.verify_oauth2_token(
+                token, requests.Request(), GOOGLE_CLIENT_ID
+            )
+            attrs["email"] = id_info.get("email")
+            attrs["first_name"] = id_info.get("given_name", "")
+            attrs["last_name"] = id_info.get("family_name", "")
+            return attrs
+        except ValueError:
+            raise serializers.ValidationError("Invalid Google token")
