@@ -72,6 +72,9 @@ from django.core.mail import send_mail
 from django.utils import timezone
 from api.job_model.job_recommender import JobAppMatching
 
+from drf_yasg.utils import swagger_auto_schema
+from drf_yasg import openapi
+
 # Activate the resend with the api key
 resend.api_key = settings.NEW_RESEND_API_KEY
 
@@ -89,6 +92,15 @@ class MyTokenObtainPairView(TokenObtainPairView):
 
 
 # Register View
+@swagger_auto_schema(
+    method="post",
+    operation_description="Register new users, company or individuals by providing basic details such as email, first name, last name, and password",
+    request_body=UserSerializer,
+    responses={
+        201: openapi.Response("User registered successfully"),
+        400: "Bad request",
+    },
+)
 @api_view(["POST"])
 @permission_classes([AllowAny])
 def register(request):
@@ -149,6 +161,7 @@ def register(request):
 @api_view(["POST"])
 @permission_classes([AllowAny])
 def resend_verify_email(request):
+    """ Verifies user email by validating token """
     try:
         email = request.data["email"]
         unverified_email = EmailAddress.objects.get(email=email)
@@ -164,6 +177,7 @@ def resend_verify_email(request):
 @api_view(["GET", "POST", "PUT"])
 @permission_classes([IsAuthenticated])
 def logout(request):
+    """Logs a user out of the platform"""
     try:
         refresh_token = request.data["refresh"]
         token = RefreshToken(refresh_token)
@@ -177,7 +191,6 @@ def logout(request):
             {"success": "fail", "detail": "LogOut UnSuccessful"},
             status=status.HTTP_400_BAD_REQUEST,
         )
-
 
 @api_view(["POST"])
 @permission_classes([AllowAny])
@@ -223,7 +236,30 @@ def login(request):
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
-# Verify Email Here
+@swagger_auto_schema(
+    method="post",
+    operation_summary="Verify Email",
+    operation_description="Verify a user's email using a unique verification key sent to their email.",
+    request_body=EmailVerifySerializer,
+    responses={
+        200: openapi.Response(
+            description="Email successfully verified",
+            examples={"application/json": {"detail": "Email verified successfully."}},
+        ),
+        400: openapi.Response(
+            description="Validation error",
+            examples={"application/json": {"key": ["This field is required."]}},
+        ),
+        404: openapi.Response(
+            description="Invalid or expired key",
+            examples={
+                "application/json": {
+                    "detail": "Key doesn't exist or Key has been used before"
+                }
+            },
+        ),
+    },
+)
 @api_view(["POST"])
 @permission_classes([AllowAny])
 def verify_email(request):
@@ -272,7 +308,30 @@ def verify_email(request):
     return Response(serialized_data.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
-# Reset password Here
+@swagger_auto_schema(
+    method="post",
+    operation_summary="Request Password Reset",
+    operation_description="Accepts an email, checks if it exists in the database, and sends a reset link containing a UID and token.",
+    request_body=openapi.Schema(
+        type=openapi.TYPE_OBJECT,
+        properties={
+            "email": openapi.Schema(type=openapi.TYPE_STRING, format="email"),
+        },
+        required=["email"],
+    ),
+    responses={
+        201: openapi.Response(
+            description="Password reset link generated",
+            examples={
+                "application/json": {"detail": {"uid": "some-uid", "key": "some-key"}}
+            },
+        ),
+        400: openapi.Response(
+            description="Request failed",
+            examples={"application/json": {"errors": "Something went wrong!"}},
+        ),
+    },
+)
 @api_view(["POST"])
 @permission_classes([AllowAny])
 def reset_password(request):
@@ -294,7 +353,48 @@ def reset_password(request):
     )
 
 
-# Verify Email Here
+@swagger_auto_schema(
+    method="post",
+    operation_summary="Confirm Password Reset",
+    operation_description="Takes a user ID (uid) and a reset key, along with a new password. If valid, updates the user's password.",
+    manual_parameters=[
+        openapi.Parameter(
+            "uid", openapi.IN_PATH, description="User ID", type=openapi.TYPE_STRING
+        ),
+        openapi.Parameter(
+            "key",
+            openapi.IN_PATH,
+            description="Password reset key",
+            type=openapi.TYPE_STRING,
+        ),
+    ],
+    request_body=openapi.Schema(
+        type=openapi.TYPE_OBJECT,
+        properties={
+            "password": openapi.Schema(type=openapi.TYPE_STRING, format="password"),
+            "password2": openapi.Schema(type=openapi.TYPE_STRING, format="password"),
+        },
+        required=["password", "password2"],
+    ),
+    responses={
+        201: openapi.Response(
+            description="Password successfully changed",
+            examples={"application/json": {"detail": "Password Successfully changed."}},
+        ),
+        400: openapi.Response(
+            description="Passwords do not match",
+            examples={"application/json": {"detail": "Passwords do not match."}},
+        ),
+        404: openapi.Response(
+            description="Invalid user or reset key",
+            examples={
+                "application/json": {
+                    "detail": "User DoesNot Exist or Reset Password Key is Invalid"
+                }
+            },
+        ),
+    },
+)
 @api_view(["POST"])
 @permission_classes([AllowAny])
 def confirm_reset_password(request, uid, key):
@@ -351,6 +451,46 @@ def confirm_reset_password(request, uid, key):
 """ PROFILE VIEWS """
 
 
+@swagger_auto_schema(
+    method="get",
+    operation_summary="Get User Profile by ID",
+    operation_description="Retrieves the profile details of a user by their ID, including resume, image, skills, and categories.",
+    manual_parameters=[
+        openapi.Parameter(
+            "user_id",
+            openapi.IN_PATH,
+            description="ID of the user whose profile is to be retrieved",
+            type=openapi.TYPE_INTEGER,
+            required=True,
+        ),
+    ],
+    responses={
+        200: openapi.Response(
+            description="Profile data retrieved successfully",
+            examples={
+                "application/json": {
+                    "data": {
+                        "email": "user@example.com",
+                        "first_name": "John",
+                        "last_name": "Doe",
+                        "image": "https://example.com/image.jpg",
+                        "resume": "https://example.com/resume.pdf",
+                        "skills": ["Python", "Django"],
+                        "categories": ["Software Development"],
+                    }
+                }
+            },
+        ),
+        400: openapi.Response(
+            description="User ID does not exist",
+            examples={"application/json": {"detail": "User Id does not exist"}},
+        ),
+        404: openapi.Response(
+            description="Profile or related data not found",
+            examples={"application/json": {"detail": "Not found"}},
+        ),
+    },
+)
 @api_view(["GET"])
 @permission_classes([AllowAny])
 def profile_detail_by_id(request, user_id):
@@ -387,7 +527,34 @@ def profile_detail_by_id(request, user_id):
     return Response({"data": profile_data}, status=status.HTTP_200_OK)
 
 
-# Profile Details of Authenticated User
+@swagger_auto_schema(
+    method="get",
+    operation_summary="Get Profile of Authenticated User",
+    operation_description="Retrieves the profile details of the currently authenticated user, including resume, image, skills, categories, and notifications.",
+    responses={
+        200: openapi.Response(
+            description="Authenticated user profile retrieved successfully",
+            examples={
+                "application/json": {
+                    "data": {
+                        "email": "user@example.com",
+                        "first_name": "John",
+                        "last_name": "Doe",
+                        "image": "https://example.com/image.jpg",
+                        "resume": "https://example.com/resume.pdf",
+                        "skills": ["Python", "Django"],
+                        "categories": ["Software Development"],
+                        "notifications": ["New message received"],
+                    }
+                }
+            },
+        ),
+        404: openapi.Response(
+            description="Profile not found",
+            examples={"application/json": {"detail": "Not found"}},
+        ),
+    },
+)
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
 def profile_detail(request):
@@ -428,7 +595,68 @@ def get_notifications(request):
     return Response({"data": profile.notifications}, status=status.HTTP_200_OK)
 
 
-# Profile Update of Authenticated User
+@swagger_auto_schema(
+    method="put",
+    operation_summary="Update Profile",
+    operation_description="Updates the authenticated user's profile. Accepts fields for first name, last name, skills, categories, image, and resume. Note that the email field is not updatable.",
+    request_body=openapi.Schema(
+        type=openapi.TYPE_OBJECT,
+        properties={
+            "first_name": openapi.Schema(
+                type=openapi.TYPE_STRING, description="User's first name"
+            ),
+            "last_name": openapi.Schema(
+                type=openapi.TYPE_STRING, description="User's last name"
+            ),
+            "skills": openapi.Schema(
+                type=openapi.TYPE_ARRAY,
+                items=openapi.Items(type=openapi.TYPE_STRING),
+                description="List of skills",
+            ),
+            "categories": openapi.Schema(
+                type=openapi.TYPE_ARRAY,
+                items=openapi.Items(type=openapi.TYPE_STRING),
+                description="List of categories",
+            ),
+            "image": openapi.Schema(
+                type=openapi.TYPE_STRING,
+                format="binary",
+                description="Image file for the user's profile",
+            ),
+            "resume": openapi.Schema(
+                type=openapi.TYPE_STRING,
+                format="binary",
+                description="Resume file for the user's profile",
+            ),
+        },
+    ),
+    responses={
+        200: openapi.Response(
+            description="Profile updated successfully",
+            examples={
+                "application/json": {
+                    "_detail": "Succesful!",
+                    "data": {
+                        "first_name": "John",
+                        "last_name": "Doe",
+                        "resume": "https://example.com/resume.pdf",
+                        "image": "https://example.com/image.jpg",
+                        "skills": ["Python", "Django"],
+                        "categories": ["Software Development"],
+                    },
+                }
+            },
+        ),
+        404: openapi.Response(
+            description="Profile does not exist",
+            examples={"application/json": {"detail": "Profile does not exist"}},
+        ),
+        500: openapi.Response(
+            description="Internal server error",
+            examples={"application/json": {"_detail": "An error occured!"}},
+        ),
+    },
+)
 @api_view(["PUT"])
 @permission_classes([IsAuthenticated])
 def profile_update(request):
@@ -593,6 +821,66 @@ def profile_update(request):
     )
 
 
+@swagger_auto_schema(
+    method="put",
+    operation_summary="Update user onboarding details",
+    operation_description="Allows a user to update their profile information, including name, skills, categories, profile image, and resume.",
+    manual_parameters=[
+        openapi.Parameter(
+            "user_id",
+            openapi.IN_PATH,
+            description="ID of the user whose profile is being updated",
+            type=openapi.TYPE_INTEGER,
+            required=True,
+        )
+    ],
+    request_body=openapi.Schema(
+        type=openapi.TYPE_OBJECT,
+        properties={
+            "first_name": openapi.Schema(
+                type=openapi.TYPE_STRING, description="User's first name (optional)"
+            ),
+            "last_name": openapi.Schema(
+                type=openapi.TYPE_STRING, description="User's last name (optional)"
+            ),
+            "skills": openapi.Schema(
+                type=openapi.TYPE_ARRAY,
+                items=openapi.Schema(type=openapi.TYPE_STRING),
+                description="List of skills to update (optional)",
+            ),
+            "categories": openapi.Schema(
+                type=openapi.TYPE_ARRAY,
+                items=openapi.Schema(type=openapi.TYPE_STRING),
+                description="List of categories to update (optional)",
+            ),
+            "image": openapi.Schema(
+                type=openapi.TYPE_STRING,
+                format=openapi.FORMAT_BINARY,
+                description="Profile image file to upload (optional)",
+            ),
+            "resume": openapi.Schema(
+                type=openapi.TYPE_STRING,
+                format=openapi.FORMAT_BINARY,
+                description="Resume file to upload (optional)",
+            ),
+        },
+        required=[],
+    ),
+    responses={
+        200: openapi.Response(
+            description="Profile updated successfully",
+            examples={"application/json": {"_detail": "Successful!"}},
+        ),
+        404: openapi.Response(
+            description="User or profile does not exist",
+            examples={"application/json": {"detail": "Profile does not exist"}},
+        ),
+        500: openapi.Response(
+            description="An error occurred while updating the profile",
+            examples={"application/json": {"_detail": "An error occurred!"}},
+        ),
+    },
+)
 @api_view(["PUT"])
 @permission_classes([AllowAny])
 def onboarding(request, user_id):
@@ -691,6 +979,7 @@ def onboarding(request, user_id):
 @api_view(["GET", "DELETE"])
 @permission_classes([IsAuthenticated])
 def profile_delete(request):
+    """Deletes a User Profile"""
     try:
         # Fetch the profile of the authenticated user
         profile = Profile.objects.get(user=request.user)
@@ -717,6 +1006,110 @@ def profile_delete(request):
 """ JOB VIEWS """
 
 
+@swagger_auto_schema(
+    method="post",
+    operation_summary="Create a Job",
+    operation_description="This endpoint allows authenticated companies to create a job listing. The system will match the job with suitable applicants using a recommendation system.",
+    request_body=openapi.Schema(
+        type=openapi.TYPE_OBJECT,
+        required=["title", "description", "location", "employment_type"],
+        properties={
+            "title": openapi.Schema(
+                type=openapi.TYPE_STRING,
+                description="Job title",
+            ),
+            "description": openapi.Schema(
+                type=openapi.TYPE_STRING,
+                description="Detailed job description",
+            ),
+            "location": openapi.Schema(
+                type=openapi.TYPE_STRING,
+                description="Job location",
+            ),
+            "employment_type": openapi.Schema(
+                type=openapi.TYPE_STRING,
+                enum=["Full-time", "Part-time", "Contract", "Remote"],
+                description="Type of employment",
+            ),
+            "max_salary": openapi.Schema(
+                type=openapi.TYPE_NUMBER,
+                description="Maximum salary offered",
+            ),
+            "min_salary": openapi.Schema(
+                type=openapi.TYPE_NUMBER,
+                description="Minimum salary offered",
+            ),
+            "currency_type": openapi.Schema(
+                type=openapi.TYPE_STRING,
+                enum=["USD", "EUR", "NGN", "GBP"],
+                description="Currency for salary",
+            ),
+            "skills": openapi.Schema(
+                type=openapi.TYPE_ARRAY,
+                items=openapi.Items(type=openapi.TYPE_STRING),
+                description="List of skills required for the job",
+            ),
+            "categories": openapi.Schema(
+                type=openapi.TYPE_ARRAY,
+                items=openapi.Items(type=openapi.TYPE_STRING),
+                description="Job categories",
+            ),
+        },
+    ),
+    responses={
+        201: openapi.Response(
+            description="Job successfully created",
+            examples={
+                "application/json": {
+                    "detail": "Job successfully posted!",
+                    "data": {
+                        "job_id": 1,
+                        "owner_id": 12,
+                        "company_name": "TechCorp",
+                        "company_email": "contact@techcorp.com",
+                        "skills": ["Python", "Django"],
+                        "category": "Software Development",
+                        "title": "Backend Developer",
+                        "description": "Develop and maintain APIs",
+                        "location": "Remote",
+                        "employment_type": "Full-time",
+                        "max_salary": 80000,
+                        "min_salary": 50000,
+                        "currency_type": "USD",
+                        "recommended_applicants": [
+                            {
+                                "user_id": 34,
+                                "user_name": "Jane Doe",
+                                "user_email": "janedoe@example.com",
+                                "match_score": 85.7,
+                                "years_of_experience": 5,
+                                "salary_range": "50K-80K",
+                                "location": "New York",
+                                "skills": ["Python", "Django"],
+                            }
+                        ],
+                    },
+                }
+            },
+        ),
+        400: openapi.Response(
+            description="Bad request",
+            examples={
+                "application/json": {
+                    "error": "Invalid job data",
+                }
+            },
+        ),
+        404: openapi.Response(
+            description="User is not a company",
+            examples={
+                "application/json": {
+                    "error": "Only Companies can create Jobs",
+                }
+            },
+        ),
+    },
+)
 @api_view(["POST"])
 @permission_classes([IsAuthenticated])
 def job_create(request):
@@ -861,6 +1254,79 @@ def job_create(request):
     )
 
 
+@swagger_auto_schema(
+    method="put",
+    operation_summary="Update a Job",
+    operation_description="This endpoint allows the job owner to update a job listing, including its details and skills.",
+    request_body=openapi.Schema(
+        type=openapi.TYPE_OBJECT,
+        properties={
+            "title": openapi.Schema(
+                type=openapi.TYPE_STRING, description="Updated job title"
+            ),
+            "description": openapi.Schema(
+                type=openapi.TYPE_STRING, description="Updated job description"
+            ),
+            "location": openapi.Schema(
+                type=openapi.TYPE_STRING, description="Updated job location"
+            ),
+            "employment_type": openapi.Schema(
+                type=openapi.TYPE_STRING,
+                enum=["Full-time", "Part-time", "Contract", "Remote"],
+                description="Updated employment type",
+            ),
+            "max_salary": openapi.Schema(
+                type=openapi.TYPE_NUMBER, description="Updated max salary"
+            ),
+            "min_salary": openapi.Schema(
+                type=openapi.TYPE_NUMBER, description="Updated min salary"
+            ),
+            "currency_type": openapi.Schema(
+                type=openapi.TYPE_STRING,
+                enum=["USD", "EUR", "NGN", "GBP"],
+                description="Updated currency type",
+            ),
+            "skills": openapi.Schema(
+                type=openapi.TYPE_ARRAY,
+                items=openapi.Items(type=openapi.TYPE_STRING),
+                description="Updated list of skills required for the job",
+            ),
+        },
+    ),
+    responses={
+        200: openapi.Response(
+            description="Job successfully updated",
+            examples={
+                "application/json": {
+                    "detail": "Job Successfully updated!",
+                    "data": {
+                        "job_id": 1,
+                        "title": "Updated Backend Developer",
+                        "description": "Updated API maintenance tasks",
+                        "location": "Remote",
+                        "employment_type": "Contract",
+                        "max_salary": 90000,
+                        "min_salary": 60000,
+                        "currency_type": "USD",
+                        "skills": ["Python", "Django", "FastAPI"],
+                    },
+                }
+            },
+        ),
+        403: openapi.Response(
+            description="Unauthorized action",
+            examples={
+                "application/json": {
+                    "error": "You do not have permission to update this job"
+                }
+            },
+        ),
+        400: openapi.Response(
+            description="Bad request",
+            examples={"application/json": {"error": "Invalid update data"}},
+        ),
+    },
+)
 @api_view(["PUT"])
 @permission_classes([IsAuthenticated])
 def job_update(request, job_id):

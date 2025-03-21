@@ -51,6 +51,7 @@ INSTALLED_APPS = [
     # cloudinary
     "cloudinary",
     "cloudinary_storage",
+    "drf_yasg",
     # payments
     # 'payments',
 ]

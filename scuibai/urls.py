@@ -1,15 +1,37 @@
-
 from django.contrib import admin
 from django.urls import path, include
 from api import views
 
+# drf imports
+
+from rest_framework import permissions
+from drf_yasg.views import get_schema_view
+from drf_yasg import openapi
+
+
+schema_view = get_schema_view(
+    openapi.Info(
+        title="Scuibai Backend API",
+        default_version="v1",
+        description="API documentation for your Scuibai detailing what endpoints are there and what data they require and in what format",
+        contact=openapi.Contact(email="okpephillips.dev@gmail.com"),
+        license=openapi.License(name="MIT License"),
+    ),
+    public=True,
+    permission_classes=[permissions.AllowAny],
+)
+
+
 urlpatterns = [
-    path('admin/', admin.site.urls),
-    path('api/auth/', include('dj_rest_auth.urls')),
-    path('api/auth/registration/', include('dj_rest_auth.registration.urls')),
-    path('api/', include('api.urls')),
-    path('api/auth/verify-email/', views.verify_email, name='verify_email'),
-    # path('dj-rest-auth/registration/account-confirm-email/<str:key>/', email_confirmation),
-    # path('reset/password/confirm/<int:uid>/<str:token>', reset_password_confirm, name="PasswordReset_keys_confirm"),
-    # path('dj-rest-auth/google/', GoogleLogin.as_view(), name='google_login'),
+    path("admin/", admin.site.urls),
+    path("api/auth/", include("dj_rest_auth.urls")),
+    path("api/auth/registration/", include("dj_rest_auth.registration.urls")),
+    path("api/", include("api.urls")),
+    path("api/auth/verify-email/", views.verify_email, name="verify_email"),
+    path(
+        "swagger/",
+        schema_view.with_ui("swagger", cache_timeout=0),
+        name="schema-swagger-ui",
+    ),
+    path("redoc/", schema_view.with_ui("redoc", cache_timeout=0), name="schema-redoc"),
 ]
