@@ -1141,6 +1141,10 @@ def profile_delete(request):
                 type=openapi.TYPE_NUMBER,
                 description="Minimum salary offered",
             ),
+            "years_of_experience": openapi.Schema(
+                type=openapi.TYPE_NUMBER,
+                description="Years of experience",
+            ),
             "currency_type": openapi.Schema(
                 type=openapi.TYPE_STRING,
                 enum=["USD", "EUR", "NGN", "GBP"],
@@ -1150,11 +1154,6 @@ def profile_delete(request):
                 type=openapi.TYPE_ARRAY,
                 items=openapi.Items(type=openapi.TYPE_STRING),
                 description="List of skills required for the job",
-            ),
-            "categories": openapi.Schema(
-                type=openapi.TYPE_ARRAY,
-                items=openapi.Items(type=openapi.TYPE_STRING),
-                description="Job categories",
             ),
         },
     ),
@@ -1280,6 +1279,17 @@ def job_create(request):
         user_profiles = matcher.load_users_from_db()
 
         if user_profiles.empty:
+            return Response(
+                {
+                    "detail": _("Job successfully posted!"),
+                    "data": data,
+                    "recommended_applicants": [],
+                },
+                status=status.HTTP_201_CREATED,
+            )
+        print(user_profiles["skills"].to_list())
+
+        if user_profiles["skills"].str.strip().eq("").all():
             return Response(
                 {
                     "detail": _("Job successfully posted!"),
