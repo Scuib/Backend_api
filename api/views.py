@@ -161,7 +161,7 @@ def register(request):
 @api_view(["POST"])
 @permission_classes([AllowAny])
 def resend_verify_email(request):
-    """ Verifies user email by validating token """
+    """Verifies user email by validating token"""
     try:
         email = request.data["email"]
         unverified_email = EmailAddress.objects.get(email=email)
@@ -174,6 +174,42 @@ def resend_verify_email(request):
         return Response("Email does not exist", status=status.HTTP_400_BAD_REQUEST)
 
 
+@swagger_auto_schema(
+    method="post",
+    operation_summary="Logout a user",
+    operation_description="Logs out the authenticated user by blacklisting their refresh token.",
+    manual_parameters=[
+        openapi.Parameter(
+            name="Authorization",
+            in_=openapi.IN_HEADER,
+            description="Bearer {token}",
+            type=openapi.TYPE_STRING,
+            required=True,
+        ),
+    ],
+    request_body=openapi.Schema(
+        type=openapi.TYPE_OBJECT,
+        required=["refresh"],
+        properties={
+            "refresh": openapi.Schema(
+                type=openapi.TYPE_STRING,
+                description="User's refresh token to be blacklisted",
+            ),
+        },
+    ),
+    responses={
+        205: openapi.Response(
+            description="LogOut Successful",
+            examples={"application/json": {"detail": "LogOut Successful"}},
+        ),
+        400: openapi.Response(
+            description="LogOut Unsuccessful",
+            examples={
+                "application/json": {"success": "fail", "detail": "LogOut UnSuccessful"}
+            },
+        ),
+    },
+)
 @api_view(["GET", "POST", "PUT"])
 @permission_classes([IsAuthenticated])
 def logout(request):
@@ -191,6 +227,7 @@ def logout(request):
             {"success": "fail", "detail": "LogOut UnSuccessful"},
             status=status.HTTP_400_BAD_REQUEST,
         )
+
 
 @api_view(["POST"])
 @permission_classes([AllowAny])
@@ -531,6 +568,15 @@ def profile_detail_by_id(request, user_id):
     method="get",
     operation_summary="Get Profile of Authenticated User",
     operation_description="Retrieves the profile details of the currently authenticated user, including resume, image, skills, categories, and notifications.",
+    manual_parameters=[
+        openapi.Parameter(
+            name="Authorization",
+            in_=openapi.IN_HEADER,
+            description="Bearer {token}",
+            type=openapi.TYPE_STRING,
+            required=True,
+        ),
+    ],
     responses={
         200: openapi.Response(
             description="Authenticated user profile retrieved successfully",
@@ -1010,6 +1056,15 @@ def profile_delete(request):
     method="post",
     operation_summary="Create a Job",
     operation_description="This endpoint allows authenticated companies to create a job listing. The system will match the job with suitable applicants using a recommendation system.",
+    manual_parameters=[
+        openapi.Parameter(
+            name="Authorization",
+            in_=openapi.IN_HEADER,
+            description="Bearer {token}",
+            type=openapi.TYPE_STRING,
+            required=True,
+        ),
+    ],
     request_body=openapi.Schema(
         type=openapi.TYPE_OBJECT,
         required=["title", "description", "location", "employment_type"],
@@ -1258,6 +1313,15 @@ def job_create(request):
     method="put",
     operation_summary="Update a Job",
     operation_description="This endpoint allows the job owner to update a job listing, including its details and skills.",
+    manual_parameters=[
+        openapi.Parameter(
+            name="Authorization",
+            in_=openapi.IN_HEADER,
+            description="Bearer {token}",
+            type=openapi.TYPE_STRING,
+            required=True,
+        ),
+    ],
     request_body=openapi.Schema(
         type=openapi.TYPE_OBJECT,
         properties={
