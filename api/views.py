@@ -1999,3 +1999,133 @@ def google_auth(request):
             "is_company": user.company,
         }
     )
+
+
+@swagger_auto_schema(
+    method="post",
+    operation_summary="Post a Job and Get Recommendations",
+    operation_description="Allows users to post a job without authentication and receive a list of recommended applicants.",
+    request_body=openapi.Schema(
+        type=openapi.TYPE_OBJECT,
+        required=["title", "description", "location", "employment_type"],
+        properties={
+            "experience_level": openapi.Schema(
+                type=openapi.TYPE_STRING, description="Experience level can be entry, mid, senior, lead"
+            ),
+            "location": openapi.Schema(
+                type=openapi.TYPE_STRING, description="Job location"
+            ),
+            "years_of_experience": openapi.Schema(
+                type=openapi.TYPE_NUMBER, description="Minimum years of experience needed for the job"
+            ),
+            "max_salary": openapi.Schema(
+                type=openapi.TYPE_NUMBER, description="Maximum salary"
+            ),
+            "min_salary": openapi.Schema(
+                type=openapi.TYPE_NUMBER, description="Minimum salary"
+            ),
+            "currency_type": openapi.Schema(
+                type=openapi.TYPE_STRING,
+                enum=["USD", "EUR", "NGN", "GBP"],
+                description="Salary currency",
+            ),
+            "skills": openapi.Schema(
+                type=openapi.TYPE_ARRAY,
+                items=openapi.Items(type=openapi.TYPE_STRING),
+                description="Required skills",
+            ),
+        },
+    ),
+    responses={
+        200: openapi.Response(
+            description="Recommended applicants",
+            examples={
+                "application/json": {
+                    "detail": "Job processed successfully!",
+                    "recommended_applicants": [
+                        {
+                            "user_id": 34,
+                            "user_name": "Jane Doe",
+                            "user_email": "janedoe@example.com",
+                            "match_score": 85.7,
+                            "years_of_experience": 5,
+                            "salary_range": "50K-80K",
+                            "location": "New York",
+                            "skills": ["Python", "Django"],
+                        }
+                    ],
+                }
+            },
+        ),
+        400: openapi.Response(
+            description="Bad request",
+            examples={"application/json": {"error": "Invalid job data"}},
+        ),
+    },
+)
+@api_view(["POST"])
+def post_job_without_auth(request):
+    job_data = request.data
+    job_data["skills"] = ";".join(job_data["skills"])
+    # Prepare data for recommendation system
+    job_df = pd.DataFrame([job_data])
+
+    # Instantiate recommendation system
+    matcher = JobAppMatching()
+
+    # Enrich job data
+    matcher.enrich_jobs_with_currency(job_df)
+
+    # Load all users as potential candidates
+    user_profiles = matcher.load_users_from_db()
+
+    if user_profiles.empty:
+        return Response(
+            {
+                "detail": "Job processed successfully!",
+                "recommended_applicants": [],
+            },
+            status=status.HTTP_200_OK,
+        )
+
+    if user_profiles["skills"].str.strip().eq("").all():
+        return Response(
+            {
+                "detail": "Job processed successfully!",
+                "recommended_applicants": [],
+            },
+            status=status.HTTP_200_OK,
+        )
+
+    # Get top 5 matching applicants
+    recommended_users = matcher.recommend_users(job_data, user_profiles)
+
+    recommended_applicants_list = []
+    for user_data in recommended_users:
+        try:
+            user_id = user_data["user_id"]
+            profile = Profile.objects.get(user_id=user_id)
+
+            recommended_applicants_list.append(
+                {
+                    "user_id": profile.user.id,
+                    "user_name": profile.user.first_name,
+                    "user_email": profile.user.email,
+                    "match_score": user_data["match_score"],
+                    "years_of_experience": profile.years_of_experience,
+                    "salary_range": user_data["salary_range"],
+                    "location": profile.location,
+                    "skills": list(profile.skills.values_list("name", flat=True)),
+                }
+            )
+
+        except Profile.DoesNotExist:
+            continue
+
+    return Response(
+        {
+            "detail": "Job processed successfully!",
+            "recommended_applicants": recommended_applicants_list,
+        },
+        status=status.HTTP_200_OK,
+    )
