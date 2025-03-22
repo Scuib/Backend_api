@@ -541,6 +541,13 @@ def confirm_reset_password(request, uid, key):
     operation_description="Retrieves the profile details of a user by their ID, including resume, image, skills, and categories.",
     manual_parameters=[
         openapi.Parameter(
+            name="Authorization",
+            in_=openapi.IN_HEADER,
+            description="Bearer {token}",
+            type=openapi.TYPE_STRING,
+            required=True,
+        ),
+        openapi.Parameter(
             "user_id",
             openapi.IN_PATH,
             description="ID of the user whose profile is to be retrieved",
@@ -692,37 +699,16 @@ def get_notifications(request):
     method="put",
     operation_summary="Update Profile",
     operation_description="Updates the authenticated user's profile. Accepts fields for first name, last name, skills, categories, image, and resume. Note that the email field is not updatable.",
-    request_body=openapi.Schema(
-        type=openapi.TYPE_OBJECT,
-        properties={
-            "first_name": openapi.Schema(
-                type=openapi.TYPE_STRING, description="User's first name"
-            ),
-            "last_name": openapi.Schema(
-                type=openapi.TYPE_STRING, description="User's last name"
-            ),
-            "skills": openapi.Schema(
-                type=openapi.TYPE_ARRAY,
-                items=openapi.Items(type=openapi.TYPE_STRING),
-                description="List of skills",
-            ),
-            "categories": openapi.Schema(
-                type=openapi.TYPE_ARRAY,
-                items=openapi.Items(type=openapi.TYPE_STRING),
-                description="List of categories",
-            ),
-            "image": openapi.Schema(
-                type=openapi.TYPE_STRING,
-                format="binary",
-                description="Image file for the user's profile",
-            ),
-            "resume": openapi.Schema(
-                type=openapi.TYPE_STRING,
-                format="binary",
-                description="Resume file for the user's profile",
-            ),
-        },
-    ),
+    manual_parameters=[
+        openapi.Parameter(
+            name="Authorization",
+            in_=openapi.IN_HEADER,
+            description="Bearer {token}",
+            type=openapi.TYPE_STRING,
+            required=True,
+        ),
+    ],
+    request_body= ProfileSerializer,
     responses={
         200: openapi.Response(
             description="Profile updated successfully",
@@ -925,7 +911,14 @@ def profile_update(request):
             description="ID of the user whose profile is being updated",
             type=openapi.TYPE_INTEGER,
             required=True,
-        )
+        ),
+        openapi.Parameter(
+            name="Authorization",
+            in_=openapi.IN_HEADER,
+            description="Bearer {token}",
+            type=openapi.TYPE_STRING,
+            required=True,
+        ),
     ],
     request_body=openapi.Schema(
         type=openapi.TYPE_OBJECT,
@@ -1005,7 +998,9 @@ def onboarding(request, user_id):
 
         # Add new skills
         for skill_name in new_skills_set - current_skills:
-            skill, created = UserSkills.objects.get_or_create(name=skill_name)
+            skill, created = UserSkills.objects.get_or_create(
+                name=skill_name, user=user
+            )
             profile.skills.add(skill)
 
         # Remove old skills
@@ -1287,7 +1282,6 @@ def job_create(request):
                 },
                 status=status.HTTP_201_CREATED,
             )
-        print(user_profiles["skills"].to_list())
 
         if user_profiles["skills"].str.strip().eq("").all():
             return Response(
