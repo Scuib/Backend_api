@@ -93,7 +93,6 @@ class Profile(models.Model):
     )
     max_salary = models.IntegerField(default=100)
     min_salary = models.IntegerField(default=10)
-    experience = models.IntegerField(default=1)
     phonenumbers = models.CharField(max_length=255, blank=True, null=True)
     github = models.CharField(max_length=100, null=True, blank=True)
     portfolio = models.CharField(max_length=100, null=True, blank=True)
@@ -107,7 +106,7 @@ class Profile(models.Model):
     experience_level = models.CharField(
         max_length=10, choices=ExperienceLevel.choices, default=ExperienceLevel.ENTRY
     )
-    years_of_experience = models.IntegerField(default=0)
+    years_of_experience = models.IntegerField(default=1)
 
     def __str__(self):
         return self.user.first_name
