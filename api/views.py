@@ -229,12 +229,58 @@ def logout(request):
         )
 
 
+@swagger_auto_schema(
+    method="post",
+    operation_summary="User Login",
+    operation_description="This endpoint allows users to log in using email and password. If the user registered with Google, they must use Google login.",
+    request_body=openapi.Schema(
+        type=openapi.TYPE_OBJECT,
+        required=["email", "password"],
+        properties={
+            "email": openapi.Schema(
+                type=openapi.TYPE_STRING,
+                format="email",
+                description="User's email address",
+            ),
+            "password": openapi.Schema(
+                type=openapi.TYPE_STRING,
+                format="password",
+                description="User's password",
+            ),
+        },
+    ),
+    responses={
+        200: openapi.Response(
+            description="Login successful",
+            examples={
+                "application/json": {
+                    "refresh": "your-refresh-token",
+                    "access": "your-access-token",
+                    "user_id": 1,
+                    "first_name": "John",
+                    "is_company": False,
+                }
+            },
+        ),
+        400: openapi.Response(
+            description="Validation error",
+            examples={
+                "application/json": {
+                    "email": ["This field is required."],
+                    "password": ["This field is required."],
+                }
+            },
+        ),
+        401: openapi.Response(
+            description="Invalid credentials or email not verified",
+            examples={"application/json": {"error": "Invalid email or password"}},
+        ),
+    },
+)
 @api_view(["POST"])
 @permission_classes([AllowAny])
 def login(request):
     serializer = LoginSerializer(data=request.data)
-    if user.auth_provider == "google":
-        return Response({"error": "Use Google login"})
     if serializer.is_valid():
         email = serializer.validated_data["email"]  # type: ignore
         password = serializer.validated_data["password"]  # type: ignore
@@ -246,7 +292,8 @@ def login(request):
                 {"error": "Invalid email or password"},
                 status=status.HTTP_401_UNAUTHORIZED,
             )
-
+        if user.auth_provider == "google":
+            return Response({"error": "Use Google login"})
         # if not EmailAddress.objects.get(email=email).verified:
         #     return Response(
         #         {"error": "Email is not verified "}, status=status.HTTP_401_UNAUTHORIZED
