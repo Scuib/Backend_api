@@ -114,7 +114,7 @@ class DisplayProfileSerializer(ModelSerializer):
             "employment_type",
             "min_salary",
             "max_salary",
-            "experience",
+            "years_of_experience",
             "phonenumbers",
             "github",
             "portfolio",
@@ -180,16 +180,6 @@ class JobSerializer(serializers.ModelSerializer):
 class CompanySerializer(ModelSerializer):
     class Meta:
         model = CompanyProfile
-        fields = "__all__"
-
-
-class AssistSerializer(ModelSerializer):
-    skills = serializers.ListField(
-        child=serializers.CharField(max_length=100), required=False
-    )
-
-    class Meta:
-        model = Assists
         fields = "__all__"
 
 

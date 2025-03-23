@@ -186,14 +186,15 @@ REST_AUTH = {
     "OLD_PASSWORD_FIELD_ENABLED": True,
 }
 
-# cors headers
-CORS_ALLOWED_ORIGINS = [
-    "http://localhost:5173",
-    "https://www.scuib.com",
-    "http://localhost",
-    "http://localhost:3000",
-]
+# # cors headers
+# CORS_ALLOWED_ORIGINS = [
+#     "http://localhost:5173",
+#     "https://www.scuib.com",
+#     "http://localhost",
+#     "http://localhost:3000",
+# ]
 CORS_ALLOW_CREDENTIALS = True
+CORS_ORIGIN_ALLOW_ALL = True
 
 # send email
 EMAIL_BACKEND = "django.core.mail.backends.smtp.EmailBackend"

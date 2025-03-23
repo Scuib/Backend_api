@@ -24,14 +24,12 @@ from .models import (
     UserCategories,
     UserSkills,
     WaitList,
-    AssistApplicants,
     JobSkills,
     Cover_Letter,
     Resume,
     Image,
     Jobs,
     Applicants,
-    AssistSkills,
 )
 
 from .serializer import (
@@ -48,7 +46,6 @@ from .serializer import (
     CoverLetterSerializer,
     JobSerializer,
     CompanySerializer,
-    AssistSerializer,
     DisplayUsers,
     GoogleAuthSerializer,
 )
@@ -708,7 +705,7 @@ def get_notifications(request):
             required=True,
         ),
     ],
-    request_body= ProfileSerializer,
+    request_body=ProfileSerializer,
     responses={
         200: openapi.Response(
             description="Profile updated successfully",
@@ -1490,89 +1487,6 @@ def job_update(request, job_id):
     return Response(serialized_data.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
-@api_view(["POST"])
-@permission_classes([IsAuthenticated])
-def get_new_applicants(request, job_id):
-    user = request.user
-    job_instance = get_object_or_404(Jobs, id=job_id)
-
-    if job_instance.owner != user:
-        return Response(
-            "You do not have permission to update this job",
-            status=status.HTTP_403_FORBIDDEN,
-        )
-
-    job_created.send(sender=Jobs, instance=job_instance)
-
-    data = {
-        "job_id": job_instance.id,
-        "owner_id": job_instance.owner.id,
-        "company_name": job_instance.owner.first_name,
-        "company_email": job_instance.owner.email,
-        "skills": Jobs.objects.get(id=job_instance.id).skills.values_list(
-            "name", flat=True
-        ),
-        "category": job_instance.categories,
-        "title": job_instance.title,
-        "description": job_instance.description,
-        "location": job_instance.location,
-        "employment_type": job_instance.employment_type,
-        "max_salary": job_instance.max_salary,
-        "min_salary": job_instance.min_salary,
-        "currency_type": job_instance.currency_type,
-    }
-    # Get job skills
-    job_skills = list(job_instance.skills.values_list("name", flat=True))
-
-    # Prepare notification data
-    notification = {
-        "id": str(uuid4()),
-        "type": "job",
-        "message": "You have been matched to a job",
-        "datetime": timezone.now().isoformat(),
-        "details": {
-            "job_name": job_instance.title,
-            "job_description": job_instance.description,
-            "job_skills": job_skills,
-        },
-    }
-
-    # Fetch the recommended applicants and add them to the data dictionary
-    # Assuming you have a function to get recommended applicants based on the job instance
-    recommended_applicant = Applicants.objects.filter(job=job_instance)
-
-    for applicant in recommended_applicant:
-        # Get all users for this applicant
-        for user in applicant.user.all():  # Use .all() to get all related users
-            try:
-                profile = Profile.objects.get(user=user)
-
-                # Initialize notifications list if it doesn't exist
-                if not profile.notifications:
-                    profile.notifications = []
-
-                # Add new notification
-                current_notifications = profile.notifications
-                current_notifications.append(notification)
-
-                # Update profile
-                profile.notifications = current_notifications
-                profile.save()
-            except Profile.DoesNotExist:
-                print(f"Profile not found for user {user.email}")
-                continue
-
-    recommended_applicants = Applicants.objects.filter(job=job_instance).values(
-        "user__id", "user__first_name", "user__email"
-    )  # Adjust fields as needed
-    data["recommended_applicants"] = list(recommended_applicants)
-
-    return Response(
-        {"detail": _("Job Successfully posted!"), "data": data},
-        status=status.HTTP_201_CREATED,
-    )
-
-
 @api_view(["GET"])
 @permission_classes([AllowAny])
 def jobs_all(request):
@@ -1705,134 +1619,6 @@ def delete_user(request):
     return Response({"detail": "User deleted Successfully"}, status=status.HTTP_200_OK)
 
 
-"""ASSIST MODELS"""
-
-
-@api_view(["POST"])
-@permission_classes([IsAuthenticated])
-def assist_create(request):
-    request.data["owner"] = request.user.id  # Ensure user is set correctly
-
-    new_skills = request.data.pop("skills", [])
-    # skill = AssitSkills.objects.create(name='default')
-    # request.data['skills'] = [skill]
-
-    serialized_data = AssistSerializer(data=request.data)
-
-    if serialized_data.is_valid():
-        assist_instance = serialized_data.save()
-
-        # Create AssistSkills relationships
-        # assist_instance.skills.clear()  # Clear the default skill
-
-        for skill in new_skills:
-            assist_skill, created = AssistSkills.objects.get_or_create(name=skill)
-            assist_instance.skills.add(assist_skill)
-
-        # print("Compiler: Hey I got here 👋😊")
-        # assist_instance.save()
-
-        return Response(
-            {"detail": _("Assist Successfully posted!")}, status=status.HTTP_201_CREATED
-        )
-
-    return Response(serialized_data.errors, status=status.HTTP_400_BAD_REQUEST)
-
-
-@api_view(["PUT"])
-@permission_classes([IsAuthenticated])
-def assist_update(request, assist_id):
-    assist_instance = get_object_or_404(Assists, id=assist_id)
-
-    # Check if the user owns the assist
-    if assist_instance.owner != request.user:
-        return Response(
-            "You do not have permission to update this assist",
-            status=status.HTTP_403_FORBIDDEN,
-        )
-
-    # Check if skills are being updated
-    skills_update = "skills" in request.data
-    new_skills = request.data.pop("skills", [])
-
-    serialized_data = AssistSerializer(assist_instance, data=request.data, partial=True)
-    if serialized_data.is_valid():
-        serialized_data.save()
-
-        if skills_update:
-            # Handle skill updates
-            current_skills = set(assist_instance.skills.values_list("name", flat=True))
-            new_skills_set = set(new_skills)
-
-            # Add new skills
-            for skill_name in new_skills_set - current_skills:
-                skill, created = AssistSkills.objects.get_or_create(name=skill_name)
-                assist_instance.skills.add(skill)
-
-            # Remove old skills
-            for skill_name in current_skills - new_skills_set:
-                skill = AssistSkills.objects.get(name=skill_name)
-                assist_instance.skills.remove(skill)
-
-        # job_created.send()
-
-        return Response(
-            {"detail": _("Assist Successfully updated!")}, status=status.HTTP_200_OK
-        )
-
-    return Response(serialized_data.errors, status=status.HTTP_400_BAD_REQUEST)
-
-
-@api_view(["GET"])
-@permission_classes([IsAuthenticated])
-def assist_for_you(request):
-    query = AssistApplicants.objects.all()
-    assists = []
-    try:
-        for assist in query:
-            if request.user.id in assist.applicants.values_list("id"):
-                assists.append(
-                    {
-                        "first_name": assist.assist.owner.first_name,
-                        "last_name": (
-                            assist.assist.owner.last_name
-                            if assist.assist.owner.last_name
-                            else ""
-                        ),  # last_name is null return an empty string
-                        "title": assist.assist.title,
-                        "description": assist.assist.description,
-                        "skills": assist.assist.skills.values_list("name", flat=True),
-                        "max_pay": assist.assist.max_pay,
-                        "min_pay": assist.assist.min_pay,
-                    }
-                )
-        return Response({"detail": assists}, status=status.HTTP_200_OK)
-    except Exception as e:
-        return Response(
-            {"detail": f"An error occured {e}"},
-            status=status.HTTP_500_INTERNAL_SERVER_ERROR,
-        )
-
-
-@api_view(["DELETE"])
-@permission_classes([IsAuthenticated])
-def delete_assist(request, assist_id):
-    # Check if assist actually exists
-    assist = get_object_or_404(Assists, id=assist_id)
-    if not assist:
-        return Response(
-            {"detail": "Assist doesn't exist"}, status=status.HTTP_404_NOT_FOUND
-        )
-    # Check if the authenticated user is owner of the assist post
-    if not request.user == assist.owner:
-        return Response(
-            {"detail": f"This User is not permitted to delete assist {assist_id}"},
-            status=status.HTTP_401_UNAUTHORIZED,
-        )
-    assist.delete()
-    return Response({"detail": "Assist delete"}, status=status.HTTP_200_OK)
-
-
 @api_view(["POST"])
 @permission_classes([AllowAny])
 def waitlist(request):
@@ -1853,7 +1639,6 @@ def waitlist(request):
             {"detail": "Unsuccessful", "error": str(e)},
             status=status.HTTP_500_INTERNAL_SERVER_ERROR,
         )
-
 
 """ PAYMENT """
 
@@ -1954,6 +1739,7 @@ def all_profiles(request):
 @api_view(["POST"])
 @permission_classes([AllowAny])
 def google_auth(request):
+    """Takes a google auth token, verifies it and login the user"""
     serializer = GoogleAuthSerializer(data=request.data)
     if not serializer.is_valid():
         return Response(serializer.errors, status=400)
@@ -2003,20 +1789,22 @@ def google_auth(request):
 
 @swagger_auto_schema(
     method="post",
-    operation_summary="Post a Job and Get Recommendations",
+    operation_summary="Post a Job without Authentication and get recommendations",
     operation_description="Allows users to post a job without authentication and receive a list of recommended applicants.",
     request_body=openapi.Schema(
         type=openapi.TYPE_OBJECT,
-        required=["title", "description", "location", "employment_type"],
+        required=["location", "experience_level", "years_of_experience", "skills", "salary", "currency_type"],
         properties={
             "experience_level": openapi.Schema(
-                type=openapi.TYPE_STRING, description="Experience level can be entry, mid, senior, lead"
+                type=openapi.TYPE_STRING,
+                description="Experience level can be entry, mid, senior, lead",
             ),
             "location": openapi.Schema(
                 type=openapi.TYPE_STRING, description="Job location"
             ),
             "years_of_experience": openapi.Schema(
-                type=openapi.TYPE_NUMBER, description="Minimum years of experience needed for the job"
+                type=openapi.TYPE_NUMBER,
+                description="Minimum years of experience needed for the job",
             ),
             "max_salary": openapi.Schema(
                 type=openapi.TYPE_NUMBER, description="Maximum salary"
