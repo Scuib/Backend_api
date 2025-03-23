@@ -12,6 +12,7 @@ urlpatterns = [
         name="resend-verify-email",
     ),
     path("auth/login/", views.login, name="login"),
+    path("auth/google/", views.google_auth, name="Googe-login"),
     path("delete/", views.delete_user, name="delete-user"),
     path("logout/", views.logout, name="logout"),
     path("auth/refresh-token/", TokenRefreshView.as_view(), name="refresh-token"),
