@@ -1,7 +1,7 @@
 import requests
 import cloudinary.uploader
 from django.shortcuts import render, get_object_or_404
-from rest_framework.decorators import api_view, permission_classes
+from rest_framework.decorators import api_view, permission_classes, parser_classes
 from rest_framework_simplejwt.views import TokenObtainPairView
 from rest_framework.permissions import IsAuthenticated, AllowAny, IsAdminUser
 from rest_framework.response import Response
@@ -17,7 +17,6 @@ from .models import (
     Profile,
     User,
     EmailVerication_Keys,
-    Assists,
     Subscription,
     PasswordReset_keys,
     JobSkills,
@@ -25,9 +24,6 @@ from .models import (
     UserSkills,
     WaitList,
     JobSkills,
-    Cover_Letter,
-    Resume,
-    Image,
     Jobs,
     Applicants,
 )
@@ -41,9 +37,6 @@ from .serializer import (
     EmailVerifySerializer,
     ApplicantSerializer,
     LoginSerializer,
-    ResumeSerializer,
-    ImageSerializer,
-    CoverLetterSerializer,
     JobSerializer,
     CompanySerializer,
     DisplayUsers,
@@ -57,6 +50,7 @@ from django.contrib.auth.hashers import make_password, check_password
 from django.template.loader import get_template
 from allauth.account.models import EmailAddress
 from rest_framework_simplejwt.tokens import RefreshToken
+from rest_framework.parsers import MultiPartParser, FormParser, JSONParser
 
 from django.conf import settings
 from .custom_signal import job_created, assist_created
@@ -348,7 +342,6 @@ def verify_email(request):
     This method verifies the use email exists by Matching the user Unique Key that was sent to the email
     request.data - ['key']
     """
-    print(request.data)
     serialized_data = EmailVerifySerializer(data=request.data)
     if serialized_data.is_valid():
         # print(serialized_data.data)
@@ -538,13 +531,6 @@ def confirm_reset_password(request, uid, key):
     operation_description="Retrieves the profile details of a user by their ID, including resume, image, skills, and categories.",
     manual_parameters=[
         openapi.Parameter(
-            name="Authorization",
-            in_=openapi.IN_HEADER,
-            description="Bearer {token}",
-            type=openapi.TYPE_STRING,
-            required=True,
-        ),
-        openapi.Parameter(
             "user_id",
             openapi.IN_PATH,
             description="ID of the user whose profile is to be retrieved",
@@ -580,7 +566,7 @@ def confirm_reset_password(request, uid, key):
     },
 )
 @api_view(["GET"])
-@permission_classes([IsAuthenticated])
+@permission_classes([AllowAny])
 def profile_detail_by_id(request, user_id):
     """Returns the profile of a user"""
     # Check if user exist
@@ -595,23 +581,6 @@ def profile_detail_by_id(request, user_id):
     except Profile.DoesNotExist:
         return Response(status=status.HTTP_404_NOT_FOUND)
     profile_data = DisplayProfileSerializer(profile).data
-
-    # Add other fields
-    resume = None
-    try:
-        resume = Resume.objects.get(user=profile.user)
-        profile_data["resume"] = resume.file.url
-    except Resume.DoesNotExist:
-        profile_data["resume"] = ""
-
-    image = get_object_or_404(Image, user=profile.user)
-
-    profile_data["email"] = profile.user.email
-    profile_data["first_name"] = profile.user.first_name
-    profile_data["last_name"] = profile.user.last_name if profile.user.last_name else ""
-    profile_data["image"] = image.file.url if image else None
-    profile_data["skills"] = profile.skills.values_list("name", flat=True)
-    profile_data["categories"] = profile.categories.values_list("name", flat=True)
 
     return Response({"data": profile_data}, status=status.HTTP_200_OK)
 
@@ -662,25 +631,6 @@ def profile_detail(request):
     except Profile.DoesNotExist:
         return Response(status=status.HTTP_404_NOT_FOUND)
     profile_data = DisplayProfileSerializer(profile).data
-
-    # Add other fields
-    resume = None
-    try:
-        resume = Resume.objects.get(user=profile.user)
-        profile_data["resume"] = resume.file.url
-    except Resume.DoesNotExist:
-        profile_data["resume"] = ""
-
-    image = get_object_or_404(Image, user=request.user)
-
-    profile_data["email"] = profile.user.email
-    profile_data["first_name"] = profile.user.first_name
-    profile_data["last_name"] = profile.user.last_name if profile.user.last_name else ""
-    profile_data["image"] = image.file.url if image else None
-    profile_data["skills"] = profile.skills.values_list("name", flat=True)
-    profile_data["categories"] = profile.categories.values_list("name", flat=True)
-    profile_data["notifications"] = profile.notifications
-
     return Response({"data": profile_data}, status=status.HTTP_200_OK)
 
 
@@ -705,8 +655,29 @@ def get_notifications(request):
             type=openapi.TYPE_STRING,
             required=True,
         ),
+        openapi.Parameter(
+            name="image",
+            in_=openapi.IN_FORM,
+            description="Profile image file",
+            type=openapi.TYPE_FILE,
+            required=False,
+        ),
+        openapi.Parameter(
+            name="resume",
+            in_=openapi.IN_FORM,
+            description="Resume file (PDF, DOCX, etc.)",
+            type=openapi.TYPE_FILE,
+            required=False,
+        ),
+        openapi.Parameter(
+            name="cover_letter",
+            in_=openapi.IN_FORM,
+            description="Cover letter file",
+            type=openapi.TYPE_FILE,
+            required=False,
+        ),
     ],
-    request_body=ProfileSerializer,
+    consumes=["multipart/form-data"],
     responses={
         200: openapi.Response(
             description="Profile updated successfully",
@@ -736,6 +707,7 @@ def get_notifications(request):
 )
 @api_view(["PUT"])
 @permission_classes([IsAuthenticated])
+@parser_classes([MultiPartParser, FormParser])
 def profile_update(request):
     user = request.user
 
@@ -793,104 +765,45 @@ def profile_update(request):
             category = UserCategories.objects.get(name=category_name)
             profile.categories.remove(category)
 
-    if "image" in request.data:
-        image = None
-        try:
-            # Attempt to retrieve the existing image
-            image = Image.objects.get(user=profile.user)
+    cloudinary_fields = ["image", "resume", "cover_letter"]
+    for field in cloudinary_fields:
+        if field in request.FILES:
+            # Delete old file if exists
+            existing_file = getattr(profile, field)
+            if existing_file:
+                try:
+                    cloudinary.uploader.destroy(existing_file.public_id)
+                except Exception as e:
+                    print(f"Failed to delete old {field}: {e}")
 
-            # Debugging: Check if the image file is a string or CloudinaryResource
-            public_id = (
-                image.file.public_id if hasattr(image.file, "public_id") else image.file
+            # Determine the folder and resource type
+            if field == "image":
+                folder = "profile_images/"
+                resource_type = "image"
+            else:  # For resume and cover letter
+                folder = "profile_docs/"
+                resource_type = "raw"
+
+            # Upload new file
+            upload_result = cloudinary.uploader.upload(
+                request.FILES[field],
+                folder=folder,
+                resource_type=resource_type  # Use 'raw' for PDFs, 'image' for images
             )
-            print(f"Existing image public_id: {public_id}")
 
-            # Delete the existing image from Cloudinary
-            cloudinary.uploader.destroy(public_id)
+            # Save the file URL to the profile
+            setattr(profile, field, upload_result["secure_url"])
 
-            # Upload the new image and update the file field
-            image.file = cloudinary.uploader.upload(request.data["image"])["public_id"]  # type: ignore
-            image.save()
-
-            # Remove image from request data after processing
-            request.data.pop("image")
-
-        except Image.DoesNotExist:
-            # If the image does not exist, upload the new image and create a new Image object
-            file = uploader.upload(request.data["image"])["public_id"]  # type: ignore
-            Image.objects.create(user=profile.user, file=file)
-
-            # Remove image from request data after processing
-            request.data.pop("image")
-
-        except Exception as e:
-            # Handle any other exceptions, such as issues with Cloudinary credentials
-            print(f"Failed to delete or upload image: {e}")
-
-    if "resume" in request.data:
-        resume = None
-
-        try:
-            # Attempt to retrieve the existing resume
-            resume = Resume.objects.get(user=profile.user)
-
-            # Debugging: Check if the resume file is a string or Cloudinary Resource
-            public_id = (
-                resume.file.public_id
-                if hasattr(resume.file, "public_id")
-                else resume.file
-            )
-            print(f"Existing resume public_id: {public_id}")
-
-            # Delete the existing resume from Cloudinary
-            cloudinary.uploader.destroy(public_id)
-
-            # Upload the new resume and update the file field
-            resume.file = cloudinary.uploader.upload(request.data["resume"])["public_id"]  # type: ignore
-            resume.save()
-
-            # Remove resume from request data after processing
-            request.data.pop("resume")
-
-        except Resume.DoesNotExist:
-            # If the resume does not exist, upload the new resume and create a new Resume object
-            file = cloudinary.uploader.upload(request.data["resume"])["public_id"]  # type: ignore
-            Resume.objects.create(user=profile.user, file=file)
-
-            # Remove resume from request data after processing
-            request.data.pop("resume")
-
-        except Exception as e:
-            # Handle any other exceptions, such as issues with Cloudinary credentials
-            print(f"Failed to delete or upload resume: {e}")
-
-    # Save edits
+    # Save the updated profile
     profile.save()
 
     # Update profile with the remaining fields
     serialized_data = ProfileSerializer(profile, data=request.data, partial=True)
-    # for attr, value in request.data.items():
-    #     setattr(profile, attr, value)
     if serialized_data.is_valid():
         serialized_data.save()
-        data = serialized_data.data
-        print(User.objects.get(id=user.id).first_name)
-        try:
-            resume = Resume.objects.get(user=profile.user)
-            data["resume"] = resume.file.url
-        except Resume.DoesNotExist:
-            data["resume"] = ""
-        data["first_name"], data["last_name"] = (
-            profile.user.first_name,
-            profile.user.last_name,
-        )
-        data["image"] = Image.objects.get(user=user).file.url
-        data["skills"] = set(profile.skills.values_list("name", flat=True))
-        data["categories"] = set(profile.categories.values_list("name", flat=True))
-        # curr_user = User.objects.get(id=user.id)
 
         return Response(
-            {"_detail": "Succesful!", "data": data}, status=status.HTTP_200_OK
+            {"_detail": "Succesful!"}, status=status.HTTP_200_OK
         )
 
     return Response(
@@ -917,43 +830,50 @@ def profile_update(request):
             type=openapi.TYPE_STRING,
             required=True,
         ),
+        openapi.Parameter(
+            name="First Name",
+            in_=openapi.IN_FORM,
+            description="User's first name",
+            type=openapi.TYPE_STRING,
+            required=False,
+        ),
+        openapi.Parameter(
+            name="Skills",
+            in_=openapi.IN_FORM,
+            description="List of skills to update (optional)",
+            type=openapi.TYPE_STRING,
+            required=False,
+        ),
+        openapi.Parameter(
+            name="Categories",
+            in_=openapi.IN_FORM,
+            description="List of categories to update (optional)",
+            type=openapi.TYPE_STRING,
+            required=False,
+        ),
+        openapi.Parameter(
+            name="image",
+            in_=openapi.IN_FORM,
+            description="Profile image (file upload)",
+            type=openapi.TYPE_FILE,
+            required=False,
+        ),
+        openapi.Parameter(
+            name="resume",
+            in_=openapi.IN_FORM,
+            description="Resume file (PDF upload)",
+            type=openapi.TYPE_FILE,
+            required=False,
+        ),
+        openapi.Parameter(
+            name="years_of_experience",
+            in_=openapi.IN_FORM,
+            description="Years of experience(optional)",
+            type=openapi.TYPE_NUMBER,
+            required=False,
+        ),
     ],
-    request_body=openapi.Schema(
-        type=openapi.TYPE_OBJECT,
-        properties={
-            "first_name": openapi.Schema(
-                type=openapi.TYPE_STRING, description="User's first name (optional)"
-            ),
-            "last_name": openapi.Schema(
-                type=openapi.TYPE_STRING, description="User's last name (optional)"
-            ),
-            "skills": openapi.Schema(
-                type=openapi.TYPE_ARRAY,
-                items=openapi.Schema(type=openapi.TYPE_STRING),
-                description="List of skills to update (optional)",
-            ),
-            "categories": openapi.Schema(
-                type=openapi.TYPE_ARRAY,
-                items=openapi.Schema(type=openapi.TYPE_STRING),
-                description="List of categories to update (optional)",
-            ),
-            "image": openapi.Schema(
-                type=openapi.TYPE_STRING,
-                format=openapi.FORMAT_BINARY,
-                description="Profile image file to upload (optional)",
-            ),
-            "resume": openapi.Schema(
-                type=openapi.TYPE_STRING,
-                format=openapi.FORMAT_BINARY,
-                description="Resume file to upload (optional)",
-            ),
-            "years_of_experience": openapi.Schema(
-                type=openapi.TYPE_NUMBER,
-                description="Years of experience(optional)",
-            ),
-        },
-        required=[],
-    ),
+    consumes=["multipart/form-data"],
     responses={
         200: openapi.Response(
             description="Profile updated successfully",
@@ -971,6 +891,7 @@ def profile_update(request):
 )
 @api_view(["PUT"])
 @permission_classes([AllowAny])
+@parser_classes([MultiPartParser, FormParser])
 def onboarding(request, user_id):
     # Check if the profile exists
     user = get_object_or_404(User, id=user_id)
@@ -1026,32 +947,37 @@ def onboarding(request, user_id):
             category = UserCategories.objects.get(name=category_name)
             profile.categories.remove(category)
 
-    if "image" in request.data:
-        image = get_object_or_404(Image, user=user)
-        if image:
-            image.file = cloudinary.uploader.upload(request.data["image"])["public_id"]  # type: ignore
-            image.save()
-            request.data.pop("image")
-        else:
-            file = cloudinary.uploader.upload(request.data["image"])["public_id"]  # type: ignore
-            Image.objects.create(user=user, file=file)
-            request.data.pop("image")
+    cloudinary_fields = ["image", "resume"]
+    for field in cloudinary_fields:
+        if field in request.FILES:
+            # Delete old file if exists
+            existing_file = getattr(profile, field)
+            if existing_file:
+                try:
+                    cloudinary.uploader.destroy(existing_file.public_id)
+                except Exception as e:
+                    print(f"Failed to delete old {field}: {e}")
 
-    if "resume" in request.data:
-        resume = get_object_or_404(Resume, user=user)
-        if resume:
-            resume.file = cloudinary.uploader.upload(request.data["resume"])["public_id"]  # type: ignore
-            resume.save()
-            request.data.pop("resume")
-        else:
-            file = cloudinary.uploader.upload(request.data["resume"])["public_id"]  # type: ignore
-            Resume.objects.create(user=user, file=file)
-            request.data.pop("resume")
+            # Determine the folder and resource type
+            if field == "image":
+                folder = "profile_images/"
+                resource_type = "image"
+            else:  # For resume and cover letter
+                folder = "profile_docs/"
+                resource_type = "raw"
+
+            # Upload new file
+            upload_result = cloudinary.uploader.upload(
+                request.FILES[field],
+                folder=folder,
+                resource_type=resource_type,  # Use 'raw' for PDFs, 'image' for images
+            )
+
+            # Save the file URL to the profile
+            setattr(profile, field, upload_result["secure_url"])
 
     # Update profile with the remaining fields
     serialized_data = ProfileSerializer(profile, data=request.data, partial=True)
-    # for attr, value in request.data.items():
-    #     setattr(profile, attr, value)
     if serialized_data.is_valid():
         serialized_data.save()
 
@@ -1326,6 +1252,7 @@ def job_create(request):
                         "user_name": profile.user.first_name,
                         "user_email": profile.user.email,
                         "User_bio": profile.bio,
+                        "image": profile.image.url,
                         "match_score": user_data["match_score"],
                         "years_of_experience": profile.years_of_experience,
                         "salary_range": user_data["salary_range"],
@@ -1945,6 +1872,7 @@ def post_job_without_auth(request):
         try:
             user_id = user_data["user_id"]
             profile = Profile.objects.get(user_id=user_id)
+            print(profile.image)
 
             recommended_applicants_list.append(
                 {
@@ -1952,6 +1880,7 @@ def post_job_without_auth(request):
                     "user_name": profile.user.first_name,
                     "user_email": profile.user.email,
                     "User_bio": profile.bio,
+                    "image": profile.image.url,
                     "match_score": user_data["match_score"],
                     "years_of_experience": profile.years_of_experience,
                     "salary_range": user_data["salary_range"],

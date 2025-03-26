@@ -107,6 +107,9 @@ class Profile(models.Model):
         max_length=10, choices=ExperienceLevel.choices, default=ExperienceLevel.ENTRY
     )
     years_of_experience = models.IntegerField(default=1)
+    resume = CloudinaryField("resume", null=True, blank=True)
+    cover_letter = CloudinaryField("cover_letter", null=True, blank=True)
+    image = CloudinaryField("image", null=True, blank=True)
 
     def __str__(self):
         return self.user.first_name
@@ -130,38 +133,6 @@ class CompanyProfile(models.Model):
         return (
             self.owner.first_name
         )  # This will be taken as the company's name.                                         # If business is True
-
-
-"""RESUME MODEL"""
-
-
-class Resume(models.Model):
-    user = models.OneToOneField(User, on_delete=models.CASCADE, related_name="resume")
-    file = CloudinaryField("resume")
-    created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(auto_now=True)
-
-
-"""COVER LETTER MODEL"""
-
-
-class Cover_Letter(models.Model):
-    user = models.OneToOneField(
-        User, on_delete=models.CASCADE, related_name="cover_letter"
-    )
-    file = CloudinaryField("cover_letter")
-    created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(auto_now=True)
-
-
-"""IMAGE MODEL"""
-
-
-class Image(models.Model):
-    user = models.OneToOneField(User, on_delete=models.CASCADE, related_name="image")
-    file = CloudinaryField("image")
-    created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(auto_now=True)
 
 
 """EMAIL VERIFICATION MODEL"""
@@ -235,8 +206,6 @@ class Jobs(models.Model):
         max_length=10, choices=ExperienceLevel.choices, default=ExperienceLevel.ENTRY
     )
     years_of_experience = models.IntegerField()
-    # max_experience = models.IntegerField(default=2)
-    # min_experience = models.IntegerField(default=1)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -250,59 +219,6 @@ class Applicants(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
-
-""" ASSIST SKILLS MODEL"""
-
-
-class AssistSkills(models.Model):
-    name = models.CharField(max_length=100)
-    created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(auto_now=True)
-
-    def __str__(self) -> str:
-        return self.name
-
-
-""" ASSIST MODEL """
-
-
-class Assists(models.Model):
-    class CurrencyChoices(models.TextChoices):
-        usd = "USD", "United States Dollar"
-        ngn = "NGN", "Nigerian Naira"
-        eur = "EUR", "Euros"
-
-    class EmploymentType(models.TextChoices):
-        REMOTE = "R", "Remote"
-        ONSITE = "O", "Onsite"
-        HYBRID = "H", "Hybrid"
-
-    owner = models.ForeignKey(User, on_delete=models.CASCADE, related_name="assists")
-    title = models.CharField(max_length=50)
-    description = models.TextField(null=True, blank=True)
-    skills = models.ManyToManyField(AssistSkills)
-    max_pay = models.IntegerField(default=100)
-    min_pay = models.IntegerField(default=10)
-    employment_type = models.CharField(
-        max_length=20, choices=EmploymentType.choices, default=EmploymentType.REMOTE
-    )
-    currency_type = models.CharField(
-        max_length=30, choices=CurrencyChoices.choices, default=CurrencyChoices.ngn
-    )
-    created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(auto_now=True)
-
-
-""" ASSIST APPLICANTS MODEL """
-
-
-class AssistApplicants(models.Model):
-    applicants = models.ManyToManyField(User, related_name="assist_applicants")
-    assist = models.ForeignKey(
-        Assists, on_delete=models.CASCADE, related_name="applicants"
-    )
-    created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(auto_now=True)
 
 
 """ WAITLIST MODEL """

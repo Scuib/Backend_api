@@ -7,13 +7,10 @@ from google.auth.transport import requests
 
 from .models import (
     JobSkills,
-    Image,
-    Resume,
     User,
     Profile,
     UserCategories,
     UserSkills,
-    Assists,
     EmailVerication_Keys,
     PasswordReset_keys,
     Jobs,
@@ -104,11 +101,15 @@ class ProfileSerializer(ModelSerializer):
 
 class DisplayProfileSerializer(ModelSerializer):
     skills = UserSkillSerializer(many=True)
-    # categories = UserCategoriesSerializer(many=True)
+    image = serializers.SerializerMethodField()
+    resume = serializers.SerializerMethodField()
+    cover_letter = serializers.SerializerMethodField()
+    categories = UserCategoriesSerializer(many=True)
 
     class Meta:
         model = Profile
         fields = [
+            "bio",
             "location",
             "job_location",
             "employment_type",
@@ -121,25 +122,20 @@ class DisplayProfileSerializer(ModelSerializer):
             "linkedin",
             "twitter",
             "skills",
+            "image",
+            "categories",
+            "resume",
+            "cover_letter",
         ]
 
+    def get_image(self, obj):
+        return obj.image.url if obj.image else None
 
-class ResumeSerializer(ModelSerializer):
-    class Meta:
-        model = Resume
-        fields = ["file"]
+    def get_resume(self, obj):
+        return obj.resume.url if obj.resume else None
 
-
-class CoverLetterSerializer(ModelSerializer):
-    class Meta:
-        model = Resume
-        fields = ["file"]
-
-
-class ImageSerializer(ModelSerializer):
-    class Meta:
-        model = Resume
-        fields = ["file"]
+    def get_cover_letter(self, obj):
+        return obj.cover_letter.url if obj.cover_letter else None
 
 
 class JobSkillSerializer(ModelSerializer):
