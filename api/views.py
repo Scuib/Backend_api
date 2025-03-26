@@ -580,8 +580,9 @@ def confirm_reset_password(request, uid, key):
     },
 )
 @api_view(["GET"])
-@permission_classes([AllowAny])
+@permission_classes([IsAuthenticated])
 def profile_detail_by_id(request, user_id):
+    """Returns the profile of a user"""
     # Check if user exist
     user = get_object_or_404(User, id=user_id)
     if not user:
@@ -946,6 +947,10 @@ def profile_update(request):
                 format=openapi.FORMAT_BINARY,
                 description="Resume file to upload (optional)",
             ),
+            "years_of_experience": openapi.Schema(
+                type=openapi.TYPE_NUMBER,
+                description="Years of experience(optional)",
+            ),
         },
         required=[],
     ),
@@ -1023,7 +1028,6 @@ def onboarding(request, user_id):
 
     if "image" in request.data:
         image = get_object_or_404(Image, user=user)
-        print("Image", image)
         if image:
             image.file = cloudinary.uploader.upload(request.data["image"])["public_id"]  # type: ignore
             image.save()
@@ -1035,7 +1039,6 @@ def onboarding(request, user_id):
 
     if "resume" in request.data:
         resume = get_object_or_404(Resume, user=user)
-        print("Resume", resume)
         if resume:
             resume.file = cloudinary.uploader.upload(request.data["resume"])["public_id"]  # type: ignore
             resume.save()
@@ -1051,7 +1054,6 @@ def onboarding(request, user_id):
     #     setattr(profile, attr, value)
     if serialized_data.is_valid():
         serialized_data.save()
-        print("DATA: ", serialized_data.data)
 
         return Response({"_detail": "Succesful!"}, status=status.HTTP_200_OK)
 
@@ -1323,10 +1325,13 @@ def job_create(request):
                         "user_id": profile.user.id,
                         "user_name": profile.user.first_name,
                         "user_email": profile.user.email,
+                        "User_bio": profile.bio,
                         "match_score": user_data["match_score"],
                         "years_of_experience": profile.years_of_experience,
                         "salary_range": user_data["salary_range"],
                         "location": profile.location,
+                        "employment_choice": profile.employment_type,
+                        "job_location_choice": profile.job_location,
                         "skills": list(profile.skills.values_list("name", flat=True)),
                     }
                 )
@@ -1640,6 +1645,7 @@ def waitlist(request):
             status=status.HTTP_500_INTERNAL_SERVER_ERROR,
         )
 
+
 """ PAYMENT """
 
 
@@ -1728,9 +1734,47 @@ def list_users(request):
     return Response(serializer.data, status=status.HTTP_200_OK)
 
 
+@swagger_auto_schema(
+    method="get",
+    operation_summary="Get Profile of All Users By Admin",
+    operation_description="Allows an admin user to retrieve the profile details of all users",
+    manual_parameters=[
+        openapi.Parameter(
+            name="Authorization",
+            in_=openapi.IN_HEADER,
+            description="Bearer {token}",
+            type=openapi.TYPE_STRING,
+            required=True,
+        ),
+    ],
+    responses={
+        200: openapi.Response(
+            description="Returns a list of all user profiles in the database",
+            examples={
+                "application/json": {
+                    "data": {
+                        "email": "user@example.com",
+                        "first_name": "John",
+                        "last_name": "Doe",
+                        "image": "https://example.com/image.jpg",
+                        "resume": "https://example.com/resume.pdf",
+                        "skills": ["Python", "Django"],
+                        "categories": ["Software Development"],
+                        "notifications": ["New message received"],
+                    }
+                }
+            },
+        ),
+        404: openapi.Response(
+            description="Profile not found",
+            examples={"application/json": {"detail": "Not found"}},
+        ),
+    },
+)
 @api_view(["GET"])
 @permission_classes([IsAdminUser])
 def all_profiles(request):
+    """Returns the profiles of all users in the database"""
     users = Profile.objects.all()
     serializer = DisplayProfileSerializer(users, many=True)
     return Response(serializer.data, status=status.HTTP_200_OK)
@@ -1747,6 +1791,7 @@ def google_auth(request):
     email = serializer.validated_data["email"]
     first_name = serializer.validated_data["first_name"]
     last_name = serializer.validated_data["last_name"]
+    company = serializer.validated_data["company"]
 
     try:
         user = User.objects.get(email=email)
@@ -1763,7 +1808,7 @@ def google_auth(request):
             "password": settings.SOCIAL_SECRET_KEY,
             "password2": settings.SOCIAL_SECRET_KEY,
             "auth_provider": "google",
-            "company": False,
+            "company": company,
         }
 
         user_serializer = UserSerializer(data=user_data)
@@ -1793,7 +1838,14 @@ def google_auth(request):
     operation_description="Allows users to post a job without authentication and receive a list of recommended applicants.",
     request_body=openapi.Schema(
         type=openapi.TYPE_OBJECT,
-        required=["location", "experience_level", "years_of_experience", "skills", "salary", "currency_type"],
+        required=[
+            "location",
+            "experience_level",
+            "years_of_experience",
+            "skills",
+            "salary",
+            "currency_type",
+        ],
         properties={
             "experience_level": openapi.Schema(
                 type=openapi.TYPE_STRING,
@@ -1899,10 +1951,13 @@ def post_job_without_auth(request):
                     "user_id": profile.user.id,
                     "user_name": profile.user.first_name,
                     "user_email": profile.user.email,
+                    "User_bio": profile.bio,
                     "match_score": user_data["match_score"],
                     "years_of_experience": profile.years_of_experience,
                     "salary_range": user_data["salary_range"],
                     "location": profile.location,
+                    "Employment_choice": profile.employment_type,
+                    "job_location_choice": profile.job_location,
                     "skills": list(profile.skills.values_list("name", flat=True)),
                 }
             )
