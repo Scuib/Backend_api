@@ -46,7 +46,6 @@ class UserSerializer(serializers.ModelSerializer):
             "last_name",
             "password",
             "password2",
-            "company",
         ]
 
     def validate(self, attrs):
@@ -196,7 +195,6 @@ class GoogleAuthSerializer(serializers.Serializer):
     token = serializers.CharField(required=True)
     first_name = serializers.CharField(required=False)
     last_name = serializers.CharField(required=False)
-    company = serializers.BooleanField(default=False)
 
     def validate(self, attrs):
         token = attrs.get("token")

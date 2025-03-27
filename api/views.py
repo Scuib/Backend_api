@@ -1904,3 +1904,68 @@ def post_job_without_auth(request):
         },
         status=status.HTTP_200_OK,
     )
+
+
+@swagger_auto_schema(
+    method="patch",
+    operation_summary="Update the 'company' field of the user",
+    operation_description="Allows an authenticated user to update their 'company' field. The field accepts boolean values (true or false) or null.",
+    manual_parameters=[
+        openapi.Parameter(
+            "Authorization",
+            openapi.IN_HEADER,
+            description="Bearer Token for authentication",
+            type=openapi.TYPE_STRING,
+            required=True,
+        )
+    ],
+    request_body=openapi.Schema(
+        type=openapi.TYPE_OBJECT,
+        required=["company"],
+        properties={
+            "company": openapi.Schema(
+                type=openapi.TYPE_BOOLEAN,
+                description="Set to true if the user is a company, false otherwise.",
+            )
+        },
+    ),
+    responses={
+        200: openapi.Response(
+            "Company status updated successfully.",
+            openapi.Schema(
+                type=openapi.TYPE_OBJECT,
+                properties={
+                    "detail": openapi.Schema(type=openapi.TYPE_STRING),
+                    "company": openapi.Schema(type=openapi.TYPE_BOOLEAN),
+                },
+            ),
+        ),
+        400: openapi.Response("Bad Request: Missing or invalid company field."),
+        401: openapi.Response("Unauthorized: User must be authenticated."),
+    },
+)
+@api_view(["PATCH"])
+@permission_classes([IsAuthenticated])
+def update_company_status(request):
+    user = request.user
+
+    if "company" not in request.data:
+        return Response(
+            {"detail": "company field is required."}, status=status.HTTP_400_BAD_REQUEST
+        )
+
+    company = request.data["company"]
+
+    if not isinstance(company, bool) and company is not None:
+        return Response(
+            {"detail": "company must be a boolean or null."},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    user.company = company
+    user.save()
+
+    return Response(
+        {"detail": "Company status updated successfully.", "company": user.company},
+        status=status.HTTP_200_OK,
+    )

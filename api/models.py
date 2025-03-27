@@ -24,7 +24,7 @@ class User(AbstractUser):
     last_login = models.DateTimeField(auto_now=True)
     verified = models.BooleanField(default=False)
     has_onboarded = models.BooleanField(default=False)
-    company = models.BooleanField(default=False)
+    company = models.BooleanField(null=True, blank=True, default=None)
     auth_provider = models.CharField(
         max_length=10, choices=AUTH_PROVIDERS, default="email"
     )
@@ -33,7 +33,6 @@ class User(AbstractUser):
     REQUIRED_FIELDS = ["first_name"]
 
     objects = CustomUserManager()
-
     def __str__(self) -> str:
         return self.email
 
@@ -219,7 +218,6 @@ class Applicants(models.Model):
     job = models.ForeignKey(Jobs, on_delete=models.CASCADE, related_name="applicants")
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
-
 
 
 """ WAITLIST MODEL """
