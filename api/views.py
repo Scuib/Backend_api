@@ -1757,6 +1757,7 @@ def google_auth(request):
             "user_id": user.id,
             "first_name": user.first_name,
             "is_company": user.company,
+            "has_onboarded": user.has_onboarded,
         }
     )
 
