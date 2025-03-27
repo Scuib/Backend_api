@@ -23,6 +23,7 @@ class User(AbstractUser):
     created_at = models.DateTimeField(auto_now_add=True)
     last_login = models.DateTimeField(auto_now=True)
     verified = models.BooleanField(default=False)
+    has_onboarded = models.BooleanField(default=False)
     company = models.BooleanField(default=False)
     auth_provider = models.CharField(
         max_length=10, choices=AUTH_PROVIDERS, default="email"

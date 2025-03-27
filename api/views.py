@@ -300,6 +300,7 @@ def login(request):
                     "user_id": user.id,  # type: ignore
                     "first_name": user.first_name,
                     "is_company": user.company,
+                    "has_onboarded": user.has_onboarded,
                 }
             )
         else:
@@ -788,7 +789,7 @@ def profile_update(request):
             upload_result = cloudinary.uploader.upload(
                 request.FILES[field],
                 folder=folder,
-                resource_type=resource_type  # Use 'raw' for PDFs, 'image' for images
+                resource_type=resource_type,  # Use 'raw' for PDFs, 'image' for images
             )
 
             # Save the file URL to the profile
@@ -802,9 +803,7 @@ def profile_update(request):
     if serialized_data.is_valid():
         serialized_data.save()
 
-        return Response(
-            {"_detail": "Succesful!"}, status=status.HTTP_200_OK
-        )
+        return Response({"_detail": "Succesful!"}, status=status.HTTP_200_OK)
 
     return Response(
         {"_detail": "An error occured!"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR
@@ -975,16 +974,19 @@ def onboarding(request, user_id):
 
             # Save the file URL to the profile
             setattr(profile, field, upload_result["secure_url"])
+    profile.save()
 
     # Update profile with the remaining fields
     serialized_data = ProfileSerializer(profile, data=request.data, partial=True)
     if serialized_data.is_valid():
         serialized_data.save()
+        user.has_onboarded = True
+        user.save()
 
-        return Response({"_detail": "Succesful!"}, status=status.HTTP_200_OK)
+        return Response({"detail": "Succesful!"}, status=status.HTTP_200_OK)
 
     return Response(
-        {"_detail": "An error occured!"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR
+        {"detail": "An error occured!"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR
     )
 
 
