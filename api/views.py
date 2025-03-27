@@ -41,6 +41,7 @@ from .serializer import (
     CompanySerializer,
     DisplayUsers,
     GoogleAuthSerializer,
+    CompanyProfileSerializer,
 )
 
 from django.utils import timezone
@@ -1499,6 +1500,24 @@ def delete_job(request, job_id):
 from django.core.exceptions import ObjectDoesNotExist
 
 
+@swagger_auto_schema(
+    method="get",
+    operation_summary="Retrieve company details",
+    operation_description="Fetches the details of the authenticated user's company profile.",
+    manual_parameters=[
+        openapi.Parameter(
+            name="Authorization",
+            in_=openapi.IN_HEADER,
+            description="Bearer {token}",
+            type=openapi.TYPE_STRING,
+            required=True,
+        ),
+    ],
+    responses={
+        200: CompanySerializer,
+        404: openapi.Response("CompanyProfile not found."),
+    },
+)
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
 def company(request):
@@ -1507,21 +1526,40 @@ def company(request):
     try:
         company = CompanyProfile.objects.get(owner=owner)
         serializer = CompanySerializer(company)
-        # Add the company name
-        data = serializer.data.copy()
-        data["company_name"] = company.owner.first_name
-        return Response(data, status=status.HTTP_200_OK)
+        return Response(serializer.data, status=status.HTTP_200_OK)
     except ObjectDoesNotExist:
         return Response(
             {"error": "CompanyProfile not found."}, status=status.HTTP_404_NOT_FOUND
         )
 
 
+@swagger_auto_schema(
+    method="put",
+    operation_summary="Update company details",
+    operation_description="Allows the authenticated user to update their company profile details.",
+    manual_parameters=[
+        openapi.Parameter(
+            name="Authorization",
+            in_=openapi.IN_HEADER,
+            description="Bearer {token}",
+            type=openapi.TYPE_STRING,
+            required=True,
+        ),
+    ],
+    request_body=CompanyProfileSerializer,
+    responses={
+        200: CompanySerializer,
+        400: openapi.Response("Invalid request data."),
+        403: openapi.Response("Permission denied."),
+        404: openapi.Response("Company profile not found."),
+    },
+)
 @api_view(["PUT"])
 @permission_classes([IsAuthenticated])
 def company_update(request):
+    user = request.user
     try:
-        company_profile = CompanyProfile.objects.get(owner=request.user)
+        company_profile = CompanyProfile.objects.get(owner=user)
     except CompanyProfile.DoesNotExist:
         return Response(
             {"error": "Company profile not found."}, status=status.HTTP_404_NOT_FOUND
@@ -1533,14 +1571,11 @@ def company_update(request):
             status=status.HTTP_403_FORBIDDEN,
         )
 
-    # Edit company name
-    if "company_name" in request.data:
-        company_name = request.data.pop("company_name")
-        company_profile.owner.first_name = company_name
-
-    serializer = CompanySerializer(company_profile, data=request.data, partial=True)
+    serializer = CompanyProfileSerializer(company_profile, data=request.data, partial=True)
     if serializer.is_valid():
         serializer.save()
+        user.has_onboarded = True
+        user.save()
         return Response(serializer.data, status=status.HTTP_200_OK)
     return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 

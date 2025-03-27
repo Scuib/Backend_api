@@ -178,6 +178,13 @@ class CompanySerializer(ModelSerializer):
         fields = "__all__"
 
 
+class CompanyProfileSerializer(ModelSerializer):
+
+    class Meta:
+        model = CompanyProfile
+        fields = ["company_name", "address", "phone_number", "website", "description"]
+
+
 class DisplayUsers(ModelSerializer):
 
     class Meta:
