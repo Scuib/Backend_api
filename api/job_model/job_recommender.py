@@ -87,7 +87,6 @@ class JobAppMatching:
         )  # Default to USD if not mapped
         return jobs
 
-    
     def recommend_jobs(self, user_profile, job_data):
         """
         Function to recommend jobs based on user profile by matching skills, experience, location, and salary.
@@ -119,7 +118,6 @@ class JobAppMatching:
         skills_similarity = cosine_similarity(
             user_skills_vector, job_skills_matrix
         ).flatten()
-        
 
         # Step 2: Match Experience Level
         experience_map = {"entry": 1, "mid": 2, "senior": 3, "lead": 4}
@@ -178,7 +176,6 @@ class JobAppMatching:
 
         return recommendations
 
-
     def recommend_users(self, job_profile, user_data):
         """
         Recommend users for a job profile based on skills, experience, location, and salary.
@@ -225,12 +222,18 @@ class JobAppMatching:
             (0.05 * salary_match.astype(int))
         )
 
+        user_data['match_score'] = scores
+        filtered_users = user_data[user_data['match_score'] >= 0.4]
+
+        # Sort users by match score in descending order
+        sorted_users = filtered_users.sort_values(by='match_score', ascending=False)
         # Get top 5 users
-        top_users = user_data.iloc[np.argsort(scores)[-5:][::-1]]
+        # top_users = user_data.iloc[np.argsort(scores)[-5:][::-1]]
 
         # Format recommendations
         recommendations = []
-        for idx, user in top_users.iterrows():
+        # for idx, user in top_users.iterrows():
+        for idx, user in sorted_users.iterrows():
             recommendations.append({
                 'user_name': user['user_name'],
                 'user_id': user['user_id'],

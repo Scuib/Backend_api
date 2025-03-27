@@ -1,7 +1,7 @@
 import requests
 import cloudinary.uploader
 from django.shortcuts import render, get_object_or_404
-from rest_framework.decorators import api_view, permission_classes
+from rest_framework.decorators import api_view, permission_classes, parser_classes
 from rest_framework_simplejwt.views import TokenObtainPairView
 from rest_framework.permissions import IsAuthenticated, AllowAny, IsAdminUser
 from rest_framework.response import Response
@@ -17,21 +17,15 @@ from .models import (
     Profile,
     User,
     EmailVerication_Keys,
-    Assists,
     Subscription,
     PasswordReset_keys,
     JobSkills,
     UserCategories,
     UserSkills,
     WaitList,
-    AssistApplicants,
     JobSkills,
-    Cover_Letter,
-    Resume,
-    Image,
     Jobs,
     Applicants,
-    AssistSkills,
 )
 
 from .serializer import (
@@ -43,12 +37,8 @@ from .serializer import (
     EmailVerifySerializer,
     ApplicantSerializer,
     LoginSerializer,
-    ResumeSerializer,
-    ImageSerializer,
-    CoverLetterSerializer,
     JobSerializer,
     CompanySerializer,
-    AssistSerializer,
     DisplayUsers,
     GoogleAuthSerializer,
 )
@@ -60,6 +50,7 @@ from django.contrib.auth.hashers import make_password, check_password
 from django.template.loader import get_template
 from allauth.account.models import EmailAddress
 from rest_framework_simplejwt.tokens import RefreshToken
+from rest_framework.parsers import MultiPartParser, FormParser, JSONParser
 
 from django.conf import settings
 from .custom_signal import job_created, assist_created
@@ -309,6 +300,7 @@ def login(request):
                     "user_id": user.id,  # type: ignore
                     "first_name": user.first_name,
                     "is_company": user.company,
+                    "has_onboarded": user.has_onboarded,
                 }
             )
         else:
@@ -351,7 +343,6 @@ def verify_email(request):
     This method verifies the use email exists by Matching the user Unique Key that was sent to the email
     request.data - ['key']
     """
-    print(request.data)
     serialized_data = EmailVerifySerializer(data=request.data)
     if serialized_data.is_valid():
         # print(serialized_data.data)
@@ -541,13 +532,6 @@ def confirm_reset_password(request, uid, key):
     operation_description="Retrieves the profile details of a user by their ID, including resume, image, skills, and categories.",
     manual_parameters=[
         openapi.Parameter(
-            name="Authorization",
-            in_=openapi.IN_HEADER,
-            description="Bearer {token}",
-            type=openapi.TYPE_STRING,
-            required=True,
-        ),
-        openapi.Parameter(
             "user_id",
             openapi.IN_PATH,
             description="ID of the user whose profile is to be retrieved",
@@ -585,6 +569,7 @@ def confirm_reset_password(request, uid, key):
 @api_view(["GET"])
 @permission_classes([AllowAny])
 def profile_detail_by_id(request, user_id):
+    """Returns the profile of a user"""
     # Check if user exist
     user = get_object_or_404(User, id=user_id)
     if not user:
@@ -597,23 +582,6 @@ def profile_detail_by_id(request, user_id):
     except Profile.DoesNotExist:
         return Response(status=status.HTTP_404_NOT_FOUND)
     profile_data = DisplayProfileSerializer(profile).data
-
-    # Add other fields
-    resume = None
-    try:
-        resume = Resume.objects.get(user=profile.user)
-        profile_data["resume"] = resume.file.url
-    except Resume.DoesNotExist:
-        profile_data["resume"] = ""
-
-    image = get_object_or_404(Image, user=profile.user)
-
-    profile_data["email"] = profile.user.email
-    profile_data["first_name"] = profile.user.first_name
-    profile_data["last_name"] = profile.user.last_name if profile.user.last_name else ""
-    profile_data["image"] = image.file.url if image else None
-    profile_data["skills"] = profile.skills.values_list("name", flat=True)
-    profile_data["categories"] = profile.categories.values_list("name", flat=True)
 
     return Response({"data": profile_data}, status=status.HTTP_200_OK)
 
@@ -664,25 +632,6 @@ def profile_detail(request):
     except Profile.DoesNotExist:
         return Response(status=status.HTTP_404_NOT_FOUND)
     profile_data = DisplayProfileSerializer(profile).data
-
-    # Add other fields
-    resume = None
-    try:
-        resume = Resume.objects.get(user=profile.user)
-        profile_data["resume"] = resume.file.url
-    except Resume.DoesNotExist:
-        profile_data["resume"] = ""
-
-    image = get_object_or_404(Image, user=request.user)
-
-    profile_data["email"] = profile.user.email
-    profile_data["first_name"] = profile.user.first_name
-    profile_data["last_name"] = profile.user.last_name if profile.user.last_name else ""
-    profile_data["image"] = image.file.url if image else None
-    profile_data["skills"] = profile.skills.values_list("name", flat=True)
-    profile_data["categories"] = profile.categories.values_list("name", flat=True)
-    profile_data["notifications"] = profile.notifications
-
     return Response({"data": profile_data}, status=status.HTTP_200_OK)
 
 
@@ -707,8 +656,29 @@ def get_notifications(request):
             type=openapi.TYPE_STRING,
             required=True,
         ),
+        openapi.Parameter(
+            name="image",
+            in_=openapi.IN_FORM,
+            description="Profile image file",
+            type=openapi.TYPE_FILE,
+            required=False,
+        ),
+        openapi.Parameter(
+            name="resume",
+            in_=openapi.IN_FORM,
+            description="Resume file (PDF, DOCX, etc.)",
+            type=openapi.TYPE_FILE,
+            required=False,
+        ),
+        openapi.Parameter(
+            name="cover_letter",
+            in_=openapi.IN_FORM,
+            description="Cover letter file",
+            type=openapi.TYPE_FILE,
+            required=False,
+        ),
     ],
-    request_body= ProfileSerializer,
+    consumes=["multipart/form-data"],
     responses={
         200: openapi.Response(
             description="Profile updated successfully",
@@ -738,6 +708,7 @@ def get_notifications(request):
 )
 @api_view(["PUT"])
 @permission_classes([IsAuthenticated])
+@parser_classes([MultiPartParser, FormParser])
 def profile_update(request):
     user = request.user
 
@@ -795,105 +766,44 @@ def profile_update(request):
             category = UserCategories.objects.get(name=category_name)
             profile.categories.remove(category)
 
-    if "image" in request.data:
-        image = None
-        try:
-            # Attempt to retrieve the existing image
-            image = Image.objects.get(user=profile.user)
+    cloudinary_fields = ["image", "resume", "cover_letter"]
+    for field in cloudinary_fields:
+        if field in request.FILES:
+            # Delete old file if exists
+            existing_file = getattr(profile, field)
+            if existing_file:
+                try:
+                    cloudinary.uploader.destroy(existing_file.public_id)
+                except Exception as e:
+                    print(f"Failed to delete old {field}: {e}")
 
-            # Debugging: Check if the image file is a string or CloudinaryResource
-            public_id = (
-                image.file.public_id if hasattr(image.file, "public_id") else image.file
+            # Determine the folder and resource type
+            if field == "image":
+                folder = "profile_images/"
+                resource_type = "image"
+            else:  # For resume and cover letter
+                folder = "profile_docs/"
+                resource_type = "raw"
+
+            # Upload new file
+            upload_result = cloudinary.uploader.upload(
+                request.FILES[field],
+                folder=folder,
+                resource_type=resource_type,  # Use 'raw' for PDFs, 'image' for images
             )
-            print(f"Existing image public_id: {public_id}")
 
-            # Delete the existing image from Cloudinary
-            cloudinary.uploader.destroy(public_id)
+            # Save the file URL to the profile
+            setattr(profile, field, upload_result["secure_url"])
 
-            # Upload the new image and update the file field
-            image.file = cloudinary.uploader.upload(request.data["image"])["public_id"]  # type: ignore
-            image.save()
-
-            # Remove image from request data after processing
-            request.data.pop("image")
-
-        except Image.DoesNotExist:
-            # If the image does not exist, upload the new image and create a new Image object
-            file = uploader.upload(request.data["image"])["public_id"]  # type: ignore
-            Image.objects.create(user=profile.user, file=file)
-
-            # Remove image from request data after processing
-            request.data.pop("image")
-
-        except Exception as e:
-            # Handle any other exceptions, such as issues with Cloudinary credentials
-            print(f"Failed to delete or upload image: {e}")
-
-    if "resume" in request.data:
-        resume = None
-
-        try:
-            # Attempt to retrieve the existing resume
-            resume = Resume.objects.get(user=profile.user)
-
-            # Debugging: Check if the resume file is a string or Cloudinary Resource
-            public_id = (
-                resume.file.public_id
-                if hasattr(resume.file, "public_id")
-                else resume.file
-            )
-            print(f"Existing resume public_id: {public_id}")
-
-            # Delete the existing resume from Cloudinary
-            cloudinary.uploader.destroy(public_id)
-
-            # Upload the new resume and update the file field
-            resume.file = cloudinary.uploader.upload(request.data["resume"])["public_id"]  # type: ignore
-            resume.save()
-
-            # Remove resume from request data after processing
-            request.data.pop("resume")
-
-        except Resume.DoesNotExist:
-            # If the resume does not exist, upload the new resume and create a new Resume object
-            file = cloudinary.uploader.upload(request.data["resume"])["public_id"]  # type: ignore
-            Resume.objects.create(user=profile.user, file=file)
-
-            # Remove resume from request data after processing
-            request.data.pop("resume")
-
-        except Exception as e:
-            # Handle any other exceptions, such as issues with Cloudinary credentials
-            print(f"Failed to delete or upload resume: {e}")
-
-    # Save edits
+    # Save the updated profile
     profile.save()
 
     # Update profile with the remaining fields
     serialized_data = ProfileSerializer(profile, data=request.data, partial=True)
-    # for attr, value in request.data.items():
-    #     setattr(profile, attr, value)
     if serialized_data.is_valid():
         serialized_data.save()
-        data = serialized_data.data
-        print(User.objects.get(id=user.id).first_name)
-        try:
-            resume = Resume.objects.get(user=profile.user)
-            data["resume"] = resume.file.url
-        except Resume.DoesNotExist:
-            data["resume"] = ""
-        data["first_name"], data["last_name"] = (
-            profile.user.first_name,
-            profile.user.last_name,
-        )
-        data["image"] = Image.objects.get(user=user).file.url
-        data["skills"] = set(profile.skills.values_list("name", flat=True))
-        data["categories"] = set(profile.categories.values_list("name", flat=True))
-        # curr_user = User.objects.get(id=user.id)
 
-        return Response(
-            {"_detail": "Succesful!", "data": data}, status=status.HTTP_200_OK
-        )
+        return Response({"_detail": "Succesful!"}, status=status.HTTP_200_OK)
 
     return Response(
         {"_detail": "An error occured!"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR
@@ -919,39 +829,50 @@ def profile_update(request):
             type=openapi.TYPE_STRING,
             required=True,
         ),
+        openapi.Parameter(
+            name="First Name",
+            in_=openapi.IN_FORM,
+            description="User's first name",
+            type=openapi.TYPE_STRING,
+            required=False,
+        ),
+        openapi.Parameter(
+            name="Skills",
+            in_=openapi.IN_FORM,
+            description="List of skills to update (optional)",
+            type=openapi.TYPE_STRING,
+            required=False,
+        ),
+        openapi.Parameter(
+            name="Categories",
+            in_=openapi.IN_FORM,
+            description="List of categories to update (optional)",
+            type=openapi.TYPE_STRING,
+            required=False,
+        ),
+        openapi.Parameter(
+            name="image",
+            in_=openapi.IN_FORM,
+            description="Profile image (file upload)",
+            type=openapi.TYPE_FILE,
+            required=False,
+        ),
+        openapi.Parameter(
+            name="resume",
+            in_=openapi.IN_FORM,
+            description="Resume file (PDF upload)",
+            type=openapi.TYPE_FILE,
+            required=False,
+        ),
+        openapi.Parameter(
+            name="years_of_experience",
+            in_=openapi.IN_FORM,
+            description="Years of experience(optional)",
+            type=openapi.TYPE_NUMBER,
+            required=False,
+        ),
     ],
-    request_body=openapi.Schema(
-        type=openapi.TYPE_OBJECT,
-        properties={
-            "first_name": openapi.Schema(
-                type=openapi.TYPE_STRING, description="User's first name (optional)"
-            ),
-            "last_name": openapi.Schema(
-                type=openapi.TYPE_STRING, description="User's last name (optional)"
-            ),
-            "skills": openapi.Schema(
-                type=openapi.TYPE_ARRAY,
-                items=openapi.Schema(type=openapi.TYPE_STRING),
-                description="List of skills to update (optional)",
-            ),
-            "categories": openapi.Schema(
-                type=openapi.TYPE_ARRAY,
-                items=openapi.Schema(type=openapi.TYPE_STRING),
-                description="List of categories to update (optional)",
-            ),
-            "image": openapi.Schema(
-                type=openapi.TYPE_STRING,
-                format=openapi.FORMAT_BINARY,
-                description="Profile image file to upload (optional)",
-            ),
-            "resume": openapi.Schema(
-                type=openapi.TYPE_STRING,
-                format=openapi.FORMAT_BINARY,
-                description="Resume file to upload (optional)",
-            ),
-        },
-        required=[],
-    ),
+    consumes=["multipart/form-data"],
     responses={
         200: openapi.Response(
             description="Profile updated successfully",
@@ -969,6 +890,7 @@ def profile_update(request):
 )
 @api_view(["PUT"])
 @permission_classes([AllowAny])
+@parser_classes([MultiPartParser, FormParser])
 def onboarding(request, user_id):
     # Check if the profile exists
     user = get_object_or_404(User, id=user_id)
@@ -1024,42 +946,47 @@ def onboarding(request, user_id):
             category = UserCategories.objects.get(name=category_name)
             profile.categories.remove(category)
 
-    if "image" in request.data:
-        image = get_object_or_404(Image, user=user)
-        print("Image", image)
-        if image:
-            image.file = cloudinary.uploader.upload(request.data["image"])["public_id"]  # type: ignore
-            image.save()
-            request.data.pop("image")
-        else:
-            file = cloudinary.uploader.upload(request.data["image"])["public_id"]  # type: ignore
-            Image.objects.create(user=user, file=file)
-            request.data.pop("image")
+    cloudinary_fields = ["image", "resume"]
+    for field in cloudinary_fields:
+        if field in request.FILES:
+            # Delete old file if exists
+            existing_file = getattr(profile, field)
+            if existing_file:
+                try:
+                    cloudinary.uploader.destroy(existing_file.public_id)
+                except Exception as e:
+                    print(f"Failed to delete old {field}: {e}")
 
-    if "resume" in request.data:
-        resume = get_object_or_404(Resume, user=user)
-        print("Resume", resume)
-        if resume:
-            resume.file = cloudinary.uploader.upload(request.data["resume"])["public_id"]  # type: ignore
-            resume.save()
-            request.data.pop("resume")
-        else:
-            file = cloudinary.uploader.upload(request.data["resume"])["public_id"]  # type: ignore
-            Resume.objects.create(user=user, file=file)
-            request.data.pop("resume")
+            # Determine the folder and resource type
+            if field == "image":
+                folder = "profile_images/"
+                resource_type = "image"
+            else:  # For resume and cover letter
+                folder = "profile_docs/"
+                resource_type = "raw"
+
+            # Upload new file
+            upload_result = cloudinary.uploader.upload(
+                request.FILES[field],
+                folder=folder,
+                resource_type=resource_type,  # Use 'raw' for PDFs, 'image' for images
+            )
+
+            # Save the file URL to the profile
+            setattr(profile, field, upload_result["secure_url"])
+    profile.save()
 
     # Update profile with the remaining fields
     serialized_data = ProfileSerializer(profile, data=request.data, partial=True)
-    # for attr, value in request.data.items():
-    #     setattr(profile, attr, value)
     if serialized_data.is_valid():
         serialized_data.save()
-        print("DATA: ", serialized_data.data)
+        user.has_onboarded = True
+        user.save()
 
-        return Response({"_detail": "Succesful!"}, status=status.HTTP_200_OK)
+        return Response({"detail": "Succesful!"}, status=status.HTTP_200_OK)
 
     return Response(
-        {"_detail": "An error occured!"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR
+        {"detail": "An error occured!"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR
     )
 
 
@@ -1326,10 +1253,14 @@ def job_create(request):
                         "user_id": profile.user.id,
                         "user_name": profile.user.first_name,
                         "user_email": profile.user.email,
+                        "User_bio": profile.bio,
+                        "image": profile.image.url,
                         "match_score": user_data["match_score"],
                         "years_of_experience": profile.years_of_experience,
                         "salary_range": user_data["salary_range"],
                         "location": profile.location,
+                        "employment_choice": profile.employment_type,
+                        "job_location_choice": profile.job_location,
                         "skills": list(profile.skills.values_list("name", flat=True)),
                     }
                 )
@@ -1490,89 +1421,6 @@ def job_update(request, job_id):
     return Response(serialized_data.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
-@api_view(["POST"])
-@permission_classes([IsAuthenticated])
-def get_new_applicants(request, job_id):
-    user = request.user
-    job_instance = get_object_or_404(Jobs, id=job_id)
-
-    if job_instance.owner != user:
-        return Response(
-            "You do not have permission to update this job",
-            status=status.HTTP_403_FORBIDDEN,
-        )
-
-    job_created.send(sender=Jobs, instance=job_instance)
-
-    data = {
-        "job_id": job_instance.id,
-        "owner_id": job_instance.owner.id,
-        "company_name": job_instance.owner.first_name,
-        "company_email": job_instance.owner.email,
-        "skills": Jobs.objects.get(id=job_instance.id).skills.values_list(
-            "name", flat=True
-        ),
-        "category": job_instance.categories,
-        "title": job_instance.title,
-        "description": job_instance.description,
-        "location": job_instance.location,
-        "employment_type": job_instance.employment_type,
-        "max_salary": job_instance.max_salary,
-        "min_salary": job_instance.min_salary,
-        "currency_type": job_instance.currency_type,
-    }
-    # Get job skills
-    job_skills = list(job_instance.skills.values_list("name", flat=True))
-
-    # Prepare notification data
-    notification = {
-        "id": str(uuid4()),
-        "type": "job",
-        "message": "You have been matched to a job",
-        "datetime": timezone.now().isoformat(),
-        "details": {
-            "job_name": job_instance.title,
-            "job_description": job_instance.description,
-            "job_skills": job_skills,
-        },
-    }
-
-    # Fetch the recommended applicants and add them to the data dictionary
-    # Assuming you have a function to get recommended applicants based on the job instance
-    recommended_applicant = Applicants.objects.filter(job=job_instance)
-
-    for applicant in recommended_applicant:
-        # Get all users for this applicant
-        for user in applicant.user.all():  # Use .all() to get all related users
-            try:
-                profile = Profile.objects.get(user=user)
-
-                # Initialize notifications list if it doesn't exist
-                if not profile.notifications:
-                    profile.notifications = []
-
-                # Add new notification
-                current_notifications = profile.notifications
-                current_notifications.append(notification)
-
-                # Update profile
-                profile.notifications = current_notifications
-                profile.save()
-            except Profile.DoesNotExist:
-                print(f"Profile not found for user {user.email}")
-                continue
-
-    recommended_applicants = Applicants.objects.filter(job=job_instance).values(
-        "user__id", "user__first_name", "user__email"
-    )  # Adjust fields as needed
-    data["recommended_applicants"] = list(recommended_applicants)
-
-    return Response(
-        {"detail": _("Job Successfully posted!"), "data": data},
-        status=status.HTTP_201_CREATED,
-    )
-
-
 @api_view(["GET"])
 @permission_classes([AllowAny])
 def jobs_all(request):
@@ -1705,134 +1553,6 @@ def delete_user(request):
     return Response({"detail": "User deleted Successfully"}, status=status.HTTP_200_OK)
 
 
-"""ASSIST MODELS"""
-
-
-@api_view(["POST"])
-@permission_classes([IsAuthenticated])
-def assist_create(request):
-    request.data["owner"] = request.user.id  # Ensure user is set correctly
-
-    new_skills = request.data.pop("skills", [])
-    # skill = AssitSkills.objects.create(name='default')
-    # request.data['skills'] = [skill]
-
-    serialized_data = AssistSerializer(data=request.data)
-
-    if serialized_data.is_valid():
-        assist_instance = serialized_data.save()
-
-        # Create AssistSkills relationships
-        # assist_instance.skills.clear()  # Clear the default skill
-
-        for skill in new_skills:
-            assist_skill, created = AssistSkills.objects.get_or_create(name=skill)
-            assist_instance.skills.add(assist_skill)
-
-        # print("Compiler: Hey I got here 👋😊")
-        # assist_instance.save()
-
-        return Response(
-            {"detail": _("Assist Successfully posted!")}, status=status.HTTP_201_CREATED
-        )
-
-    return Response(serialized_data.errors, status=status.HTTP_400_BAD_REQUEST)
-
-
-@api_view(["PUT"])
-@permission_classes([IsAuthenticated])
-def assist_update(request, assist_id):
-    assist_instance = get_object_or_404(Assists, id=assist_id)
-
-    # Check if the user owns the assist
-    if assist_instance.owner != request.user:
-        return Response(
-            "You do not have permission to update this assist",
-            status=status.HTTP_403_FORBIDDEN,
-        )
-
-    # Check if skills are being updated
-    skills_update = "skills" in request.data
-    new_skills = request.data.pop("skills", [])
-
-    serialized_data = AssistSerializer(assist_instance, data=request.data, partial=True)
-    if serialized_data.is_valid():
-        serialized_data.save()
-
-        if skills_update:
-            # Handle skill updates
-            current_skills = set(assist_instance.skills.values_list("name", flat=True))
-            new_skills_set = set(new_skills)
-
-            # Add new skills
-            for skill_name in new_skills_set - current_skills:
-                skill, created = AssistSkills.objects.get_or_create(name=skill_name)
-                assist_instance.skills.add(skill)
-
-            # Remove old skills
-            for skill_name in current_skills - new_skills_set:
-                skill = AssistSkills.objects.get(name=skill_name)
-                assist_instance.skills.remove(skill)
-
-        # job_created.send()
-
-        return Response(
-            {"detail": _("Assist Successfully updated!")}, status=status.HTTP_200_OK
-        )
-
-    return Response(serialized_data.errors, status=status.HTTP_400_BAD_REQUEST)
-
-
-@api_view(["GET"])
-@permission_classes([IsAuthenticated])
-def assist_for_you(request):
-    query = AssistApplicants.objects.all()
-    assists = []
-    try:
-        for assist in query:
-            if request.user.id in assist.applicants.values_list("id"):
-                assists.append(
-                    {
-                        "first_name": assist.assist.owner.first_name,
-                        "last_name": (
-                            assist.assist.owner.last_name
-                            if assist.assist.owner.last_name
-                            else ""
-                        ),  # last_name is null return an empty string
-                        "title": assist.assist.title,
-                        "description": assist.assist.description,
-                        "skills": assist.assist.skills.values_list("name", flat=True),
-                        "max_pay": assist.assist.max_pay,
-                        "min_pay": assist.assist.min_pay,
-                    }
-                )
-        return Response({"detail": assists}, status=status.HTTP_200_OK)
-    except Exception as e:
-        return Response(
-            {"detail": f"An error occured {e}"},
-            status=status.HTTP_500_INTERNAL_SERVER_ERROR,
-        )
-
-
-@api_view(["DELETE"])
-@permission_classes([IsAuthenticated])
-def delete_assist(request, assist_id):
-    # Check if assist actually exists
-    assist = get_object_or_404(Assists, id=assist_id)
-    if not assist:
-        return Response(
-            {"detail": "Assist doesn't exist"}, status=status.HTTP_404_NOT_FOUND
-        )
-    # Check if the authenticated user is owner of the assist post
-    if not request.user == assist.owner:
-        return Response(
-            {"detail": f"This User is not permitted to delete assist {assist_id}"},
-            status=status.HTTP_401_UNAUTHORIZED,
-        )
-    assist.delete()
-    return Response({"detail": "Assist delete"}, status=status.HTTP_200_OK)
-
-
 @api_view(["POST"])
 @permission_classes([AllowAny])
 def waitlist(request):
@@ -1943,9 +1663,47 @@ def list_users(request):
     return Response(serializer.data, status=status.HTTP_200_OK)
 
 
+@swagger_auto_schema(
+    method="get",
+    operation_summary="Get Profile of All Users By Admin",
+    operation_description="Allows an admin user to retrieve the profile details of all users",
+    manual_parameters=[
+        openapi.Parameter(
+            name="Authorization",
+            in_=openapi.IN_HEADER,
+            description="Bearer {token}",
+            type=openapi.TYPE_STRING,
+            required=True,
+        ),
+    ],
+    responses={
+        200: openapi.Response(
+            description="Returns a list of all user profiles in the database",
+            examples={
+                "application/json": {
+                    "data": {
+                        "email": "user@example.com",
+                        "first_name": "John",
+                        "last_name": "Doe",
+                        "image": "https://example.com/image.jpg",
+                        "resume": "https://example.com/resume.pdf",
+                        "skills": ["Python", "Django"],
+                        "categories": ["Software Development"],
+                        "notifications": ["New message received"],
+                    }
+                }
+            },
+        ),
+        404: openapi.Response(
+            description="Profile not found",
+            examples={"application/json": {"detail": "Not found"}},
+        ),
+    },
+)
 @api_view(["GET"])
 @permission_classes([IsAdminUser])
 def all_profiles(request):
+    """Returns the profiles of all users in the database"""
     users = Profile.objects.all()
     serializer = DisplayProfileSerializer(users, many=True)
     return Response(serializer.data, status=status.HTTP_200_OK)
@@ -1954,6 +1712,7 @@ def all_profiles(request):
 @api_view(["POST"])
 @permission_classes([AllowAny])
 def google_auth(request):
+    """Takes a google auth token, verifies it and login the user"""
     serializer = GoogleAuthSerializer(data=request.data)
     if not serializer.is_valid():
         return Response(serializer.errors, status=400)
@@ -1961,6 +1720,7 @@ def google_auth(request):
     email = serializer.validated_data["email"]
     first_name = serializer.validated_data["first_name"]
     last_name = serializer.validated_data["last_name"]
+    company = serializer.validated_data["company"]
 
     try:
         user = User.objects.get(email=email)
@@ -1977,7 +1737,7 @@ def google_auth(request):
             "password": settings.SOCIAL_SECRET_KEY,
             "password2": settings.SOCIAL_SECRET_KEY,
             "auth_provider": "google",
-            "company": False,
+            "company": company,
         }
 
         user_serializer = UserSerializer(data=user_data)
@@ -1997,26 +1757,36 @@ def google_auth(request):
             "user_id": user.id,
             "first_name": user.first_name,
             "is_company": user.company,
+            "has_onboarded": user.has_onboarded,
         }
     )
 
 
 @swagger_auto_schema(
     method="post",
-    operation_summary="Post a Job and Get Recommendations",
+    operation_summary="Post a Job without Authentication and get recommendations",
     operation_description="Allows users to post a job without authentication and receive a list of recommended applicants.",
     request_body=openapi.Schema(
         type=openapi.TYPE_OBJECT,
-        required=["title", "description", "location", "employment_type"],
+        required=[
+            "location",
+            "experience_level",
+            "years_of_experience",
+            "skills",
+            "salary",
+            "currency_type",
+        ],
         properties={
             "experience_level": openapi.Schema(
-                type=openapi.TYPE_STRING, description="Experience level can be entry, mid, senior, lead"
+                type=openapi.TYPE_STRING,
+                description="Experience level can be entry, mid, senior, lead",
             ),
             "location": openapi.Schema(
                 type=openapi.TYPE_STRING, description="Job location"
             ),
             "years_of_experience": openapi.Schema(
-                type=openapi.TYPE_NUMBER, description="Minimum years of experience needed for the job"
+                type=openapi.TYPE_NUMBER,
+                description="Minimum years of experience needed for the job",
             ),
             "max_salary": openapi.Schema(
                 type=openapi.TYPE_NUMBER, description="Maximum salary"
@@ -2105,16 +1875,21 @@ def post_job_without_auth(request):
         try:
             user_id = user_data["user_id"]
             profile = Profile.objects.get(user_id=user_id)
+            print(profile.image)
 
             recommended_applicants_list.append(
                 {
                     "user_id": profile.user.id,
                     "user_name": profile.user.first_name,
                     "user_email": profile.user.email,
+                    "User_bio": profile.bio,
+                    "image": profile.image.url,
                     "match_score": user_data["match_score"],
                     "years_of_experience": profile.years_of_experience,
                     "salary_range": user_data["salary_range"],
                     "location": profile.location,
+                    "Employment_choice": profile.employment_type,
+                    "job_location_choice": profile.job_location,
                     "skills": list(profile.skills.values_list("name", flat=True)),
                 }
             )

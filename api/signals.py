@@ -3,15 +3,13 @@ from django.db.models.signals import post_save, post_delete
 from django.shortcuts import get_object_or_404
 
 from .models import (
-    AssistApplicants,
-    Assists,
+    
     JobSkills,
     Jobs,
     User,
     Profile,
     UserSkills,
     UserCategories,
-    Image,
     CompanyProfile,
     Applicants,
 )
@@ -20,10 +18,8 @@ import cloudinary.uploader
 from scuibai.settings import BASE_DIR
 from api.job_model.data_processing import DataPreprocessor
 from api.job_model.job_recommender import JobAppMatching
-from .assist_model.data_processing import DataPreprocessor as AssistDataProcessor
-from .assist_model.assist_recommender import AssistRecommender
 
-from .custom_signal import job_created, assist_created
+from .custom_signal import job_created
 
 
 # Call when a user is created
@@ -48,12 +44,12 @@ def create_user_signals(sender, instance, created, **kwargs):
 # It creates a default picture
 
 
-@receiver(post_save, sender=User)
-def create_user_image(sender, instance, created, **kwargs):
-    if created and not instance.company:
-        file_path = str(BASE_DIR / "static/default.jpg")
-        file = cloudinary.uploader.upload(file_path)["public_id"]
-        Image.objects.create(user=instance, file=file)
+# @receiver(post_save, sender=User)
+# def create_user_image(sender, instance, created, **kwargs):
+#     if created and not instance.company:
+#         file_path = str(BASE_DIR / "static/default.jpg")
+#         file = cloudinary.uploader.upload(file_path)["public_id"]
+#         Image.objects.create(user=instance, file=file)
 
 
 # Call when a User with company==True is created

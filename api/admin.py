@@ -1,6 +1,6 @@
 from django.contrib import admin
 from .models import (User, Profile, EmailVerication_Keys, PasswordReset_keys,
-                     JobSkills, UserSkills, Resume, Cover_Letter, Image)
+                     JobSkills, UserSkills)
 from django.contrib.auth.admin import UserAdmin
 from django.utils.translation import gettext_lazy as _
 
@@ -85,6 +85,3 @@ admin.site.register(EmailVerication_Keys, EmailVericationKeysAdmin)
 admin.site.register(PasswordReset_keys, PasswordResetKeysAdmin)
 admin.site.register(JobSkills, JobSkillsAdmin)
 admin.site.register(UserSkills, UserSkillsAdmin)
-admin.site.register(Image)
-admin.site.register(Resume)
-admin.site.register(Cover_Letter)
