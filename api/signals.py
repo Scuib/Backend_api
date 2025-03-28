@@ -10,7 +10,6 @@ from .models import (
     UserSkills,
     UserCategories,
     CompanyProfile,
-    Applicants,
 )
 from django.dispatch import receiver
 import cloudinary.uploader
@@ -59,36 +58,36 @@ def create_company_signals(sender, instance, created, **kwargs):
 # Sort out job applicants
 
 
-@receiver(job_created)
-def create_applicants_signals(sender, instance, **kwargs):
-    # Initialize and prepare the data
-    preprocessor = DataPreprocessor()
-    job_posting, user_profiles = preprocessor.load_data(instance.id)
-    preprocessor.preprocess_data()
-    preprocessor.match_experience()
-    preprocessor.match_category()
-    preprocessor.match_salary()
+# @receiver(job_created)
+# def create_applicants_signals(sender, instance, **kwargs):
+#     # Initialize and prepare the data
+#     preprocessor = DataPreprocessor()
+#     job_posting, user_profiles = preprocessor.load_data(instance.id)
+#     preprocessor.preprocess_data()
+#     preprocessor.match_experience()
+#     preprocessor.match_category()
+#     preprocessor.match_salary()
 
-    # Get qualified users
-    qualified = preprocessor.get_matching_scores()
+#     # Get qualified users
+#     qualified = preprocessor.get_matching_scores()
 
-    # Initialize the Job Recommender and train it with the prepared data
-    recommender = JobAppMatching()
-    # recommender.train(preprocessor)
+#     # Initialize the Job Recommender and train it with the prepared data
+#     recommender = JobAppMatching()
+#     # recommender.train(preprocessor)
 
-    # Make recommendations based on the preprocessed data
-    # recommended_users = recommender.recommend_users(preprocessor)
-    recommended_users = recommender.recommend_users(job_id=instance.id)
+#     # Make recommendations based on the preprocessed data
+#     # recommended_users = recommender.recommend_users(preprocessor)
+#     recommended_users = recommender.recommend_users(job_id=instance.id)
 
-    # Extract the user IDs from the recommendations
-    recommended_user_ids = recommended_users["id"].tolist()
+#     # Extract the user IDs from the recommendations
+#     recommended_user_ids = recommended_users["id"].tolist()
 
-    # Try to create or update the Applicants model with recommended users
-    try:
-        application = Applicants.objects.get(job=instance)
-        # Update existing applicants
-        application.user.set(User.objects.filter(id__in=recommended_user_ids))
-    except Applicants.DoesNotExist:
-        # Create a new applicants entry
-        application = Applicants.objects.create(job=instance)
-        application.user.set(User.objects.filter(id__in=recommended_user_ids))
+#     # Try to create or update the Applicants model with recommended users
+#     try:
+#         application = Applicants.objects.get(job=instance)
+#         # Update existing applicants
+#         application.user.set(User.objects.filter(id__in=recommended_user_ids))
+#     except Applicants.DoesNotExist:
+#         # Create a new applicants entry
+#         application = Applicants.objects.create(job=instance)
+#         application.user.set(User.objects.filter(id__in=recommended_user_ids))

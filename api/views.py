@@ -25,7 +25,7 @@ from .models import (
     WaitList,
     JobSkills,
     Jobs,
-    Applicants,
+    Applicant,
 )
 
 from .serializer import (
@@ -86,6 +86,7 @@ class MyTokenObtainPairView(TokenObtainPairView):
 # Register View
 @swagger_auto_schema(
     method="post",
+    operation_summary="Registers a new user",
     operation_description="Register new users, company or individuals by providing basic details such as email, first name, last name, and password",
     request_body=UserSerializer,
     responses={
@@ -1037,7 +1038,15 @@ def profile_delete(request):
     ],
     request_body=openapi.Schema(
         type=openapi.TYPE_OBJECT,
-        required=["title", "description", "location", "employment_type"],
+        required=[
+            "title",
+            "description",
+            "location",
+            "experience_level",
+            "years_of_experience",
+            "skills",
+            "employment_type",
+        ],
         properties={
             "title": openapi.Schema(
                 type=openapi.TYPE_STRING,
@@ -1047,14 +1056,17 @@ def profile_delete(request):
                 type=openapi.TYPE_STRING,
                 description="Detailed job description",
             ),
+            "experience_level": openapi.Schema(
+                type=openapi.TYPE_STRING,
+                description="Experience level can be Entry, Mid, Senior, Lead",
+            ),
             "location": openapi.Schema(
                 type=openapi.TYPE_STRING,
                 description="Job location",
             ),
             "employment_type": openapi.Schema(
                 type=openapi.TYPE_STRING,
-                enum=["Full-time", "Part-time", "Contract", "Remote"],
-                description="Type of employment",
+                description="Employment type - O: Onsite, R: Remote, H: Hybrid",
             ),
             "max_salary": openapi.Schema(
                 type=openapi.TYPE_NUMBER,
@@ -1242,11 +1254,12 @@ def job_create(request):
         for user_data in recommended_users:
             try:
                 user_id = user_data["user_id"]
-                profile = Profile.objects.get(user__id=user_id)
+                profile = Profile.objects.get(user_id=user_id)
 
                 # Ensure applicants are linked to the job
-                applicant, created = Applicants.objects.get_or_create(job=job_instance)
-                applicant.user.add(profile.user)
+                applicant, created = Applicant.objects.get_or_create(
+                    job=job_instance, user=profile.user
+                )
 
                 # Collect recommended applicant info
                 recommended_applicants_list.append(
@@ -1422,6 +1435,17 @@ def job_update(request, job_id):
     return Response(serialized_data.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
+@swagger_auto_schema(
+    method="get",
+    operation_summary="Returns all jobs in the database",
+    operation_description="This endpoint retrieves all jobs posted. No authentication required",
+    responses={
+        200: openapi.Response(
+            description="Returns all jobs",
+        ),
+        404: openapi.Response(description="Job not found"),
+    },
+)
 @api_view(["GET"])
 @permission_classes([AllowAny])
 def jobs_all(request):
@@ -1430,53 +1454,145 @@ def jobs_all(request):
     return Response(serialized_jobs.data, status=status.HTTP_200_OK)
 
 
+@swagger_auto_schema(
+    method="get",
+    operation_summary="Returns all jobs created by a user with applicants list",
+    operation_description="This returns all the jobs created by the loggedin company and displays the matches for the job",
+    manual_parameters=[
+        openapi.Parameter(
+            name="Authorization",
+            in_=openapi.IN_HEADER,
+            description="Bearer {token}",
+            type=openapi.TYPE_STRING,
+            required=True,
+        ),
+    ],
+    responses={
+        201: openapi.Response(
+            description="Jobs retrieved",
+            examples={
+                "data": {
+                    "job_id": 1,
+                    "owner_id": 12,
+                    "company_name": "TechCorp",
+                    "company_email": "contact@techcorp.com",
+                    "skills": ["Python", "Django"],
+                    "category": "Software Development",
+                    "title": "Backend Developer",
+                    "description": "Develop and maintain APIs",
+                    "location": "Remote",
+                    "employment_type": "Full-time",
+                    "max_salary": 80000,
+                    "min_salary": 50000,
+                    "currency_type": "USD",
+                    "recommended_applicants": [
+                        {
+                            "user_id": 34,
+                            "user_name": "Jane Doe",
+                            "user_email": "janedoe@example.com",
+                            "match_score": 85.7,
+                            "years_of_experience": 5,
+                            "salary_range": "50K-80K",
+                            "location": "New York",
+                            "skills": ["Python", "Django"],
+                        }
+                    ],
+                },
+            },
+        ),
+        400: openapi.Response(
+            description="Bad request",
+            examples={
+                "application/json": {
+                    "error": "Invalid job data",
+                }
+            },
+        ),
+        404: openapi.Response(
+            description="User is not a company",
+            examples={
+                "application/json": {
+                    "error": "Only Companies can create Jobs",
+                }
+            },
+        ),
+    },
+)
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
 def jobs_user(request):
-    jobs = Jobs.objects.filter(owner=request.user)
+    user = request.user
+    jobs = Jobs.objects.filter(owner=user)
     data = []
+
     for job in jobs:
-        applicants = Applicants.objects.filter(job=job)
-        # print([User.objects.get(email=users.applicants) for users in applicants])
-        print(applicant.user.values_list("first_name") for applicant in applicants)
-        data.append(
-            {
-                "job": {
-                    "job_id": job.id,
-                    "description": job.description,
-                    "location": job.location,
-                    "role": job.categories,
-                    "type": job.employment_type,
-                    "skills": job.skills.values_list("name", flat=True),
-                    "location": job.location,
-                    "pay_range": f"{job.min_salary} - {job.max_salary}",
-                    "experience": f"{job.min_experience} - {job.max_experience}",
-                    "employment_type": job.get_employment_type_display(),
-                    "created_at": job.created_at,
-                },
-                "applicants": [
-                    {
-                        "applicant_id": user.id,
-                        "first_name": user.first_name,
-                        "last_name": user.last_name if user.last_name else "",
-                        "email": user.email,
-                        # Profile fields
-                        "phonenumber": user.profile.phonenumbers,
-                        "image": user.profile.user.image.file.url,
-                        "skills": user.profile.skills.values_list("name", flat=True),
-                        "categories": user.profile.categories.values_list(
-                            "name", flat=True
-                        ),
-                        "experience": user.profile.experience,
-                    }
-                    for applicant in applicants
-                    for user in applicant.user.all()
-                ],
+        # Get all Applicant entries for this job
+        applicants = Applicant.objects.filter(job=job).select_related("user__profile")
+
+        # Build job data
+        job_data = {
+            "job": {
+                "job_id": job.id,
+                "description": job.description,
+                "location": job.location,
+                "role": job.categories,
+                "type": job.employment_type,
+                "skills": list(job.skills.values_list("name", flat=True)),
+                "pay_range": f"{job.min_salary} - {job.max_salary}",
+                "experience": job.experience_level,
+                "employment_type": job.get_employment_type_display(),
+                "created_at": job.created_at,
+            },
+            "applicants": [],
+        }
+
+        # Build applicants list
+        for applicant in applicants:
+            applicant_user = applicant.user
+            profile = getattr(applicant_user, "profile", None)  # Safe profile access
+
+            # Skip users without profiles
+            if not profile:
+                continue
+
+            applicant_data = {
+                "applicant_id": applicant_user.id,
+                "first_name": applicant_user.first_name,
+                "last_name": applicant_user.last_name or "",
+                "email": applicant_user.email,
+                "phonenumber": profile.phonenumbers,
+                "image": profile.image.url if profile.image else None,
+                "skills": list(profile.skills.values_list("name", flat=True)),
+                "categories": list(profile.categories.values_list("name", flat=True)),
+                "experience": profile.years_of_experience,
             }
-        )
+            job_data["applicants"].append(applicant_data)
+
+        data.append(job_data)
+
     return Response(data, status=status.HTTP_200_OK)
 
 
+@swagger_auto_schema(
+    method="delete",
+    operation_summary="Deletes a job by id",
+    operation_description="Allows a company to delete its job post",
+    manual_parameters=[
+        openapi.Parameter(
+            name="Authorization",
+            in_=openapi.IN_HEADER,
+            description="Bearer {token}",
+            type=openapi.TYPE_STRING,
+            required=True,
+        ),
+    ],
+    responses={
+        204: openapi.Response(
+            description="Job deleted successfully",
+        ),
+        404: openapi.Response(description="Job not found"),
+    },
+)
 @api_view(["DELETE"])
 @permission_classes([IsAuthenticated])
 def delete_job(request, job_id):
@@ -1571,7 +1687,9 @@ def company_update(request):
             status=status.HTTP_403_FORBIDDEN,
         )
 
-    serializer = CompanyProfileSerializer(company_profile, data=request.data, partial=True)
+    serializer = CompanyProfileSerializer(
+        company_profile, data=request.data, partial=True
+    )
     if serializer.is_valid():
         serializer.save()
         user.has_onboarded = True
@@ -1770,7 +1888,7 @@ def google_auth(request):
             "last_name": last_name,
             "password": settings.SOCIAL_SECRET_KEY,
             "password2": settings.SOCIAL_SECRET_KEY,
-            "auth_provider": "google"
+            "auth_provider": "google",
         }
 
         user_serializer = UserSerializer(data=user_data)

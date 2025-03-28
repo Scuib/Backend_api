@@ -14,7 +14,7 @@ from .models import (
     EmailVerication_Keys,
     PasswordReset_keys,
     Jobs,
-    Applicants,
+    Applicant,
     CompanyProfile,
 )
 
@@ -157,7 +157,7 @@ class EmailVerifySerializer(ModelSerializer):
 
 class ApplicantSerializer(ModelSerializer):
     class Meta:
-        model = Applicants
+        model = Applicant
         fields = "__all__"
 
 

@@ -214,8 +214,10 @@ class Jobs(models.Model):
 """ JOB APPLICANTS MODEL """
 
 
-class Applicants(models.Model):
-    user = models.ManyToManyField(User, related_name="applications")
+class Applicant(models.Model):
+    user = models.ForeignKey(
+        User, on_delete=models.CASCADE, related_name="applications"
+    )
     job = models.ForeignKey(Jobs, on_delete=models.CASCADE, related_name="applicants")
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
