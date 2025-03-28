@@ -1755,7 +1755,6 @@ def google_auth(request):
     email = serializer.validated_data["email"]
     first_name = serializer.validated_data["first_name"]
     last_name = serializer.validated_data["last_name"]
-    company = serializer.validated_data["company"]
 
     try:
         user = User.objects.get(email=email)
@@ -1771,14 +1770,13 @@ def google_auth(request):
             "last_name": last_name,
             "password": settings.SOCIAL_SECRET_KEY,
             "password2": settings.SOCIAL_SECRET_KEY,
-            "auth_provider": "google",
-            "company": company,
+            "auth_provider": "google"
         }
 
         user_serializer = UserSerializer(data=user_data)
         if user_serializer.is_valid():
             user = user_serializer.save()
-            user.email_verified = True
+            user.verified = True
             user.save()
         else:
             return Response(user_serializer.errors, status=400)
