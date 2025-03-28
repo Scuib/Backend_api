@@ -637,7 +637,26 @@ def profile_detail(request):
     return Response({"data": profile_data}, status=status.HTTP_200_OK)
 
 
-# Get all notifications
+@swagger_auto_schema(
+    method="get",
+    operation_summary="Returns all users notifications",
+    operation_description="This endpoint retrieves all notifications of the logged in user",
+    manual_parameters=[
+        openapi.Parameter(
+            name="Authorization",
+            in_=openapi.IN_HEADER,
+            description="Bearer {token}",
+            type=openapi.TYPE_STRING,
+            required=True,
+        ),
+    ],
+    responses={
+        200: openapi.Response(
+            description="Returns all notifications",
+        ),
+        404: openapi.Response(description="Notification not found"),
+    },
+)
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
 def get_notifications(request):
@@ -1730,7 +1749,6 @@ def waitlist(request):
 
 """ PAYMENT """
 
-
 @api_view(["POST"])
 @permission_classes([IsAuthenticated])
 def initialize_payment(request):
@@ -1808,6 +1826,26 @@ def verify_payment(request):
         )
 
 
+@swagger_auto_schema(
+    method="get",
+    operation_summary="Returns all users in the database. Restricted to only admin users",
+    operation_description="This endpoint retrieves all users in the database for the admin user to see.",
+    manual_parameters=[
+        openapi.Parameter(
+            name="Authorization",
+            in_=openapi.IN_HEADER,
+            description="Bearer {token}",
+            type=openapi.TYPE_STRING,
+            required=True,
+        ),
+    ],
+    responses={
+        200: openapi.Response(
+            description="Returns all Users",
+        ),
+        404: openapi.Response(description="Users not found"),
+    },
+)
 @api_view(["GET"])
 @permission_classes([IsAdminUser])
 def list_users(request):

@@ -125,6 +125,7 @@ class DisplayProfileSerializer(ModelSerializer):
             "categories",
             "resume",
             "cover_letter",
+            "notifications",
         ]
 
     def get_image(self, obj):
