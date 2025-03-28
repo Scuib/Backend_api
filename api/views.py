@@ -11,6 +11,7 @@ import cloudinary
 from django.core.mail import EmailMultiAlternatives
 import pandas as pd
 import json
+from django.views.decorators.csrf import csrf_exempt
 
 from .models import (
     CompanyProfile,
@@ -1941,6 +1942,7 @@ def all_profiles(request):
         ),
     },
 )
+@csrf_exempt
 @api_view(["POST"])
 @permission_classes([AllowAny])
 def google_auth(request):
