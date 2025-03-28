@@ -14,7 +14,7 @@ from .models import (
     EmailVerication_Keys,
     PasswordReset_keys,
     Jobs,
-    Applicants,
+    Applicant,
     CompanyProfile,
 )
 
@@ -46,7 +46,6 @@ class UserSerializer(serializers.ModelSerializer):
             "last_name",
             "password",
             "password2",
-            "company",
         ]
 
     def validate(self, attrs):
@@ -126,6 +125,7 @@ class DisplayProfileSerializer(ModelSerializer):
             "categories",
             "resume",
             "cover_letter",
+            "notifications",
         ]
 
     def get_image(self, obj):
@@ -158,7 +158,7 @@ class EmailVerifySerializer(ModelSerializer):
 
 class ApplicantSerializer(ModelSerializer):
     class Meta:
-        model = Applicants
+        model = Applicant
         fields = "__all__"
 
 
@@ -179,6 +179,13 @@ class CompanySerializer(ModelSerializer):
         fields = "__all__"
 
 
+class CompanyProfileSerializer(ModelSerializer):
+
+    class Meta:
+        model = CompanyProfile
+        fields = ["company_name", "address", "phone_number", "website", "description"]
+
+
 class DisplayUsers(ModelSerializer):
 
     class Meta:
@@ -196,7 +203,6 @@ class GoogleAuthSerializer(serializers.Serializer):
     token = serializers.CharField(required=True)
     first_name = serializers.CharField(required=False)
     last_name = serializers.CharField(required=False)
-    company = serializers.BooleanField(default=False)
 
     def validate(self, attrs):
         token = attrs.get("token")

@@ -24,7 +24,7 @@ class User(AbstractUser):
     last_login = models.DateTimeField(auto_now=True)
     verified = models.BooleanField(default=False)
     has_onboarded = models.BooleanField(default=False)
-    company = models.BooleanField(default=False)
+    company = models.BooleanField(null=True, blank=True, default=None)
     auth_provider = models.CharField(
         max_length=10, choices=AUTH_PROVIDERS, default="email"
     )
@@ -33,7 +33,6 @@ class User(AbstractUser):
     REQUIRED_FIELDS = ["first_name"]
 
     objects = CustomUserManager()
-
     def __str__(self) -> str:
         return self.email
 
@@ -126,7 +125,8 @@ class CompanyProfile(models.Model):
     address = models.TextField(blank=True, null=True)
     website = models.URLField(max_length=200, blank=True, null=True)
     description = models.TextField(blank=True, null=True)
-    established_date = models.DateField(blank=True, null=True)
+    phone_number = models.CharField(max_length=24, blank=True, null=True)
+    company_name = models.CharField(max_length=60, blank=True, null=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -214,12 +214,13 @@ class Jobs(models.Model):
 """ JOB APPLICANTS MODEL """
 
 
-class Applicants(models.Model):
-    user = models.ManyToManyField(User, related_name="applications")
+class Applicant(models.Model):
+    user = models.ForeignKey(
+        User, on_delete=models.CASCADE, related_name="applications"
+    )
     job = models.ForeignKey(Jobs, on_delete=models.CASCADE, related_name="applicants")
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
-
 
 
 """ WAITLIST MODEL """

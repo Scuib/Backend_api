@@ -25,7 +25,7 @@ from .models import (
     WaitList,
     JobSkills,
     Jobs,
-    Applicants,
+    Applicant,
 )
 
 from .serializer import (
@@ -41,6 +41,7 @@ from .serializer import (
     CompanySerializer,
     DisplayUsers,
     GoogleAuthSerializer,
+    CompanyProfileSerializer,
 )
 
 from django.utils import timezone
@@ -85,6 +86,7 @@ class MyTokenObtainPairView(TokenObtainPairView):
 # Register View
 @swagger_auto_schema(
     method="post",
+    operation_summary="Registers a new user",
     operation_description="Register new users, company or individuals by providing basic details such as email, first name, last name, and password",
     request_body=UserSerializer,
     responses={
@@ -635,7 +637,26 @@ def profile_detail(request):
     return Response({"data": profile_data}, status=status.HTTP_200_OK)
 
 
-# Get all notifications
+@swagger_auto_schema(
+    method="get",
+    operation_summary="Returns all users notifications",
+    operation_description="This endpoint retrieves all notifications of the logged in user",
+    manual_parameters=[
+        openapi.Parameter(
+            name="Authorization",
+            in_=openapi.IN_HEADER,
+            description="Bearer {token}",
+            type=openapi.TYPE_STRING,
+            required=True,
+        ),
+    ],
+    responses={
+        200: openapi.Response(
+            description="Returns all notifications",
+        ),
+        404: openapi.Response(description="Notification not found"),
+    },
+)
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
 def get_notifications(request):
@@ -1036,7 +1057,15 @@ def profile_delete(request):
     ],
     request_body=openapi.Schema(
         type=openapi.TYPE_OBJECT,
-        required=["title", "description", "location", "employment_type"],
+        required=[
+            "title",
+            "description",
+            "location",
+            "experience_level",
+            "years_of_experience",
+            "skills",
+            "employment_type",
+        ],
         properties={
             "title": openapi.Schema(
                 type=openapi.TYPE_STRING,
@@ -1046,14 +1075,17 @@ def profile_delete(request):
                 type=openapi.TYPE_STRING,
                 description="Detailed job description",
             ),
+            "experience_level": openapi.Schema(
+                type=openapi.TYPE_STRING,
+                description="Experience level can be Entry, Mid, Senior, Lead",
+            ),
             "location": openapi.Schema(
                 type=openapi.TYPE_STRING,
                 description="Job location",
             ),
             "employment_type": openapi.Schema(
                 type=openapi.TYPE_STRING,
-                enum=["Full-time", "Part-time", "Contract", "Remote"],
-                description="Type of employment",
+                description="Employment type - O: Onsite, R: Remote, H: Hybrid",
             ),
             "max_salary": openapi.Schema(
                 type=openapi.TYPE_NUMBER,
@@ -1241,11 +1273,12 @@ def job_create(request):
         for user_data in recommended_users:
             try:
                 user_id = user_data["user_id"]
-                profile = Profile.objects.get(user__id=user_id)
+                profile = Profile.objects.get(user_id=user_id)
 
                 # Ensure applicants are linked to the job
-                applicant, created = Applicants.objects.get_or_create(job=job_instance)
-                applicant.user.add(profile.user)
+                applicant, created = Applicant.objects.get_or_create(
+                    job=job_instance, user=profile.user
+                )
 
                 # Collect recommended applicant info
                 recommended_applicants_list.append(
@@ -1421,6 +1454,17 @@ def job_update(request, job_id):
     return Response(serialized_data.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
+@swagger_auto_schema(
+    method="get",
+    operation_summary="Returns all jobs in the database",
+    operation_description="This endpoint retrieves all jobs posted. No authentication required",
+    responses={
+        200: openapi.Response(
+            description="Returns all jobs",
+        ),
+        404: openapi.Response(description="Job not found"),
+    },
+)
 @api_view(["GET"])
 @permission_classes([AllowAny])
 def jobs_all(request):
@@ -1429,53 +1473,145 @@ def jobs_all(request):
     return Response(serialized_jobs.data, status=status.HTTP_200_OK)
 
 
+@swagger_auto_schema(
+    method="get",
+    operation_summary="Returns all jobs created by a user with applicants list",
+    operation_description="This returns all the jobs created by the loggedin company and displays the matches for the job",
+    manual_parameters=[
+        openapi.Parameter(
+            name="Authorization",
+            in_=openapi.IN_HEADER,
+            description="Bearer {token}",
+            type=openapi.TYPE_STRING,
+            required=True,
+        ),
+    ],
+    responses={
+        201: openapi.Response(
+            description="Jobs retrieved",
+            examples={
+                "data": {
+                    "job_id": 1,
+                    "owner_id": 12,
+                    "company_name": "TechCorp",
+                    "company_email": "contact@techcorp.com",
+                    "skills": ["Python", "Django"],
+                    "category": "Software Development",
+                    "title": "Backend Developer",
+                    "description": "Develop and maintain APIs",
+                    "location": "Remote",
+                    "employment_type": "Full-time",
+                    "max_salary": 80000,
+                    "min_salary": 50000,
+                    "currency_type": "USD",
+                    "recommended_applicants": [
+                        {
+                            "user_id": 34,
+                            "user_name": "Jane Doe",
+                            "user_email": "janedoe@example.com",
+                            "match_score": 85.7,
+                            "years_of_experience": 5,
+                            "salary_range": "50K-80K",
+                            "location": "New York",
+                            "skills": ["Python", "Django"],
+                        }
+                    ],
+                },
+            },
+        ),
+        400: openapi.Response(
+            description="Bad request",
+            examples={
+                "application/json": {
+                    "error": "Invalid job data",
+                }
+            },
+        ),
+        404: openapi.Response(
+            description="User is not a company",
+            examples={
+                "application/json": {
+                    "error": "Only Companies can create Jobs",
+                }
+            },
+        ),
+    },
+)
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
 def jobs_user(request):
-    jobs = Jobs.objects.filter(owner=request.user)
+    user = request.user
+    jobs = Jobs.objects.filter(owner=user)
     data = []
+
     for job in jobs:
-        applicants = Applicants.objects.filter(job=job)
-        # print([User.objects.get(email=users.applicants) for users in applicants])
-        print(applicant.user.values_list("first_name") for applicant in applicants)
-        data.append(
-            {
-                "job": {
-                    "job_id": job.id,
-                    "description": job.description,
-                    "location": job.location,
-                    "role": job.categories,
-                    "type": job.employment_type,
-                    "skills": job.skills.values_list("name", flat=True),
-                    "location": job.location,
-                    "pay_range": f"{job.min_salary} - {job.max_salary}",
-                    "experience": f"{job.min_experience} - {job.max_experience}",
-                    "employment_type": job.get_employment_type_display(),
-                    "created_at": job.created_at,
-                },
-                "applicants": [
-                    {
-                        "applicant_id": user.id,
-                        "first_name": user.first_name,
-                        "last_name": user.last_name if user.last_name else "",
-                        "email": user.email,
-                        # Profile fields
-                        "phonenumber": user.profile.phonenumbers,
-                        "image": user.profile.user.image.file.url,
-                        "skills": user.profile.skills.values_list("name", flat=True),
-                        "categories": user.profile.categories.values_list(
-                            "name", flat=True
-                        ),
-                        "experience": user.profile.experience,
-                    }
-                    for applicant in applicants
-                    for user in applicant.user.all()
-                ],
+        # Get all Applicant entries for this job
+        applicants = Applicant.objects.filter(job=job).select_related("user__profile")
+
+        # Build job data
+        job_data = {
+            "job": {
+                "job_id": job.id,
+                "description": job.description,
+                "location": job.location,
+                "role": job.categories,
+                "type": job.employment_type,
+                "skills": list(job.skills.values_list("name", flat=True)),
+                "pay_range": f"{job.min_salary} - {job.max_salary}",
+                "experience": job.experience_level,
+                "employment_type": job.get_employment_type_display(),
+                "created_at": job.created_at,
+            },
+            "applicants": [],
+        }
+
+        # Build applicants list
+        for applicant in applicants:
+            applicant_user = applicant.user
+            profile = getattr(applicant_user, "profile", None)  # Safe profile access
+
+            # Skip users without profiles
+            if not profile:
+                continue
+
+            applicant_data = {
+                "applicant_id": applicant_user.id,
+                "first_name": applicant_user.first_name,
+                "last_name": applicant_user.last_name or "",
+                "email": applicant_user.email,
+                "phonenumber": profile.phonenumbers,
+                "image": profile.image.url if profile.image else None,
+                "skills": list(profile.skills.values_list("name", flat=True)),
+                "categories": list(profile.categories.values_list("name", flat=True)),
+                "experience": profile.years_of_experience,
             }
-        )
+            job_data["applicants"].append(applicant_data)
+
+        data.append(job_data)
+
     return Response(data, status=status.HTTP_200_OK)
 
 
+@swagger_auto_schema(
+    method="delete",
+    operation_summary="Deletes a job by id",
+    operation_description="Allows a company to delete its job post",
+    manual_parameters=[
+        openapi.Parameter(
+            name="Authorization",
+            in_=openapi.IN_HEADER,
+            description="Bearer {token}",
+            type=openapi.TYPE_STRING,
+            required=True,
+        ),
+    ],
+    responses={
+        204: openapi.Response(
+            description="Job deleted successfully",
+        ),
+        404: openapi.Response(description="Job not found"),
+    },
+)
 @api_view(["DELETE"])
 @permission_classes([IsAuthenticated])
 def delete_job(request, job_id):
@@ -1499,6 +1635,24 @@ def delete_job(request, job_id):
 from django.core.exceptions import ObjectDoesNotExist
 
 
+@swagger_auto_schema(
+    method="get",
+    operation_summary="Retrieve company details",
+    operation_description="Fetches the details of the authenticated user's company profile.",
+    manual_parameters=[
+        openapi.Parameter(
+            name="Authorization",
+            in_=openapi.IN_HEADER,
+            description="Bearer {token}",
+            type=openapi.TYPE_STRING,
+            required=True,
+        ),
+    ],
+    responses={
+        200: CompanySerializer,
+        404: openapi.Response("CompanyProfile not found."),
+    },
+)
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
 def company(request):
@@ -1507,21 +1661,40 @@ def company(request):
     try:
         company = CompanyProfile.objects.get(owner=owner)
         serializer = CompanySerializer(company)
-        # Add the company name
-        data = serializer.data.copy()
-        data["company_name"] = company.owner.first_name
-        return Response(data, status=status.HTTP_200_OK)
+        return Response(serializer.data, status=status.HTTP_200_OK)
     except ObjectDoesNotExist:
         return Response(
             {"error": "CompanyProfile not found."}, status=status.HTTP_404_NOT_FOUND
         )
 
 
+@swagger_auto_schema(
+    method="put",
+    operation_summary="Update company details",
+    operation_description="Allows the authenticated user to update their company profile details.",
+    manual_parameters=[
+        openapi.Parameter(
+            name="Authorization",
+            in_=openapi.IN_HEADER,
+            description="Bearer {token}",
+            type=openapi.TYPE_STRING,
+            required=True,
+        ),
+    ],
+    request_body=CompanyProfileSerializer,
+    responses={
+        200: CompanySerializer,
+        400: openapi.Response("Invalid request data."),
+        403: openapi.Response("Permission denied."),
+        404: openapi.Response("Company profile not found."),
+    },
+)
 @api_view(["PUT"])
 @permission_classes([IsAuthenticated])
 def company_update(request):
+    user = request.user
     try:
-        company_profile = CompanyProfile.objects.get(owner=request.user)
+        company_profile = CompanyProfile.objects.get(owner=user)
     except CompanyProfile.DoesNotExist:
         return Response(
             {"error": "Company profile not found."}, status=status.HTTP_404_NOT_FOUND
@@ -1533,14 +1706,13 @@ def company_update(request):
             status=status.HTTP_403_FORBIDDEN,
         )
 
-    # Edit company name
-    if "company_name" in request.data:
-        company_name = request.data.pop("company_name")
-        company_profile.owner.first_name = company_name
-
-    serializer = CompanySerializer(company_profile, data=request.data, partial=True)
+    serializer = CompanyProfileSerializer(
+        company_profile, data=request.data, partial=True
+    )
     if serializer.is_valid():
         serializer.save()
+        user.has_onboarded = True
+        user.save()
         return Response(serializer.data, status=status.HTTP_200_OK)
     return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
@@ -1576,7 +1748,6 @@ def waitlist(request):
 
 
 """ PAYMENT """
-
 
 @api_view(["POST"])
 @permission_classes([IsAuthenticated])
@@ -1655,6 +1826,26 @@ def verify_payment(request):
         )
 
 
+@swagger_auto_schema(
+    method="get",
+    operation_summary="Returns all users in the database. Restricted to only admin users",
+    operation_description="This endpoint retrieves all users in the database for the admin user to see.",
+    manual_parameters=[
+        openapi.Parameter(
+            name="Authorization",
+            in_=openapi.IN_HEADER,
+            description="Bearer {token}",
+            type=openapi.TYPE_STRING,
+            required=True,
+        ),
+    ],
+    responses={
+        200: openapi.Response(
+            description="Returns all Users",
+        ),
+        404: openapi.Response(description="Users not found"),
+    },
+)
 @api_view(["GET"])
 @permission_classes([IsAdminUser])
 def list_users(request):
@@ -1709,6 +1900,47 @@ def all_profiles(request):
     return Response(serializer.data, status=status.HTTP_200_OK)
 
 
+@swagger_auto_schema(
+    method="post",
+    operation_summary="Google Login",
+    operation_description="This endpoint allows users to log in via google.",
+    request_body=openapi.Schema(
+        type=openapi.TYPE_OBJECT,
+        required=["token"],
+        properties={
+            "token": openapi.Schema(
+                type=openapi.TYPE_STRING,
+                description="Token retrieved from google auth",
+            ),
+        },
+    ),
+    responses={
+        200: openapi.Response(
+            description="Login successful",
+            examples={
+                "application/json": {
+                    "refresh": "your-refresh-token",
+                    "access": "your-access-token",
+                    "user_id": 1,
+                    "first_name": "John",
+                    "is_company": False,
+                }
+            },
+        ),
+        400: openapi.Response(
+            description="Validation error",
+            examples={
+                "application/json": {
+                    "token": ["This field is required."],
+                }
+            },
+        ),
+        401: openapi.Response(
+            description="Invalid credentials",
+            examples={"application/json": {"error": "Invalid token"}},
+        ),
+    },
+)
 @api_view(["POST"])
 @permission_classes([AllowAny])
 def google_auth(request):
@@ -1720,8 +1952,6 @@ def google_auth(request):
     email = serializer.validated_data["email"]
     first_name = serializer.validated_data["first_name"]
     last_name = serializer.validated_data["last_name"]
-    company = serializer.validated_data["company"]
-
     try:
         user = User.objects.get(email=email)
         if user.auth_provider != "google":
@@ -1737,13 +1967,12 @@ def google_auth(request):
             "password": settings.SOCIAL_SECRET_KEY,
             "password2": settings.SOCIAL_SECRET_KEY,
             "auth_provider": "google",
-            "company": company,
         }
 
         user_serializer = UserSerializer(data=user_data)
         if user_serializer.is_valid():
             user = user_serializer.save()
-            user.email_verified = True
+            user.verified = True
             user.save()
         else:
             return Response(user_serializer.errors, status=400)
@@ -1902,5 +2131,70 @@ def post_job_without_auth(request):
             "detail": "Job processed successfully!",
             "recommended_applicants": recommended_applicants_list,
         },
+        status=status.HTTP_200_OK,
+    )
+
+
+@swagger_auto_schema(
+    method="patch",
+    operation_summary="Update the 'company' field of the user",
+    operation_description="Allows an authenticated user to update their 'company' field. The field accepts boolean values (true or false) or null.",
+    manual_parameters=[
+        openapi.Parameter(
+            "Authorization",
+            openapi.IN_HEADER,
+            description="Bearer Token for authentication",
+            type=openapi.TYPE_STRING,
+            required=True,
+        )
+    ],
+    request_body=openapi.Schema(
+        type=openapi.TYPE_OBJECT,
+        required=["company"],
+        properties={
+            "company": openapi.Schema(
+                type=openapi.TYPE_BOOLEAN,
+                description="Set to true if the user is a company, false otherwise.",
+            )
+        },
+    ),
+    responses={
+        200: openapi.Response(
+            "Company status updated successfully.",
+            openapi.Schema(
+                type=openapi.TYPE_OBJECT,
+                properties={
+                    "detail": openapi.Schema(type=openapi.TYPE_STRING),
+                    "company": openapi.Schema(type=openapi.TYPE_BOOLEAN),
+                },
+            ),
+        ),
+        400: openapi.Response("Bad Request: Missing or invalid company field."),
+        401: openapi.Response("Unauthorized: User must be authenticated."),
+    },
+)
+@api_view(["PATCH"])
+@permission_classes([IsAuthenticated])
+def update_company_status(request):
+    user = request.user
+
+    if "company" not in request.data:
+        return Response(
+            {"detail": "company field is required."}, status=status.HTTP_400_BAD_REQUEST
+        )
+
+    company = request.data["company"]
+
+    if not isinstance(company, bool) and company is not None:
+        return Response(
+            {"detail": "company must be a boolean or null."},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    user.company = company
+    user.save()
+
+    return Response(
+        {"detail": "Company status updated successfully.", "company": user.company},
         status=status.HTTP_200_OK,
     )

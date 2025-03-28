@@ -34,8 +34,8 @@ urlpatterns = [
     path("job/user/", views.jobs_user, name="user_jobs"),
     path("job/all/", views.jobs_all, name="all_jobs"),
     path("job/delete/<int:job_id>", views.delete_job, name="job-delete"),
-    path("company/update/", views.company_update, name="company-update"),
-    path("company/", views.company, name="company-profile"),
+    path("company/profile/update/", views.company_update, name="company-update"),
+    path("company/profile/", views.company, name="company-profile"),
     path("waitlist/", views.waitlist, name="waitlist"),
     path("payment/initialize/", views.initialize_payment, name="initialize_payment"),
     path("payment/verify/", views.verify_payment, name="verify_payment"),
@@ -43,4 +43,5 @@ urlpatterns = [
     path("users/", views.list_users, name="get all users"),
     path("profiles/", views.all_profiles, name="get all profiles"),
     path("create-job/", views.post_job_without_auth, name="Test job creation without login"),
+    path("company-status/", views.update_company_status, name="Set company status"),
 ]
