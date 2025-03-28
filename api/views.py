@@ -1900,6 +1900,47 @@ def all_profiles(request):
     return Response(serializer.data, status=status.HTTP_200_OK)
 
 
+@swagger_auto_schema(
+    method="post",
+    operation_summary="Google Login",
+    operation_description="This endpoint allows users to log in via google.",
+    request_body=openapi.Schema(
+        type=openapi.TYPE_OBJECT,
+        required=["token"],
+        properties={
+            "token": openapi.Schema(
+                type=openapi.TYPE_STRING,
+                description="Token retrieved from google auth",
+            ),
+        },
+    ),
+    responses={
+        200: openapi.Response(
+            description="Login successful",
+            examples={
+                "application/json": {
+                    "refresh": "your-refresh-token",
+                    "access": "your-access-token",
+                    "user_id": 1,
+                    "first_name": "John",
+                    "is_company": False,
+                }
+            },
+        ),
+        400: openapi.Response(
+            description="Validation error",
+            examples={
+                "application/json": {
+                    "token": ["This field is required."],
+                }
+            },
+        ),
+        401: openapi.Response(
+            description="Invalid credentials",
+            examples={"application/json": {"error": "Invalid token"}},
+        ),
+    },
+)
 @api_view(["POST"])
 @permission_classes([AllowAny])
 def google_auth(request):
@@ -1911,7 +1952,6 @@ def google_auth(request):
     email = serializer.validated_data["email"]
     first_name = serializer.validated_data["first_name"]
     last_name = serializer.validated_data["last_name"]
-
     try:
         user = User.objects.get(email=email)
         if user.auth_provider != "google":
