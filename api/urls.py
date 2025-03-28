@@ -42,6 +42,8 @@ urlpatterns = [
     path("notifications/", views.get_notifications, name="notifications"),
     path("users/", views.list_users, name="get all users"),
     path("profiles/", views.all_profiles, name="get all profiles"),
+    path("users/", views.all_users, name="get all users"),
+    path("users/<int:user_id>/", views.delete_user, name="Delete a user"),
     path("create-job/", views.post_job_without_auth, name="Test job creation without login"),
     path("company-status/", views.update_company_status, name="Set company status"),
 ]

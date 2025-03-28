@@ -1903,6 +1903,111 @@ def all_profiles(request):
 
 
 @swagger_auto_schema(
+    method="get",
+    operation_summary="Get Profile of All Users By Admin",
+    operation_description="Allows an admin user to retrieve the profile details of all users",
+    manual_parameters=[
+        openapi.Parameter(
+            name="Authorization",
+            in_=openapi.IN_HEADER,
+            description="Bearer {token}",
+            type=openapi.TYPE_STRING,
+            required=True,
+        ),
+    ],
+    responses={
+        200: openapi.Response(
+            description="Returns a list of all user profiles in the database",
+            examples={
+                "application/json": {
+                    "data": {
+                        "email": "user@example.com",
+                        "first_name": "John",
+                        "last_name": "Doe",
+                        "image": "https://example.com/image.jpg",
+                        "resume": "https://example.com/resume.pdf",
+                        "skills": ["Python", "Django"],
+                        "categories": ["Software Development"],
+                        "notifications": ["New message received"],
+                    }
+                }
+            },
+        ),
+        404: openapi.Response(
+            description="Profile not found",
+            examples={"application/json": {"detail": "Not found"}},
+        ),
+    },
+)
+@api_view(["GET"])
+@permission_classes([IsAdminUser])
+def all_users(request):
+    """Returns the profiles of all users in the database"""
+    users = User.objects.all()
+    serializer = UserSerializer(users, many=True)
+    return Response(serializer.data, status=status.HTTP_200_OK)
+
+
+@swagger_auto_schema(
+    method="delete",
+    operation_summary="Delete a User by Admin",
+    operation_description="Allows an admin to delete a user by providing the user's ID.",
+    manual_parameters=[
+        openapi.Parameter(
+            name="Authorization",
+            in_=openapi.IN_HEADER,
+            description="Bearer {token}",
+            type=openapi.TYPE_STRING,
+            required=True,
+        ),
+        openapi.Parameter(
+            name="user_id",
+            in_=openapi.IN_QUERY,
+            description="ID of the user to delete",
+            type=openapi.TYPE_INTEGER,
+            required=True,
+        ),
+    ],
+    responses={
+        204: openapi.Response(
+            description="User successfully deleted",
+        ),
+        404: openapi.Response(
+            description="User not found",
+            examples={"application/json": {"detail": "User not found"}},
+        ),
+        400: openapi.Response(
+            description="Bad Request",
+            examples={"application/json": {"detail": "Missing user_id parameter"}},
+        ),
+    },
+)
+@api_view(["DELETE"])
+@permission_classes([IsAdminUser])
+def delete_user(request):
+    """Allows an admin to delete a user by ID"""
+    user_id = request.query_params.get("user_id")
+
+    if not user_id:
+        return Response(
+            {"detail": "Missing user_id parameter"},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+    try:
+        user = User.objects.get(id=user_id)
+        user.delete()
+        return Response(
+            {"detail": "User deleted successfully"},
+            status=status.HTTP_204_NO_CONTENT,
+        )
+    except User.DoesNotExist:
+        return Response(
+            {"detail": "User not found"},
+            status=status.HTTP_404_NOT_FOUND,
+        )
+
+
+@swagger_auto_schema(
     method="post",
     operation_summary="Google Login",
     operation_description="This endpoint allows users to log in via google.",
