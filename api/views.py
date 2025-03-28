@@ -1902,51 +1902,6 @@ def all_profiles(request):
     return Response(serializer.data, status=status.HTTP_200_OK)
 
 
-@swagger_auto_schema(
-    method="get",
-    operation_summary="Get Profile of All Users By Admin",
-    operation_description="Allows an admin user to retrieve the profile details of all users",
-    manual_parameters=[
-        openapi.Parameter(
-            name="Authorization",
-            in_=openapi.IN_HEADER,
-            description="Bearer {token}",
-            type=openapi.TYPE_STRING,
-            required=True,
-        ),
-    ],
-    responses={
-        200: openapi.Response(
-            description="Returns a list of all user profiles in the database",
-            examples={
-                "application/json": {
-                    "data": {
-                        "email": "user@example.com",
-                        "first_name": "John",
-                        "last_name": "Doe",
-                        "image": "https://example.com/image.jpg",
-                        "resume": "https://example.com/resume.pdf",
-                        "skills": ["Python", "Django"],
-                        "categories": ["Software Development"],
-                        "notifications": ["New message received"],
-                    }
-                }
-            },
-        ),
-        404: openapi.Response(
-            description="Profile not found",
-            examples={"application/json": {"detail": "Not found"}},
-        ),
-    },
-)
-@api_view(["GET"])
-@permission_classes([IsAdminUser])
-def all_users(request):
-    """Returns the profiles of all users in the database"""
-    users = User.objects.all()
-    serializer = UserSerializer(users, many=True)
-    return Response(serializer.data, status=status.HTTP_200_OK)
-
 
 @swagger_auto_schema(
     method="delete",
@@ -2062,11 +2017,11 @@ def google_auth(request):
     last_name = serializer.validated_data["last_name"]
     try:
         user = User.objects.get(email=email)
-        if user.auth_provider != "google":
-            return Response(
-                {"error": "Please login using your email and password"},
-                status=status.HTTP_401_UNAUTHORIZED,
-            )
+        # if user.auth_provider != "google":
+        #     return Response(
+        #         {"error": "Please login using your email and password"},
+        #         status=status.HTTP_401_UNAUTHORIZED,
+        #     )
     except User.DoesNotExist:
         user_data = {
             "email": email,
@@ -2095,7 +2050,8 @@ def google_auth(request):
             "first_name": user.first_name,
             "is_company": user.company,
             "has_onboarded": user.has_onboarded,
-        }
+        },
+        status=status.HTTP_200_OK,
     )
 
 
