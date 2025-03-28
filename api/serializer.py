@@ -1,7 +1,7 @@
 import cloudinary.uploader
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 import cloudinary
-from scuibai.settings import BASE_DIR, GOOGLE_CLIENT_ID
+from scuibai.settings import BASE_DIR, NEW_GOOGLE_CLIENT_ID
 from google.oauth2 import id_token
 from google.auth.transport import requests
 
@@ -208,11 +208,12 @@ class GoogleAuthSerializer(serializers.Serializer):
         token = attrs.get("token")
         try:
             id_info = id_token.verify_oauth2_token(
-                token, requests.Request(), GOOGLE_CLIENT_ID
+                token, requests.Request(), NEW_GOOGLE_CLIENT_ID
             )
             attrs["email"] = id_info.get("email")
             attrs["first_name"] = id_info.get("given_name", "")
             attrs["last_name"] = id_info.get("family_name", "")
             return attrs
-        except ValueError:
+        except ValueError as e:
+            print("Token verification error:", e)
             raise serializers.ValidationError("Invalid Google token")

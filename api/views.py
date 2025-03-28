@@ -1750,6 +1750,7 @@ def waitlist(request):
 
 """ PAYMENT """
 
+
 @api_view(["POST"])
 @permission_classes([IsAuthenticated])
 def initialize_payment(request):
@@ -1968,13 +1969,13 @@ def google_auth(request):
             "last_name": last_name,
             "password": settings.SOCIAL_SECRET_KEY,
             "password2": settings.SOCIAL_SECRET_KEY,
-            "auth_provider": "google",
         }
 
         user_serializer = UserSerializer(data=user_data)
         if user_serializer.is_valid():
             user = user_serializer.save()
             user.verified = True
+            user.auth_provider = "google"
             user.save()
         else:
             return Response(user_serializer.errors, status=400)
