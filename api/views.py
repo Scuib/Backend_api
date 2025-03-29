@@ -1553,6 +1553,7 @@ def jobs_user(request):
         job_data = {
             "job": {
                 "job_id": job.id,
+                "title": job.title,
                 "description": job.description,
                 "location": job.location,
                 "role": job.categories,
@@ -1581,6 +1582,9 @@ def jobs_user(request):
                 "last_name": applicant_user.last_name or "",
                 "email": applicant_user.email,
                 "phonenumber": profile.phonenumbers,
+                "user_bio": profile.bio,
+                "location": profile.location,
+                "job_location_choice": profile.job_location,
                 "image": profile.image.url if profile.image else None,
                 "skills": list(profile.skills.values_list("name", flat=True)),
                 "categories": list(profile.categories.values_list("name", flat=True)),
@@ -1900,7 +1904,6 @@ def all_profiles(request):
     users = Profile.objects.all()
     serializer = DisplayProfileSerializer(users, many=True)
     return Response(serializer.data, status=status.HTTP_200_OK)
-
 
 
 @swagger_auto_schema(
