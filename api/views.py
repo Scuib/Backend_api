@@ -2384,7 +2384,7 @@ def profile_header(request):
             data = {
                 "first_name": user.first_name,
                 "last_name": user.last_name,
-                "profile_pic": profile.image.url,
+                "profile_pic": profile.image.url if profile.image else None,
             }
         else:
             company = CompanyProfile.objects.get(owner=user)
