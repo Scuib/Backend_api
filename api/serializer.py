@@ -183,7 +183,7 @@ class CompanyProfileSerializer(ModelSerializer):
 
     class Meta:
         model = CompanyProfile
-        fields = ["company_name", "address", "phone_number", "website", "description"]
+        fields = ["company_name", "address", "phone_number", "website", "description", "image"]
 
 
 class DisplayUsers(ModelSerializer):

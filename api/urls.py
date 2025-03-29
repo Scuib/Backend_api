@@ -45,4 +45,5 @@ urlpatterns = [
     path("users/<int:user_id>/", views.delete_user, name="Delete a user"),
     path("create-job/", views.post_job_without_auth, name="Test job creation without login"),
     path("company-status/", views.update_company_status, name="Set company status"),
+    path("profile/headers/", views.profile_header, name="Get profile header"),
 ]

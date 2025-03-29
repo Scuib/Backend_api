@@ -1685,17 +1685,68 @@ def company(request):
             type=openapi.TYPE_STRING,
             required=True,
         ),
+        openapi.Parameter(
+            name="company_name",
+            in_=openapi.IN_FORM,
+            description="Name of the company",
+            type=openapi.TYPE_STRING,
+            required=False,
+        ),
+        openapi.Parameter(
+            name="address",
+            in_=openapi.IN_FORM,
+            description="Address of the company",
+            type=openapi.TYPE_STRING,
+            required=False,
+        ),
+        openapi.Parameter(
+            name="website",
+            in_=openapi.IN_FORM,
+            description="Website of the company",
+            type=openapi.TYPE_STRING,
+            required=False,
+        ),
+        openapi.Parameter(
+            name="description",
+            in_=openapi.IN_FORM,
+            description="Short description of the company",
+            type=openapi.TYPE_STRING,
+            required=False,
+        ),
+        openapi.Parameter(
+            name="phone_number",
+            in_=openapi.IN_FORM,
+            description="Phone number of the company",
+            type=openapi.TYPE_STRING,
+            required=False,
+        ),
+        openapi.Parameter(
+            name="image",
+            in_=openapi.IN_FORM,
+            description="Profile image (file upload)",
+            type=openapi.TYPE_FILE,
+            required=False,
+        ),
     ],
-    request_body=CompanyProfileSerializer,
+    consumes=["multipart/form-data"],
     responses={
-        200: CompanySerializer,
-        400: openapi.Response("Invalid request data."),
-        403: openapi.Response("Permission denied."),
-        404: openapi.Response("Company profile not found."),
+        200: openapi.Response(
+            description="Profile updated successfully",
+            examples={"application/json": {"_detail": "Successful!"}},
+        ),
+        404: openapi.Response(
+            description="User or profile does not exist",
+            examples={"application/json": {"detail": "Profile does not exist"}},
+        ),
+        500: openapi.Response(
+            description="An error occurred while updating the profile",
+            examples={"application/json": {"_detail": "An error occurred!"}},
+        ),
     },
 )
 @api_view(["PUT"])
 @permission_classes([IsAuthenticated])
+@parser_classes([MultiPartParser, FormParser])
 def company_update(request):
     user = request.user
     try:
@@ -1710,17 +1761,40 @@ def company_update(request):
             {"error": "You do not have permission to edit this profile."},
             status=status.HTTP_403_FORBIDDEN,
         )
-
     serializer = CompanyProfileSerializer(
         company_profile, data=request.data, partial=True
     )
-    if serializer.is_valid():
-        serializer.save()
-        user.has_onboarded = True
-        user.save()
-        return Response(serializer.data, status=status.HTTP_200_OK)
-    return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+    if not serializer.is_valid():
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
+    # Handle image AFTER validation
+    if "image" in request.FILES:
+        # Validate file
+        image_file = request.FILES["image"]
+        if image_file.size > 5 * 1024 * 1024:  # 5MB limit
+            return Response({"error": "File too large"}, status=400)
+        # Delete old image
+        existing_file = getattr(company_profile, "image", None)
+        if existing_file:
+            try:
+                cloudinary.uploader.destroy(existing_file.public_id)
+            except Exception as e:
+                print(f"Failed to delete old image: {e}")
+
+        # Upload new image
+        upload_result = cloudinary.uploader.upload(
+            image_file,
+            folder="company_profile",
+            resource_type="image",
+        )
+        company_profile.image = upload_result["secure_url"]
+        company_profile.save()
+
+    # Save other fields
+    serializer.save()
+    user.has_onboarded = True
+    user.save()
+    return Response(serializer.data, status=status.HTTP_200_OK)
 
 @api_view(["DELETE"])
 @permission_classes([IsAuthenticated])
@@ -2265,3 +2339,60 @@ def update_company_status(request):
         {"detail": "Company status updated successfully.", "company": user.company},
         status=status.HTTP_200_OK,
     )
+
+
+@swagger_auto_schema(
+    method="get",
+    operation_summary="Get Profile Name and Picture only",
+    operation_description="Returns the profile picture and name of the authenticated user",
+    manual_parameters=[
+        openapi.Parameter(
+            name="Authorization",
+            in_=openapi.IN_HEADER,
+            description="Bearer {token}",
+            type=openapi.TYPE_STRING,
+            required=True,
+        ),
+    ],
+    responses={
+        200: openapi.Response(
+            description="Authenticated user profile retrieved successfully",
+            examples={
+                "application/json": {
+                    "data": {
+                        "first_name": "John",
+                        "last_name": "Doe",
+                        "image": "https://example.com/image.jpg",
+                    }
+                }
+            },
+        ),
+        404: openapi.Response(
+            description="Profile not found",
+            examples={"application/json": {"detail": "Not found"}},
+        ),
+    },
+)
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def profile_header(request):
+    # Check if the profile exists
+    try:
+        user = User.objects.get(id=request.user.id)
+        if not user.company:
+            profile = Profile.objects.get(user=user)
+            data = {
+                "first_name": user.first_name,
+                "last_name": user.last_name,
+                "profile_pic": profile.image.url,
+            }
+        else:
+            company = CompanyProfile.objects.get(owner=user)
+            data = {
+                "company_name": company.company_name,
+                "profile_pic": company.image.url if company.image else None,
+            }
+    except User.DoesNotExist:
+        return Response(status=status.HTTP_404_NOT_FOUND)
+    
+    return Response(data, status=status.HTTP_200_OK)
