@@ -104,10 +104,12 @@ class DisplayProfileSerializer(ModelSerializer):
     resume = serializers.SerializerMethodField()
     cover_letter = serializers.SerializerMethodField()
     categories = UserCategoriesSerializer(many=True)
+    user = UserSerializer()
 
     class Meta:
         model = Profile
         fields = [
+            "user",
             "bio",
             "location",
             "job_location",
