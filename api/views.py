@@ -71,7 +71,6 @@ from drf_yasg import openapi
 # Activate the resend with the api key
 resend.api_key = settings.NEW_RESEND_API_KEY
 
-
 def home(request):
     return render(request, "home.html")
 
@@ -103,7 +102,6 @@ def register(request):
     if serialized_data.is_valid():
         user = serialized_data.save()
         EmailAddress.objects.create(user=user, email=user.email)  # type: ignore
-        # print(user.company)
 
         key, exp = VerifyEmail_key(user.id)
 
@@ -118,7 +116,7 @@ def register(request):
         # msg = EmailMultiAlternatives(subject, "Your email client does not support HTML.", from_email, recipient_list)
         # msg.attach_alternative(html, "text/html")
         params: resend.Emails.SendParams = {
-            "from": "okpe@resend.dev",
+            "from": "scuib.com",
             "to": [user.email],
             "subject": "VERIFY YOUR EMAIL",
             "html": html,
@@ -690,21 +688,28 @@ def get_notifications(request):
         openapi.Parameter(
             name="bio",
             in_=openapi.IN_FORM,
-            description="Brief description of yourself",
+            description="Brief description of yourself (optional)",
             type=openapi.TYPE_STRING,
             required=False,
         ),
         openapi.Parameter(
             name="first_name",
             in_=openapi.IN_FORM,
-            description="User's first name",
+            description="User's first name (optional)",
             type=openapi.TYPE_STRING,
             required=False,
         ),
         openapi.Parameter(
             name="last_name",
             in_=openapi.IN_FORM,
-            description="User's Last name",
+            description="User's Last name (optional)",
+            type=openapi.TYPE_STRING,
+            required=False,
+        ),
+        openapi.Parameter(
+            name="location",
+            in_=openapi.IN_FORM,
+            description="User's location (optional)",
             type=openapi.TYPE_STRING,
             required=False,
         ),
@@ -725,42 +730,42 @@ def get_notifications(request):
         openapi.Parameter(
             name="image",
             in_=openapi.IN_FORM,
-            description="Profile image file",
+            description="Profile image file (optional)",
             type=openapi.TYPE_FILE,
             required=False,
         ),
         openapi.Parameter(
             name="resume",
             in_=openapi.IN_FORM,
-            description="Resume file (PDF, DOCX, etc.)",
+            description="Resume file (PDF, DOCX, etc.) (optional)",
             type=openapi.TYPE_FILE,
             required=False,
         ),
         openapi.Parameter(
             name="phonenumbers",
             in_=openapi.IN_FORM,
-            description="User's phone number",
+            description="User's phone number (optional)",
             type=openapi.TYPE_STRING,
             required=False,
         ),
         openapi.Parameter(
             name="years_of_experience",
             in_=openapi.IN_FORM,
-            description="User's years of experience in number",
+            description="User's years of experience in number (optional)",
             type=openapi.TYPE_NUMBER,
             required=False,
         ),
         openapi.Parameter(
             name="min_salary",
             in_=openapi.IN_FORM,
-            description="User's expected minimum salary in number",
+            description="User's expected minimum salary in number (optional)",
             type=openapi.TYPE_NUMBER,
             required=False,
         ),
         openapi.Parameter(
             name="max_salary",
             in_=openapi.IN_FORM,
-            description="User's expected maximum salary in number",
+            description="User's expected maximum salary in number (optional)",
             type=openapi.TYPE_NUMBER,
             required=False,
         ),
@@ -838,7 +843,7 @@ def profile_update(request):
 
         # Remove old skills
         for skill_name in current_skills - new_skills_set:
-            skill = UserSkills.objects.get(name=skill_name).first()
+            skill = UserSkills.objects.filter(name=skill_name).first()
             if skill:
                 profile.skills.remove(skill)
 
@@ -860,7 +865,7 @@ def profile_update(request):
 
         # Remove old skills
         for category_name in current_categories - new_categories_set:
-            category = UserCategories.objects.get(name=category_name).first()
+            category = UserCategories.objects.filter(name=category_name).first()
             if category:
                 profile.categories.remove(category)
 
