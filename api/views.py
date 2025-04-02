@@ -137,16 +137,25 @@ def register(request):
                 },
                 status=status.HTTP_501_NOT_IMPLEMENTED,
             )
+        refresh = RefreshToken.for_user(user)
 
         return Response(
             {
-                "message": "User Registered Successfully, Check email for otp code",
-                "data": {"key": key, "exp": exp},
+                "refresh": str(refresh),
+                "access": str(refresh.access_token),  # type: ignore
+                "user_id": user.id,  # type: ignore
+                "first_name": user.first_name,
+                "is_company": user.company,
+                "has_onboarded": user.has_onboarded,
             },
             status=status.HTTP_201_CREATED,
         )
-
-    print(f"Serializer Error: {serialized_data.errors}, Data: {request.data}")
+        # return Response(
+        #     {
+        #         "message": "User Registered Successfully, Check email for otp code",
+        #         "data": {"key": key, "exp": exp},
+        #     },
+        # )
 
     return Response(serialized_data.errors, status=status.HTTP_400_BAD_REQUEST)
 
@@ -789,10 +798,11 @@ def get_notifications(request):
 @parser_classes([MultiPartParser, FormParser])
 def profile_update(request):
     user = request.user
+    data = request.data.copy()
 
     # Check if email is in field
-    if "email" in request.data:
-        request.data.pop("email")
+    if "email" in data:
+        data.pop("email")
     # Check if the profile exists
     try:
         profile = Profile.objects.get(user=user)
@@ -802,19 +812,22 @@ def profile_update(request):
         )
 
     # Handle first_name and last_name
-    if "first_name" in request.data:
-        first_name = request.data.pop("first_name")
-        profile.user.first_name = first_name
-        profile.user.save()
-
-    if "last_name" in request.data:
-        last_name = request.data.pop("last_name")
-        profile.user.last_name = last_name
-        profile.user.save()
+    user_updated = False
+    if "first_name" in data:
+        user.first_name = data.pop("first_name")
+        user_updated = True
+    if "last_name" in data:
+        user.last_name = data.pop("last_name")
+        user_updated = True
+    if user_updated:
+        user.save()
 
     # Handle skill updates
-    if "skills" in request.data:
-        new_skills = request.data.pop("skills")
+    if "skills" in data:
+        new_skills = data.pop("skills")
+        new_skills = (
+            new_skills if isinstance(new_skills, list) else new_skills.split(",")
+        )
         current_skills = set(profile.skills.values_list("name", flat=True))
         new_skills_set = set(new_skills)
 
@@ -825,12 +838,18 @@ def profile_update(request):
 
         # Remove old skills
         for skill_name in current_skills - new_skills_set:
-            skill = UserSkills.objects.get(name=skill_name)
-            profile.skills.remove(skill)
+            skill = UserSkills.objects.get(name=skill_name).first()
+            if skill:
+                profile.skills.remove(skill)
 
     # Handle skill updates
-    if "categories" in request.data:
-        new_categories = request.data.pop("categories")
+    if "categories" in data:
+        new_categories = data.pop("categories")
+        new_categories = (
+            new_categories
+            if isinstance(new_categories, list)
+            else new_categories.split(",")
+        )
         current_categories = set(profile.categories.values_list("name", flat=True))
         new_categories_set = set(new_categories)
 
@@ -841,8 +860,9 @@ def profile_update(request):
 
         # Remove old skills
         for category_name in current_categories - new_categories_set:
-            category = UserCategories.objects.get(name=category_name)
-            profile.categories.remove(category)
+            category = UserCategories.objects.get(name=category_name).first()
+            if category:
+                profile.categories.remove(category)
 
     cloudinary_fields = ["image", "resume", "cover_letter"]
     for field in cloudinary_fields:
@@ -877,15 +897,13 @@ def profile_update(request):
     profile.save()
 
     # Update profile with the remaining fields
-    serialized_data = ProfileSerializer(profile, data=request.data, partial=True)
+    serialized_data = ProfileSerializer(profile, data=data, partial=True)
     if serialized_data.is_valid():
         serialized_data.save()
 
-        return Response({"_detail": "Succesful!"}, status=status.HTTP_200_OK)
+        return Response({"detail": "Succesful!"}, status=status.HTTP_200_OK)
 
-    return Response(
-        {"_detail": "An error occured!"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR
-    )
+    return Response(serialized_data.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
 @swagger_auto_schema(
@@ -1852,6 +1870,7 @@ def company_update(request):
     user.save()
     return Response(serializer.data, status=status.HTTP_200_OK)
 
+
 @api_view(["DELETE"])
 @permission_classes([IsAuthenticated])
 def delete_user(request):
@@ -2450,5 +2469,5 @@ def profile_header(request):
             }
     except User.DoesNotExist:
         return Response(status=status.HTTP_404_NOT_FOUND)
-    
+
     return Response(data, status=status.HTTP_200_OK)
