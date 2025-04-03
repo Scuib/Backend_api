@@ -71,6 +71,7 @@ from drf_yasg import openapi
 # Activate the resend with the api key
 resend.api_key = settings.NEW_RESEND_API_KEY
 
+
 def home(request):
     return render(request, "home.html")
 
@@ -109,23 +110,15 @@ def register(request):
         context = {"user": user, "otp": key, "expirary_date": exp}
         html = template.render(context)
 
-        # subject = "Verify Your Email"
-        # from_email = settings.DEFAULT_FROM_EMAIL
-        # recipient_list = [user.email]
-
-        # msg = EmailMultiAlternatives(subject, "Your email client does not support HTML.", from_email, recipient_list)
-        # msg.attach_alternative(html, "text/html")
         params: resend.Emails.SendParams = {
-            "from": "scuib.com",
+            "from": "Godwin <godwin@scuib.com>",
             "to": [user.email],
             "subject": "VERIFY YOUR EMAIL",
             "html": html,
         }
 
         try:
-            # msg.send()
-            # r = resend.Emails.send(params)
-            pass
+            r = resend.Emails.send(params)
         except Exception as e:
             print(f"Error: {e}")
             user.delete()
@@ -135,30 +128,52 @@ def register(request):
                 },
                 status=status.HTTP_501_NOT_IMPLEMENTED,
             )
-        refresh = RefreshToken.for_user(user)
-
         return Response(
             {
-                "refresh": str(refresh),
-                "access": str(refresh.access_token),  # type: ignore
-                "user_id": user.id,  # type: ignore
-                "first_name": user.first_name,
-                "is_company": user.company,
-                "has_onboarded": user.has_onboarded,
+                "message": "User Registered Successfully, Check email for otp code",
+                "data": {"key": key, "exp": exp},
             },
-            status=status.HTTP_201_CREATED,
         )
-        # return Response(
-        #     {
-        #         "message": "User Registered Successfully, Check email for otp code",
-        #         "data": {"key": key, "exp": exp},
-        #     },
-        # )
 
     return Response(serialized_data.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
-# Verify Email Here
+@swagger_auto_schema(
+    method="post",
+    operation_summary="Resend Verify Email",
+    operation_description="This endpoint resends email verification code to the user",
+    request_body=openapi.Schema(
+        type=openapi.TYPE_OBJECT,
+        required=["email"],
+        properties={
+            "email": openapi.Schema(
+                type=openapi.TYPE_STRING,
+                format="email",
+                description="User's email address",
+            ),
+        },
+    ),
+    responses={
+        201: openapi.Response(
+            description="Email verification sent",
+            examples={
+                "detail": {"name": "user.first_name", "key": "key", "expires": "exp"},
+            },
+        ),
+        400: openapi.Response(
+            description="Validation error",
+            examples={
+                "application/json": {
+                    "email": ["This field is required."],
+                }
+            },
+        ),
+        401: openapi.Response(
+            description="Invalid email",
+            examples={"application/json": {"error": "Invalid email"}},
+        ),
+    },
+)
 @api_view(["POST"])
 @permission_classes([AllowAny])
 def resend_verify_email(request):
@@ -295,19 +310,24 @@ def login(request):
             )
         if user.auth_provider == "google":
             return Response({"error": "Use Google login"})
-        # if not EmailAddress.objects.get(email=email).verified:
-        #     return Response(
-        #         {"error": "Email is not verified "}, status=status.HTTP_401_UNAUTHORIZED
-        #     )
-
+        try:
+            email_entry = EmailAddress.objects.get(email=email)
+            if not email_entry.verified:
+                return Response(
+                    {"error": "Email is not verified"},
+                    status=status.HTTP_401_UNAUTHORIZED,
+                )
+        except EmailAddress.DoesNotExist:
+            pass
+        
         if check_password(password, user.password):
             refresh = RefreshToken.for_user(user)
 
             return Response(
                 {
                     "refresh": str(refresh),
-                    "access": str(refresh.access_token),  # type: ignore
-                    "user_id": user.id,  # type: ignore
+                    "access": str(refresh.access_token),
+                    "user_id": user.id,
                     "first_name": user.first_name,
                     "is_company": user.company,
                     "has_onboarded": user.has_onboarded,
@@ -355,8 +375,7 @@ def verify_email(request):
     """
     serialized_data = EmailVerifySerializer(data=request.data)
     if serialized_data.is_valid():
-        # print(serialized_data.data)
-        key = serialized_data.data["key"]  # type: ignore It works just pylance Type list errors
+        key = serialized_data.data["key"]
         try:
             unique_key = get_object_or_404(EmailVerication_Keys, key=key)
             if not unique_key:
@@ -534,7 +553,6 @@ def confirm_reset_password(request, uid, key):
 
 
 """ PROFILE VIEWS """
-
 
 @swagger_auto_schema(
     method="get",
@@ -769,6 +787,20 @@ def get_notifications(request):
             type=openapi.TYPE_NUMBER,
             required=False,
         ),
+        openapi.Parameter(
+            name="employment_type",
+            in_=openapi.IN_FORM,
+            description="F: Full-Time, P: Part-Time, C: Contract (optional)",
+            type=openapi.TYPE_STRING,
+            required=False,
+        ),
+        openapi.Parameter(
+            name="job_location",
+            in_=openapi.IN_FORM,
+            description="R: Remote, H: Hybrid, O: Onsite (optional)",
+            type=openapi.TYPE_STRING,
+            required=False,
+        ),
     ],
     consumes=["multipart/form-data"],
     responses={
@@ -819,10 +851,10 @@ def profile_update(request):
     # Handle first_name and last_name
     user_updated = False
     if "first_name" in data:
-        user.first_name = data.pop("first_name")
+        user.first_name = data.pop("first_name")[0]
         user_updated = True
     if "last_name" in data:
-        user.last_name = data.pop("last_name")
+        user.last_name = data.pop("last_name")[0]
         user_updated = True
     if user_updated:
         user.save()
@@ -838,7 +870,7 @@ def profile_update(request):
 
         # Add new skills
         for skill_name in new_skills_set - current_skills:
-            skill, created = UserSkills.objects.get_or_create(name=skill_name)
+            skill, created = UserSkills.objects.get_or_create(name=skill_name, user=request.user)
             profile.skills.add(skill)
 
         # Remove old skills
@@ -931,9 +963,16 @@ def profile_update(request):
             required=True,
         ),
         openapi.Parameter(
-            name="First Name",
+            name="first_name",
             in_=openapi.IN_FORM,
             description="User's first name",
+            type=openapi.TYPE_STRING,
+            required=False,
+        ),
+        openapi.Parameter(
+            name="last_name",
+            in_=openapi.IN_FORM,
+            description="User's last name",
             type=openapi.TYPE_STRING,
             required=False,
         ),
@@ -995,6 +1034,7 @@ def profile_update(request):
 def onboarding(request, user_id):
     # Check if the profile exists
     user = get_object_or_404(User, id=user_id)
+    data = request.data.copy()
     if not user:
         return Response(
             {"detail": "User does not exist"}, status=status.HTTP_404_NOT_FOUND
@@ -1007,15 +1047,19 @@ def onboarding(request, user_id):
         )
 
     # Handle user fields (first_name and last_name)
-    if "first_name" in request.data:
-        user.first_name = request.data.pop("first_name")
-
-    if "last_name" in request.data:
-        user.last_name = request.data.pop("last_name")
+    user_updated = False
+    if "first_name" in data:
+        user.first_name = data.pop("first_name")[0]
+        user_updated = True
+    if "last_name" in data:
+        user.last_name = data.pop("last_name")[0]
+        user_updated = True
+    if user_updated:
+        user.save()
 
     # Handle skill updates
-    if "skills" in request.data:
-        new_skills = request.data.pop("skills")
+    if "skills" in data:
+        new_skills = data.pop("skills")
         current_skills = set(profile.skills.values_list("name", flat=True))
         new_skills_set = set(new_skills)
 
@@ -1033,7 +1077,7 @@ def onboarding(request, user_id):
 
     # Handle skill updates
     if "categories" in request.data:
-        new_categories = request.data.pop("categories")
+        new_categories = data.pop("categories")
         current_categories = set(profile.categories.values_list("name", flat=True))
         new_categories_set = set(new_categories)
 
@@ -2325,7 +2369,6 @@ def post_job_without_auth(request):
         try:
             user_id = user_data["user_id"]
             profile = Profile.objects.get(user_id=user_id)
-            print(profile.image)
 
             recommended_applicants_list.append(
                 {
