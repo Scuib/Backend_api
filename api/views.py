@@ -310,16 +310,20 @@ def login(request):
             )
         if user.auth_provider == "google":
             return Response({"error": "Use Google login"})
-        # try:
-        #     email_entry = EmailAddress.objects.get(email=email)
-        #     if not email_entry.verified:
-        #         return Response(
-        #             {"error": "Email is not verified"},
-        #             status=status.HTTP_401_UNAUTHORIZED,
-        #         )
-        # except EmailAddress.DoesNotExist:
-        #     pass
-        
+        # if not EmailAddress.objects.get(email=email).verified:
+        #     return Response(
+        #         {"error": "Email is not verified "}, status=status.HTTP_401_UNAUTHORIZED
+        #     )
+        try:
+            email_entry = EmailAddress.objects.get(email=email)
+            if not email_entry.verified:
+                return Response(
+                    {"error": "Email is not verified"},
+                    status=status.HTTP_401_UNAUTHORIZED,
+                )
+        except EmailAddress.DoesNotExist:
+            pass 
+
         if check_password(password, user.password):
             refresh = RefreshToken.for_user(user)
 
@@ -400,8 +404,18 @@ def verify_email(request):
             user.save()
             # You might also want to delete the used verification key
             unique_key.delete()
+            refresh = RefreshToken.for_user(user)
+
             return Response(
-                {"detail": _("Email verified successfully.")}, status=status.HTTP_200_OK
+                {
+                    "refresh": str(refresh),
+                    "access": str(refresh.access_token),
+                    "user_id": user.id,
+                    "first_name": user.first_name,
+                    "is_company": user.company,
+                    "has_onboarded": user.has_onboarded,
+                },
+                status=status.HTTP_200_OK,
             )
         except EmailVerication_Keys.DoesNotExist:
             return Response(
@@ -553,6 +567,7 @@ def confirm_reset_password(request, uid, key):
 
 
 """ PROFILE VIEWS """
+
 
 @swagger_auto_schema(
     method="get",
@@ -870,7 +885,9 @@ def profile_update(request):
 
         # Add new skills
         for skill_name in new_skills_set - current_skills:
-            skill, created = UserSkills.objects.get_or_create(name=skill_name, user=request.user)
+            skill, created = UserSkills.objects.get_or_create(
+                name=skill_name, user=request.user
+            )
             profile.skills.add(skill)
 
         # Remove old skills
