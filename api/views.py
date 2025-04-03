@@ -310,15 +310,15 @@ def login(request):
             )
         if user.auth_provider == "google":
             return Response({"error": "Use Google login"})
-        try:
-            email_entry = EmailAddress.objects.get(email=email)
-            if not email_entry.verified:
-                return Response(
-                    {"error": "Email is not verified"},
-                    status=status.HTTP_401_UNAUTHORIZED,
-                )
-        except EmailAddress.DoesNotExist:
-            pass
+        # try:
+        #     email_entry = EmailAddress.objects.get(email=email)
+        #     if not email_entry.verified:
+        #         return Response(
+        #             {"error": "Email is not verified"},
+        #             status=status.HTTP_401_UNAUTHORIZED,
+        #         )
+        # except EmailAddress.DoesNotExist:
+        #     pass
         
         if check_password(password, user.password):
             refresh = RefreshToken.for_user(user)
