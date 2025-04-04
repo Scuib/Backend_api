@@ -11,6 +11,7 @@ import cloudinary
 from django.core.mail import EmailMultiAlternatives
 import pandas as pd
 import json
+from django.views.decorators.csrf import csrf_exempt
 
 from .models import (
     CompanyProfile,
@@ -102,7 +103,6 @@ def register(request):
     if serialized_data.is_valid():
         user = serialized_data.save()
         EmailAddress.objects.create(user=user, email=user.email)  # type: ignore
-        # print(user.company)
 
         key, exp = VerifyEmail_key(user.id)
 
@@ -110,23 +110,15 @@ def register(request):
         context = {"user": user, "otp": key, "expirary_date": exp}
         html = template.render(context)
 
-        # subject = "Verify Your Email"
-        # from_email = settings.DEFAULT_FROM_EMAIL
-        # recipient_list = [user.email]
-
-        # msg = EmailMultiAlternatives(subject, "Your email client does not support HTML.", from_email, recipient_list)
-        # msg.attach_alternative(html, "text/html")
         params: resend.Emails.SendParams = {
-            "from": "okpe@resend.dev",
+            "from": "Godwin <godwin@scuib.com>",
             "to": [user.email],
             "subject": "VERIFY YOUR EMAIL",
             "html": html,
         }
 
         try:
-            # msg.send()
-            # r = resend.Emails.send(params)
-            pass
+            r = resend.Emails.send(params)
         except Exception as e:
             print(f"Error: {e}")
             user.delete()
@@ -136,21 +128,52 @@ def register(request):
                 },
                 status=status.HTTP_501_NOT_IMPLEMENTED,
             )
-
         return Response(
             {
                 "message": "User Registered Successfully, Check email for otp code",
                 "data": {"key": key, "exp": exp},
             },
-            status=status.HTTP_201_CREATED,
         )
-
-    print(f"Serializer Error: {serialized_data.errors}, Data: {request.data}")
 
     return Response(serialized_data.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
-# Verify Email Here
+@swagger_auto_schema(
+    method="post",
+    operation_summary="Resend Verify Email",
+    operation_description="This endpoint resends email verification code to the user",
+    request_body=openapi.Schema(
+        type=openapi.TYPE_OBJECT,
+        required=["email"],
+        properties={
+            "email": openapi.Schema(
+                type=openapi.TYPE_STRING,
+                format="email",
+                description="User's email address",
+            ),
+        },
+    ),
+    responses={
+        201: openapi.Response(
+            description="Email verification sent",
+            examples={
+                "detail": {"name": "user.first_name", "key": "key", "expires": "exp"},
+            },
+        ),
+        400: openapi.Response(
+            description="Validation error",
+            examples={
+                "application/json": {
+                    "email": ["This field is required."],
+                }
+            },
+        ),
+        401: openapi.Response(
+            description="Invalid email",
+            examples={"application/json": {"error": "Invalid email"}},
+        ),
+    },
+)
 @api_view(["POST"])
 @permission_classes([AllowAny])
 def resend_verify_email(request):
@@ -291,6 +314,15 @@ def login(request):
         #     return Response(
         #         {"error": "Email is not verified "}, status=status.HTTP_401_UNAUTHORIZED
         #     )
+        try:
+            email_entry = EmailAddress.objects.get(email=email)
+            if not email_entry.verified:
+                return Response(
+                    {"error": "Email is not verified"},
+                    status=status.HTTP_401_UNAUTHORIZED,
+                )
+        except EmailAddress.DoesNotExist:
+            pass 
 
         if check_password(password, user.password):
             refresh = RefreshToken.for_user(user)
@@ -298,8 +330,8 @@ def login(request):
             return Response(
                 {
                     "refresh": str(refresh),
-                    "access": str(refresh.access_token),  # type: ignore
-                    "user_id": user.id,  # type: ignore
+                    "access": str(refresh.access_token),
+                    "user_id": user.id,
                     "first_name": user.first_name,
                     "is_company": user.company,
                     "has_onboarded": user.has_onboarded,
@@ -347,8 +379,7 @@ def verify_email(request):
     """
     serialized_data = EmailVerifySerializer(data=request.data)
     if serialized_data.is_valid():
-        # print(serialized_data.data)
-        key = serialized_data.data["key"]  # type: ignore It works just pylance Type list errors
+        key = serialized_data.data["key"]
         try:
             unique_key = get_object_or_404(EmailVerication_Keys, key=key)
             if not unique_key:
@@ -373,8 +404,18 @@ def verify_email(request):
             user.save()
             # You might also want to delete the used verification key
             unique_key.delete()
+            refresh = RefreshToken.for_user(user)
+
             return Response(
-                {"detail": _("Email verified successfully.")}, status=status.HTTP_200_OK
+                {
+                    "refresh": str(refresh),
+                    "access": str(refresh.access_token),
+                    "user_id": user.id,
+                    "first_name": user.first_name,
+                    "is_company": user.company,
+                    "has_onboarded": user.has_onboarded,
+                },
+                status=status.HTTP_200_OK,
             )
         except EmailVerication_Keys.DoesNotExist:
             return Response(
@@ -678,24 +719,101 @@ def get_notifications(request):
             required=True,
         ),
         openapi.Parameter(
+            name="bio",
+            in_=openapi.IN_FORM,
+            description="Brief description of yourself (optional)",
+            type=openapi.TYPE_STRING,
+            required=False,
+        ),
+        openapi.Parameter(
+            name="first_name",
+            in_=openapi.IN_FORM,
+            description="User's first name (optional)",
+            type=openapi.TYPE_STRING,
+            required=False,
+        ),
+        openapi.Parameter(
+            name="last_name",
+            in_=openapi.IN_FORM,
+            description="User's Last name (optional)",
+            type=openapi.TYPE_STRING,
+            required=False,
+        ),
+        openapi.Parameter(
+            name="location",
+            in_=openapi.IN_FORM,
+            description="User's location (optional)",
+            type=openapi.TYPE_STRING,
+            required=False,
+        ),
+        openapi.Parameter(
+            name="skills",
+            in_=openapi.IN_FORM,
+            description="List of skills to update (optional)",
+            type=openapi.TYPE_STRING,
+            required=False,
+        ),
+        openapi.Parameter(
+            name="categories",
+            in_=openapi.IN_FORM,
+            description="List of categories to update (optional)",
+            type=openapi.TYPE_STRING,
+            required=False,
+        ),
+        openapi.Parameter(
             name="image",
             in_=openapi.IN_FORM,
-            description="Profile image file",
+            description="Profile image file (optional)",
             type=openapi.TYPE_FILE,
             required=False,
         ),
         openapi.Parameter(
             name="resume",
             in_=openapi.IN_FORM,
-            description="Resume file (PDF, DOCX, etc.)",
+            description="Resume file (PDF, DOCX, etc.) (optional)",
             type=openapi.TYPE_FILE,
             required=False,
         ),
         openapi.Parameter(
-            name="cover_letter",
+            name="phonenumbers",
             in_=openapi.IN_FORM,
-            description="Cover letter file",
-            type=openapi.TYPE_FILE,
+            description="User's phone number (optional)",
+            type=openapi.TYPE_STRING,
+            required=False,
+        ),
+        openapi.Parameter(
+            name="years_of_experience",
+            in_=openapi.IN_FORM,
+            description="User's years of experience in number (optional)",
+            type=openapi.TYPE_NUMBER,
+            required=False,
+        ),
+        openapi.Parameter(
+            name="min_salary",
+            in_=openapi.IN_FORM,
+            description="User's expected minimum salary in number (optional)",
+            type=openapi.TYPE_NUMBER,
+            required=False,
+        ),
+        openapi.Parameter(
+            name="max_salary",
+            in_=openapi.IN_FORM,
+            description="User's expected maximum salary in number (optional)",
+            type=openapi.TYPE_NUMBER,
+            required=False,
+        ),
+        openapi.Parameter(
+            name="employment_type",
+            in_=openapi.IN_FORM,
+            description="F: Full-Time, P: Part-Time, C: Contract (optional)",
+            type=openapi.TYPE_STRING,
+            required=False,
+        ),
+        openapi.Parameter(
+            name="job_location",
+            in_=openapi.IN_FORM,
+            description="R: Remote, H: Hybrid, O: Onsite (optional)",
+            type=openapi.TYPE_STRING,
             required=False,
         ),
     ],
@@ -732,10 +850,11 @@ def get_notifications(request):
 @parser_classes([MultiPartParser, FormParser])
 def profile_update(request):
     user = request.user
+    data = request.data.copy()
 
     # Check if email is in field
-    if "email" in request.data:
-        request.data.pop("email")
+    if "email" in data:
+        data.pop("email")
     # Check if the profile exists
     try:
         profile = Profile.objects.get(user=user)
@@ -745,35 +864,46 @@ def profile_update(request):
         )
 
     # Handle first_name and last_name
-    if "first_name" in request.data:
-        first_name = request.data.pop("first_name")
-        profile.user.first_name = first_name
-        profile.user.save()
-
-    if "last_name" in request.data:
-        last_name = request.data.pop("last_name")
-        profile.user.last_name = last_name
-        profile.user.save()
+    user_updated = False
+    if "first_name" in data:
+        user.first_name = data.pop("first_name")[0]
+        user_updated = True
+    if "last_name" in data:
+        user.last_name = data.pop("last_name")[0]
+        user_updated = True
+    if user_updated:
+        user.save()
 
     # Handle skill updates
-    if "skills" in request.data:
-        new_skills = request.data.pop("skills")
+    if "skills" in data:
+        new_skills = data.pop("skills")
+        new_skills = (
+            new_skills if isinstance(new_skills, list) else new_skills.split(",")
+        )
         current_skills = set(profile.skills.values_list("name", flat=True))
         new_skills_set = set(new_skills)
 
         # Add new skills
         for skill_name in new_skills_set - current_skills:
-            skill, created = UserSkills.objects.get_or_create(name=skill_name)
+            skill, created = UserSkills.objects.get_or_create(
+                name=skill_name, user=request.user
+            )
             profile.skills.add(skill)
 
         # Remove old skills
         for skill_name in current_skills - new_skills_set:
-            skill = UserSkills.objects.get(name=skill_name)
-            profile.skills.remove(skill)
+            skill = UserSkills.objects.filter(name=skill_name).first()
+            if skill:
+                profile.skills.remove(skill)
 
     # Handle skill updates
-    if "categories" in request.data:
-        new_categories = request.data.pop("categories")
+    if "categories" in data:
+        new_categories = data.pop("categories")
+        new_categories = (
+            new_categories
+            if isinstance(new_categories, list)
+            else new_categories.split(",")
+        )
         current_categories = set(profile.categories.values_list("name", flat=True))
         new_categories_set = set(new_categories)
 
@@ -784,8 +914,9 @@ def profile_update(request):
 
         # Remove old skills
         for category_name in current_categories - new_categories_set:
-            category = UserCategories.objects.get(name=category_name)
-            profile.categories.remove(category)
+            category = UserCategories.objects.filter(name=category_name).first()
+            if category:
+                profile.categories.remove(category)
 
     cloudinary_fields = ["image", "resume", "cover_letter"]
     for field in cloudinary_fields:
@@ -820,15 +951,13 @@ def profile_update(request):
     profile.save()
 
     # Update profile with the remaining fields
-    serialized_data = ProfileSerializer(profile, data=request.data, partial=True)
+    serialized_data = ProfileSerializer(profile, data=data, partial=True)
     if serialized_data.is_valid():
         serialized_data.save()
 
-        return Response({"_detail": "Succesful!"}, status=status.HTTP_200_OK)
+        return Response({"detail": "Succesful!"}, status=status.HTTP_200_OK)
 
-    return Response(
-        {"_detail": "An error occured!"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR
-    )
+    return Response(serialized_data.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
 @swagger_auto_schema(
@@ -851,9 +980,16 @@ def profile_update(request):
             required=True,
         ),
         openapi.Parameter(
-            name="First Name",
+            name="first_name",
             in_=openapi.IN_FORM,
             description="User's first name",
+            type=openapi.TYPE_STRING,
+            required=False,
+        ),
+        openapi.Parameter(
+            name="last_name",
+            in_=openapi.IN_FORM,
+            description="User's last name",
             type=openapi.TYPE_STRING,
             required=False,
         ),
@@ -888,8 +1024,15 @@ def profile_update(request):
         openapi.Parameter(
             name="years_of_experience",
             in_=openapi.IN_FORM,
-            description="Years of experience(optional)",
+            description="Years of experience in number (optional)",
             type=openapi.TYPE_NUMBER,
+            required=False,
+        ),
+        openapi.Parameter(
+            name="experience_level",
+            in_=openapi.IN_FORM,
+            description="Experience level can be Entry, Mid, Senior, Lead (optional)",
+            type=openapi.TYPE_STRING,
             required=False,
         ),
     ],
@@ -915,6 +1058,7 @@ def profile_update(request):
 def onboarding(request, user_id):
     # Check if the profile exists
     user = get_object_or_404(User, id=user_id)
+    data = request.data.copy()
     if not user:
         return Response(
             {"detail": "User does not exist"}, status=status.HTTP_404_NOT_FOUND
@@ -927,15 +1071,19 @@ def onboarding(request, user_id):
         )
 
     # Handle user fields (first_name and last_name)
-    if "first_name" in request.data:
-        user.first_name = request.data.pop("first_name")
-
-    if "last_name" in request.data:
-        user.last_name = request.data.pop("last_name")
+    user_updated = False
+    if "first_name" in data:
+        user.first_name = data.pop("first_name")[0]
+        user_updated = True
+    if "last_name" in data:
+        user.last_name = data.pop("last_name")[0]
+        user_updated = True
+    if user_updated:
+        user.save()
 
     # Handle skill updates
-    if "skills" in request.data:
-        new_skills = request.data.pop("skills")
+    if "skills" in data:
+        new_skills = data.pop("skills")
         current_skills = set(profile.skills.values_list("name", flat=True))
         new_skills_set = set(new_skills)
 
@@ -953,7 +1101,7 @@ def onboarding(request, user_id):
 
     # Handle skill updates
     if "categories" in request.data:
-        new_categories = request.data.pop("categories")
+        new_categories = data.pop("categories")
         current_categories = set(profile.categories.values_list("name", flat=True))
         new_categories_set = set(new_categories)
 
@@ -1552,6 +1700,7 @@ def jobs_user(request):
         job_data = {
             "job": {
                 "job_id": job.id,
+                "title": job.title,
                 "description": job.description,
                 "location": job.location,
                 "role": job.categories,
@@ -1580,6 +1729,9 @@ def jobs_user(request):
                 "last_name": applicant_user.last_name or "",
                 "email": applicant_user.email,
                 "phonenumber": profile.phonenumbers,
+                "user_bio": profile.bio,
+                "location": profile.location,
+                "job_location_choice": profile.job_location,
                 "image": profile.image.url if profile.image else None,
                 "skills": list(profile.skills.values_list("name", flat=True)),
                 "categories": list(profile.categories.values_list("name", flat=True)),
@@ -1680,17 +1832,68 @@ def company(request):
             type=openapi.TYPE_STRING,
             required=True,
         ),
+        openapi.Parameter(
+            name="company_name",
+            in_=openapi.IN_FORM,
+            description="Name of the company",
+            type=openapi.TYPE_STRING,
+            required=False,
+        ),
+        openapi.Parameter(
+            name="address",
+            in_=openapi.IN_FORM,
+            description="Address of the company",
+            type=openapi.TYPE_STRING,
+            required=False,
+        ),
+        openapi.Parameter(
+            name="website",
+            in_=openapi.IN_FORM,
+            description="Website of the company",
+            type=openapi.TYPE_STRING,
+            required=False,
+        ),
+        openapi.Parameter(
+            name="description",
+            in_=openapi.IN_FORM,
+            description="Short description of the company",
+            type=openapi.TYPE_STRING,
+            required=False,
+        ),
+        openapi.Parameter(
+            name="phone_number",
+            in_=openapi.IN_FORM,
+            description="Phone number of the company",
+            type=openapi.TYPE_STRING,
+            required=False,
+        ),
+        openapi.Parameter(
+            name="image",
+            in_=openapi.IN_FORM,
+            description="Profile image (file upload)",
+            type=openapi.TYPE_FILE,
+            required=False,
+        ),
     ],
-    request_body=CompanyProfileSerializer,
+    consumes=["multipart/form-data"],
     responses={
-        200: CompanySerializer,
-        400: openapi.Response("Invalid request data."),
-        403: openapi.Response("Permission denied."),
-        404: openapi.Response("Company profile not found."),
+        200: openapi.Response(
+            description="Profile updated successfully",
+            examples={"application/json": {"_detail": "Successful!"}},
+        ),
+        404: openapi.Response(
+            description="User or profile does not exist",
+            examples={"application/json": {"detail": "Profile does not exist"}},
+        ),
+        500: openapi.Response(
+            description="An error occurred while updating the profile",
+            examples={"application/json": {"_detail": "An error occurred!"}},
+        ),
     },
 )
 @api_view(["PUT"])
 @permission_classes([IsAuthenticated])
+@parser_classes([MultiPartParser, FormParser])
 def company_update(request):
     user = request.user
     try:
@@ -1705,16 +1908,40 @@ def company_update(request):
             {"error": "You do not have permission to edit this profile."},
             status=status.HTTP_403_FORBIDDEN,
         )
-
     serializer = CompanyProfileSerializer(
         company_profile, data=request.data, partial=True
     )
-    if serializer.is_valid():
-        serializer.save()
-        user.has_onboarded = True
-        user.save()
-        return Response(serializer.data, status=status.HTTP_200_OK)
-    return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+    if not serializer.is_valid():
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+    # Handle image AFTER validation
+    if "image" in request.FILES:
+        # Validate file
+        image_file = request.FILES["image"]
+        if image_file.size > 5 * 1024 * 1024:  # 5MB limit
+            return Response({"error": "File too large"}, status=400)
+        # Delete old image
+        existing_file = getattr(company_profile, "image", None)
+        if existing_file:
+            try:
+                cloudinary.uploader.destroy(existing_file.public_id)
+            except Exception as e:
+                print(f"Failed to delete old image: {e}")
+
+        # Upload new image
+        upload_result = cloudinary.uploader.upload(
+            image_file,
+            folder="company_profile",
+            resource_type="image",
+        )
+        company_profile.image = upload_result["secure_url"]
+        company_profile.save()
+
+    # Save other fields
+    serializer.save()
+    user.has_onboarded = True
+    user.save()
+    return Response(serializer.data, status=status.HTTP_200_OK)
 
 
 @api_view(["DELETE"])
@@ -1748,6 +1975,7 @@ def waitlist(request):
 
 
 """ PAYMENT """
+
 
 @api_view(["POST"])
 @permission_classes([IsAuthenticated])
@@ -1901,6 +2129,65 @@ def all_profiles(request):
 
 
 @swagger_auto_schema(
+    method="delete",
+    operation_summary="Delete a User by Admin",
+    operation_description="Allows an admin to delete a user by providing the user's ID.",
+    manual_parameters=[
+        openapi.Parameter(
+            name="Authorization",
+            in_=openapi.IN_HEADER,
+            description="Bearer {token}",
+            type=openapi.TYPE_STRING,
+            required=True,
+        ),
+        openapi.Parameter(
+            name="user_id",
+            in_=openapi.IN_QUERY,
+            description="ID of the user to delete",
+            type=openapi.TYPE_INTEGER,
+            required=True,
+        ),
+    ],
+    responses={
+        204: openapi.Response(
+            description="User successfully deleted",
+        ),
+        404: openapi.Response(
+            description="User not found",
+            examples={"application/json": {"detail": "User not found"}},
+        ),
+        400: openapi.Response(
+            description="Bad Request",
+            examples={"application/json": {"detail": "Missing user_id parameter"}},
+        ),
+    },
+)
+@api_view(["DELETE"])
+@permission_classes([IsAdminUser])
+def delete_user(request):
+    """Allows an admin to delete a user by ID"""
+    user_id = request.query_params.get("user_id")
+
+    if not user_id:
+        return Response(
+            {"detail": "Missing user_id parameter"},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+    try:
+        user = User.objects.get(id=user_id)
+        user.delete()
+        return Response(
+            {"detail": "User deleted successfully"},
+            status=status.HTTP_204_NO_CONTENT,
+        )
+    except User.DoesNotExist:
+        return Response(
+            {"detail": "User not found"},
+            status=status.HTTP_404_NOT_FOUND,
+        )
+
+
+@swagger_auto_schema(
     method="post",
     operation_summary="Google Login",
     operation_description="This endpoint allows users to log in via google.",
@@ -1941,6 +2228,7 @@ def all_profiles(request):
         ),
     },
 )
+@csrf_exempt
 @api_view(["POST"])
 @permission_classes([AllowAny])
 def google_auth(request):
@@ -1954,11 +2242,11 @@ def google_auth(request):
     last_name = serializer.validated_data["last_name"]
     try:
         user = User.objects.get(email=email)
-        if user.auth_provider != "google":
-            return Response(
-                {"error": "Please login using your email and password"},
-                status=status.HTTP_401_UNAUTHORIZED,
-            )
+        # if user.auth_provider != "google":
+        #     return Response(
+        #         {"error": "Please login using your email and password"},
+        #         status=status.HTTP_401_UNAUTHORIZED,
+        #     )
     except User.DoesNotExist:
         user_data = {
             "email": email,
@@ -1966,13 +2254,13 @@ def google_auth(request):
             "last_name": last_name,
             "password": settings.SOCIAL_SECRET_KEY,
             "password2": settings.SOCIAL_SECRET_KEY,
-            "auth_provider": "google",
         }
 
         user_serializer = UserSerializer(data=user_data)
         if user_serializer.is_valid():
             user = user_serializer.save()
             user.verified = True
+            user.auth_provider = "google"
             user.save()
         else:
             return Response(user_serializer.errors, status=400)
@@ -1987,7 +2275,8 @@ def google_auth(request):
             "first_name": user.first_name,
             "is_company": user.company,
             "has_onboarded": user.has_onboarded,
-        }
+        },
+        status=status.HTTP_200_OK,
     )
 
 
@@ -2104,7 +2393,6 @@ def post_job_without_auth(request):
         try:
             user_id = user_data["user_id"]
             profile = Profile.objects.get(user_id=user_id)
-            print(profile.image)
 
             recommended_applicants_list.append(
                 {
@@ -2198,3 +2486,60 @@ def update_company_status(request):
         {"detail": "Company status updated successfully.", "company": user.company},
         status=status.HTTP_200_OK,
     )
+
+
+@swagger_auto_schema(
+    method="get",
+    operation_summary="Get Profile Name and Picture only",
+    operation_description="Returns the profile picture and name of the authenticated user",
+    manual_parameters=[
+        openapi.Parameter(
+            name="Authorization",
+            in_=openapi.IN_HEADER,
+            description="Bearer {token}",
+            type=openapi.TYPE_STRING,
+            required=True,
+        ),
+    ],
+    responses={
+        200: openapi.Response(
+            description="Authenticated user profile retrieved successfully",
+            examples={
+                "application/json": {
+                    "data": {
+                        "first_name": "John",
+                        "last_name": "Doe",
+                        "image": "https://example.com/image.jpg",
+                    }
+                }
+            },
+        ),
+        404: openapi.Response(
+            description="Profile not found",
+            examples={"application/json": {"detail": "Not found"}},
+        ),
+    },
+)
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def profile_header(request):
+    # Check if the profile exists
+    try:
+        user = User.objects.get(id=request.user.id)
+        if not user.company:
+            profile = Profile.objects.get(user=user)
+            data = {
+                "first_name": user.first_name,
+                "last_name": user.last_name,
+                "profile_pic": profile.image.url if profile.image else None,
+            }
+        else:
+            company = CompanyProfile.objects.get(owner=user)
+            data = {
+                "company_name": company.company_name,
+                "profile_pic": company.image.url if company.image else None,
+            }
+    except User.DoesNotExist:
+        return Response(status=status.HTTP_404_NOT_FOUND)
+
+    return Response(data, status=status.HTTP_200_OK)

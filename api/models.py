@@ -127,6 +127,7 @@ class CompanyProfile(models.Model):
     description = models.TextField(blank=True, null=True)
     phone_number = models.CharField(max_length=24, blank=True, null=True)
     company_name = models.CharField(max_length=60, blank=True, null=True)
+    image = CloudinaryField("image", null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
