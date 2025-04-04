@@ -322,7 +322,7 @@ def login(request):
                     status=status.HTTP_401_UNAUTHORIZED,
                 )
         except EmailAddress.DoesNotExist:
-            pass 
+            pass
 
         if check_password(password, user.password):
             refresh = RefreshToken.for_user(user)
@@ -1400,7 +1400,7 @@ def job_create(request):
                 status=status.HTTP_201_CREATED,
             )
 
-        # Get top 5 matching applicants using the recommendation function
+        # Get matching applicants using the recommendation function
         recommended_users = matcher.recommend_users(job_data, user_profiles)
 
         # Prepare notification
@@ -1408,11 +1408,17 @@ def job_create(request):
             "id": str(uuid4()),
             "type": "job",
             "message": "You have been matched to a job",
-            "datetime": timezone.now().isoformat(),
+            "created_at": timezone.now().isoformat(),
             "details": {
+                "recruiter": job_instance.owner.company_profile.company_name,
+                "recruiter_email": job_instance.owner.email,
                 "job_name": job_instance.title,
                 "job_description": job_instance.description,
                 "job_skills": job_skills,
+                "experience_level": job_instance.experience_level,
+                "years_of_experience": job_instance.years_of_experience,
+                "max_salary": job_instance.max_salary,
+                "min_salary": job_instance.min_salary,
             },
         }
 
