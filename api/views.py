@@ -1024,8 +1024,15 @@ def profile_update(request):
         openapi.Parameter(
             name="years_of_experience",
             in_=openapi.IN_FORM,
-            description="Years of experience(optional)",
+            description="Years of experience in number (optional)",
             type=openapi.TYPE_NUMBER,
+            required=False,
+        ),
+        openapi.Parameter(
+            name="experience_level",
+            in_=openapi.IN_FORM,
+            description="Experience level can be Entry, Mid, Senior, Lead (optional)",
+            type=openapi.TYPE_STRING,
             required=False,
         ),
     ],
