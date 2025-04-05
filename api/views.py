@@ -131,7 +131,7 @@ def register(request):
         return Response(
             {
                 "message": "User Registered Successfully, Check email for otp code",
-                "data": {"key": key, "exp": exp},
+                "data": {"key": key, "exp": exp, "is_Verified": user.verified},
             },
         )
 
@@ -335,6 +335,7 @@ def login(request):
                     "first_name": user.first_name,
                     "is_company": user.company,
                     "has_onboarded": user.has_onboarded,
+                    "is_verified": user.verified,
                 }
             )
         else:
@@ -414,6 +415,7 @@ def verify_email(request):
                     "first_name": user.first_name,
                     "is_company": user.company,
                     "has_onboarded": user.has_onboarded,
+                    "is_Verified": user.verified,
                 },
                 status=status.HTTP_200_OK,
             )
@@ -813,6 +815,27 @@ def get_notifications(request):
             name="job_location",
             in_=openapi.IN_FORM,
             description="R: Remote, H: Hybrid, O: Onsite (optional)",
+            type=openapi.TYPE_STRING,
+            required=False,
+        ),
+        openapi.Parameter(
+            name="github",
+            in_=openapi.IN_FORM,
+            description="User's github url (optional)",
+            type=openapi.TYPE_STRING,
+            required=False,
+        ),
+        openapi.Parameter(
+            name="linkedin",
+            in_=openapi.IN_FORM,
+            description="User's linkedin url (optional)",
+            type=openapi.TYPE_STRING,
+            required=False,
+        ),
+        openapi.Parameter(
+            name="twitter",
+            in_=openapi.IN_FORM,
+            description="User's twitter url (optional)",
             type=openapi.TYPE_STRING,
             required=False,
         ),
@@ -2267,6 +2290,12 @@ def google_auth(request):
             user = user_serializer.save()
             user.verified = True
             user.auth_provider = "google"
+            EmailAddress.objects.create(
+                user=user,
+                email=user.email,
+                verified=True,
+                primary=True
+            )
             user.save()
         else:
             return Response(user_serializer.errors, status=400)
@@ -2281,6 +2310,7 @@ def google_auth(request):
             "first_name": user.first_name,
             "is_company": user.company,
             "has_onboarded": user.has_onboarded,
+            "is_verified": user.verified
         },
         status=status.HTTP_200_OK,
     )
