@@ -107,7 +107,7 @@ class Profile(models.Model):
         max_length=10, choices=ExperienceLevel.choices, default=ExperienceLevel.ENTRY
     )
     years_of_experience = models.IntegerField(default=1)
-    resume = CloudinaryField("resume", null=True, blank=True)
+    resume = CloudinaryField("resume", resource_type="raw", null=True, blank=True)
     cover_letter = CloudinaryField("cover_letter", null=True, blank=True)
     image = CloudinaryField("image", null=True, blank=True)
 

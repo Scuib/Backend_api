@@ -845,6 +845,13 @@ def get_notifications(request):
             type=openapi.TYPE_STRING,
             required=False,
         ),
+        openapi.Parameter(
+            name="portfolio",
+            in_=openapi.IN_FORM,
+            description="User's portfolio url (optional)",
+            type=openapi.TYPE_STRING,
+            required=False,
+        ),
     ],
     consumes=["multipart/form-data"],
     responses={
@@ -975,14 +982,16 @@ def profile_update(request):
                 folder = "profile_docs/"
                 resource_type = "raw"
 
+            file_name = uploaded_file.name
             # Upload new file
             try:
+                uploaded_file.seek(0)  # Reset file pointer
+                file_bytes = uploaded_file.read()
                 upload_result = cloudinary.uploader.upload(
-                    uploaded_file,
+                    (file_name, file_bytes),
                     folder=folder,
                     resource_type=resource_type,
                 )
-                # Save the file URL to the profile
                 setattr(profile, field, upload_result["secure_url"])
             except cloudinary.exceptions.Error as e:
                 return Response(
@@ -1183,14 +1192,16 @@ def onboarding(request, user_id):
                 folder = "profile_docs/"
                 resource_type = "raw"
 
+            file_name = uploaded_file.name
             # Upload new file
             try:
+                uploaded_file.seek(0)  # Reset file pointer
+                file_bytes = uploaded_file.read()
                 upload_result = cloudinary.uploader.upload(
-                    uploaded_file,
+                    (file_name, file_bytes),
                     folder=folder,
                     resource_type=resource_type,
                 )
-                # Save the file URL to the profile
                 setattr(profile, field, upload_result["secure_url"])
             except cloudinary.exceptions.Error as e:
                 return Response(
