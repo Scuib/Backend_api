@@ -467,15 +467,52 @@ def reset_password(request):
     Send (uid, token) in a url
     """
     data = request.data
-    if data:
+    if data and "email" in data:
+        result = ResetPassword_key(email=data["email"])
+        if not result:
+            return Response(
+                {"errors": "User with this email does not exist."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
 
-        key, uid = ResetPassword_key(email=data["email"])  # type: ignore pylance warning
+        key, uid = result
+        user = get_object_or_404(User, email=data["email"])
+        exp = timezone.now() + timezone.timedelta(hours=1)
+
+        # Load and render the HTML email
+        template = get_template("password_reset/password_reset.html")
+        context = {
+            "user": user,
+            "key": key,
+            "uid": uid,
+            "expiry_date": exp.strftime("%Y-%m-%d %H:%M:%S"),
+        }
+        html = template.render(context)
+
+        # Build params for Resend
+        params: resend.Emails.SendParams = {
+            "from": "Scuibai <godwin@scuib.com>",
+            "to": [user.email],
+            "subject": "Reset Your Password",
+            "html": html,
+        }
+
+        try:
+            r = resend.Emails.send(params)
+        except Exception as e:
+            return Response(
+                {"errors": f"Failed to send email: {str(e)}"},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
 
         return Response(
-            {"detail": {"uid": uid, "key": key}}, status=status.HTTP_201_CREATED
+            {"detail": "Password reset link sent to email."},
+            status=status.HTTP_200_OK,
         )
+
     return Response(
-        {"errors": "Something went wrong!"}, status=status.HTTP_400_BAD_REQUEST
+        {"errors": "Email is required."},
+        status=status.HTTP_400_BAD_REQUEST,
     )
 
 
@@ -2213,7 +2250,7 @@ def all_profiles(request):
         ),
         openapi.Parameter(
             name="user_id",
-            in_=openapi.IN_QUERY,
+            in_=openapi.IN_PATH,
             description="ID of the user to delete",
             type=openapi.TYPE_INTEGER,
             required=True,
@@ -2235,27 +2272,14 @@ def all_profiles(request):
 )
 @api_view(["DELETE"])
 @permission_classes([IsAdminUser])
-def delete_user(request):
+def delete_user_by_admin(request, user_id):
     """Allows an admin to delete a user by ID"""
-    user_id = request.query_params.get("user_id")
-
-    if not user_id:
-        return Response(
-            {"detail": "Missing user_id parameter"},
-            status=status.HTTP_400_BAD_REQUEST,
-        )
-    try:
-        user = User.objects.get(id=user_id)
-        user.delete()
-        return Response(
-            {"detail": "User deleted successfully"},
-            status=status.HTTP_204_NO_CONTENT,
-        )
-    except User.DoesNotExist:
-        return Response(
-            {"detail": "User not found"},
-            status=status.HTTP_404_NOT_FOUND,
-        )
+    user = get_object_or_404(User, id=user_id)
+    user.delete()
+    return Response(
+        {"detail": "User deleted successfully"},
+        status=status.HTTP_204_NO_CONTENT,
+    )
 
 
 @swagger_auto_schema(
