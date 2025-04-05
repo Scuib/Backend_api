@@ -111,7 +111,7 @@ def register(request):
         html = template.render(context)
 
         params: resend.Emails.SendParams = {
-            "from": "Godwin <godwin@scuib.com>",
+            "from": "Scuibai <godwin@scuib.com>",
             "to": [user.email],
             "subject": "VERIFY YOUR EMAIL",
             "html": html,
@@ -131,7 +131,12 @@ def register(request):
         return Response(
             {
                 "message": "User Registered Successfully, Check email for otp code",
-                "data": {"key": key, "exp": exp, "is_Verified": user.verified},
+                "data": {
+                    "key": key,
+                    "exp": exp,
+                    "is_Verified": user.verified,
+                    "email": user.email,
+                },
             },
         )
 
@@ -336,6 +341,7 @@ def login(request):
                     "is_company": user.company,
                     "has_onboarded": user.has_onboarded,
                     "is_verified": user.verified,
+                    "email": user.email,
                 }
             )
         else:
@@ -941,9 +947,18 @@ def profile_update(request):
             if category:
                 profile.categories.remove(category)
 
+    MAX_FILE_SIZE = 5 * 1024 * 1024
     cloudinary_fields = ["image", "resume", "cover_letter"]
     for field in cloudinary_fields:
         if field in request.FILES:
+            uploaded_file = request.FILES[field]
+
+            # Check file size before attempting upload
+            if uploaded_file.size > MAX_FILE_SIZE:
+                return Response(
+                    {"detail": f"{field} exceeds 5MB size limit."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
             # Delete old file if exists
             existing_file = getattr(profile, field)
             if existing_file:
@@ -961,15 +976,19 @@ def profile_update(request):
                 resource_type = "raw"
 
             # Upload new file
-            upload_result = cloudinary.uploader.upload(
-                request.FILES[field],
-                folder=folder,
-                resource_type=resource_type,  # Use 'raw' for PDFs, 'image' for images
-            )
-
-            # Save the file URL to the profile
-            setattr(profile, field, upload_result["secure_url"])
-
+            try:
+                upload_result = cloudinary.uploader.upload(
+                    uploaded_file,
+                    folder=folder,
+                    resource_type=resource_type,
+                )
+                # Save the file URL to the profile
+                setattr(profile, field, upload_result["secure_url"])
+            except cloudinary.exceptions.Error as e:
+                return Response(
+                    {"detail": f"Upload failed for {field}: {str(e)}"},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
     # Save the updated profile
     profile.save()
 
@@ -1082,10 +1101,6 @@ def onboarding(request, user_id):
     # Check if the profile exists
     user = get_object_or_404(User, id=user_id)
     data = request.data.copy()
-    if not user:
-        return Response(
-            {"detail": "User does not exist"}, status=status.HTTP_404_NOT_FOUND
-        )
     try:
         profile = Profile.objects.get(user=user)
     except Profile.DoesNotExist:
@@ -1119,11 +1134,12 @@ def onboarding(request, user_id):
 
         # Remove old skills
         for skill_name in current_skills - new_skills_set:
-            skill = UserSkills.objects.get(name=skill_name)
-            profile.skills.remove(skill)
+            skill = UserSkills.objects.filter(name=skill_name).first()
+            if skill:
+                profile.skills.remove(skill)
 
     # Handle skill updates
-    if "categories" in request.data:
+    if "categories" in data:
         new_categories = data.pop("categories")
         current_categories = set(profile.categories.values_list("name", flat=True))
         new_categories_set = set(new_categories)
@@ -1135,12 +1151,22 @@ def onboarding(request, user_id):
 
         # Remove old skills
         for category_name in current_categories - new_categories_set:
-            category = UserCategories.objects.get(name=category_name)
-            profile.categories.remove(category)
+            category = UserCategories.objects.filter(name=category_name).first()
+            if category:
+                profile.categories.remove(category)
 
+    MAX_FILE_SIZE = 5 * 1024 * 1024
     cloudinary_fields = ["image", "resume"]
     for field in cloudinary_fields:
         if field in request.FILES:
+            uploaded_file = request.FILES[field]
+
+            # Check file size before attempting upload
+            if uploaded_file.size > MAX_FILE_SIZE:
+                return Response(
+                    {"detail": f"{field} exceeds 5MB size limit."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
             # Delete old file if exists
             existing_file = getattr(profile, field)
             if existing_file:
@@ -1158,14 +1184,19 @@ def onboarding(request, user_id):
                 resource_type = "raw"
 
             # Upload new file
-            upload_result = cloudinary.uploader.upload(
-                request.FILES[field],
-                folder=folder,
-                resource_type=resource_type,  # Use 'raw' for PDFs, 'image' for images
-            )
-
-            # Save the file URL to the profile
-            setattr(profile, field, upload_result["secure_url"])
+            try:
+                upload_result = cloudinary.uploader.upload(
+                    uploaded_file,
+                    folder=folder,
+                    resource_type=resource_type,
+                )
+                # Save the file URL to the profile
+                setattr(profile, field, upload_result["secure_url"])
+            except cloudinary.exceptions.Error as e:
+                return Response(
+                    {"detail": f"Upload failed for {field}: {str(e)}"},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
     profile.save()
 
     # Update profile with the remaining fields
@@ -2291,10 +2322,7 @@ def google_auth(request):
             user.verified = True
             user.auth_provider = "google"
             EmailAddress.objects.create(
-                user=user,
-                email=user.email,
-                verified=True,
-                primary=True
+                user=user, email=user.email, verified=True, primary=True
             )
             user.save()
         else:
@@ -2310,7 +2338,8 @@ def google_auth(request):
             "first_name": user.first_name,
             "is_company": user.company,
             "has_onboarded": user.has_onboarded,
-            "is_verified": user.verified
+            "is_verified": user.verified,
+            "email": user.email,
         },
         status=status.HTTP_200_OK,
     )
