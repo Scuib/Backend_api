@@ -1248,7 +1248,7 @@ def onboarding(request, user_id):
     profile.save()
 
     # Update profile with the remaining fields
-    serialized_data = ProfileSerializer(profile, data=request.data, partial=True)
+    serialized_data = ProfileSerializer(profile, data=data, partial=True)
     if serialized_data.is_valid():
         serialized_data.save()
         user.has_onboarded = True
