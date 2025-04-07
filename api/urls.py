@@ -42,8 +42,17 @@ urlpatterns = [
     path("notifications/", views.get_notifications, name="notifications"),
     path("users/", views.list_users, name="get all users"),
     path("profiles/", views.all_profiles, name="get all profiles"),
-    path("users/<int:user_id>/", views.delete_user_by_admin, name="Delete a user by admin"),
-    path("create-job/", views.post_job_without_auth, name="Test job creation without login"),
+    path(
+        "users/<int:user_id>/",
+        views.delete_user_by_admin,
+        name="Delete a user by admin",
+    ),
+    path(
+        "create-job/",
+        views.post_job_without_auth,
+        name="Test job creation without login",
+    ),
     path("company-status/", views.update_company_status, name="Set company status"),
     path("profile/headers/", views.profile_header, name="Get profile header"),
+    path("contact/", views.contact_us, name="Contact us"),
 ]

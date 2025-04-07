@@ -1141,7 +1141,7 @@ def profile_update(request):
     },
 )
 @api_view(["PUT"])
-@permission_classes([AllowAny])
+@permission_classes([IsAuthenticated])
 @parser_classes([MultiPartParser, FormParser])
 def onboarding(request, user_id):
     # Check if the profile exists
@@ -1256,9 +1256,7 @@ def onboarding(request, user_id):
 
         return Response({"detail": "Succesful!"}, status=status.HTTP_200_OK)
 
-    return Response(
-        {"detail": "An error occured!"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR
-    )
+    return Response(serialized_data.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
 # Delete Authenticated User
@@ -2643,3 +2641,70 @@ def profile_header(request):
         return Response(status=status.HTTP_404_NOT_FOUND)
 
     return Response(data, status=status.HTTP_200_OK)
+
+
+@swagger_auto_schema(
+    method="post",
+    operation_summary="Get Message from the Frontend",
+    operation_description="Receive message from the frontend and send it to the admin user",
+    request_body=openapi.Schema(
+        type=openapi.TYPE_OBJECT,
+        required=["name", "email", "message"],
+        properties={
+            "name": openapi.Schema(
+                type=openapi.TYPE_STRING, description="Name of the sender"
+            ),
+            "email": openapi.Schema(
+                type=openapi.TYPE_STRING,
+                format=openapi.FORMAT_EMAIL,
+                description="Email of the sender",
+            ),
+            "message": openapi.Schema(
+                type=openapi.TYPE_STRING, description="Message content"
+            ),
+        },
+    ),
+    responses={
+        200: openapi.Response(description="Message sent successfully."),
+        400: openapi.Response(description="Missing or invalid fields."),
+        500: openapi.Response(description="Failed to send message."),
+    },
+)
+@api_view(["POST"])
+@permission_classes([AllowAny])
+def contact_us(request):
+    name = request.data.get("name")
+    email = request.data.get("email")
+    message = request.data.get("message")
+
+    if not name or not email or not message:
+        return Response(
+            {"detail": "Name, email, and message are required."}, status=400
+        )
+
+    # Render the HTML email using a Django template
+    template = get_template("contact/contact_email.html")
+    context = {
+        "name": name,
+        "email": email,
+        "message": message,
+    }
+    html = template.render(context)
+
+    params: resend.Emails.SendParams = {
+        "from": "Scuibai <admin@scuib.com>",
+        "to": ["scuib.com@gmail.com", "okpephillips.dev@gmail.com"],
+        "subject": f"New Contact Form Message from {name}",
+        "html": html,
+    }
+
+    try:
+        resend.Emails.send(params)
+        return Response(
+            {"detail": "Message sent successfully!"}, status=status.HTTP_200_OK
+        )
+    except Exception as e:
+        print(f"Contact form error: {e}")
+        return Response(
+            {"detail": "Failed to send message. Please try again."}, status=500
+        )
