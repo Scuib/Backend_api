@@ -491,7 +491,7 @@ def reset_password(request):
 
         # Build params for Resend
         params: resend.Emails.SendParams = {
-            "from": "Scuibai <godwin@scuib.com>",
+            "from": "Scuibai <Admin@scuib.com>",
             "to": [user.email],
             "subject": "Reset Your Password",
             "html": html,
@@ -845,6 +845,13 @@ def get_notifications(request):
             in_=openapi.IN_FORM,
             description="User's expected maximum salary in number (optional)",
             type=openapi.TYPE_NUMBER,
+            required=False,
+        ),
+        openapi.Parameter(
+            name="currency",
+            in_=openapi.IN_FORM,
+            description="User's currency type (optional)",
+            type=openapi.TYPE_STRING,
             required=False,
         ),
         openapi.Parameter(

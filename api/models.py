@@ -33,6 +33,7 @@ class User(AbstractUser):
     REQUIRED_FIELDS = ["first_name"]
 
     objects = CustomUserManager()
+
     def __str__(self) -> str:
         return self.email
 
@@ -91,8 +92,9 @@ class Profile(models.Model):
         choices=JobEmploymentChoices.choices,
         default=JobEmploymentChoices.Full_Time,
     )
-    max_salary = models.IntegerField(default=100)
+    max_salary = models.IntegerField(default=10)
     min_salary = models.IntegerField(default=10)
+    currency = models.CharField(max_length=20, blank=True, null=True)
     phonenumbers = models.CharField(max_length=255, blank=True, null=True)
     github = models.CharField(max_length=100, null=True, blank=True)
     portfolio = models.CharField(max_length=100, null=True, blank=True)
@@ -108,7 +110,9 @@ class Profile(models.Model):
     )
     years_of_experience = models.IntegerField(default=1)
     resume = CloudinaryField("resume", resource_type="raw", null=True, blank=True)
-    cover_letter = CloudinaryField("cover_letter", null=True, blank=True)
+    cover_letter = CloudinaryField(
+        "cover_letter", resource_type="raw", null=True, blank=True
+    )
     image = CloudinaryField("image", null=True, blank=True)
 
     def __str__(self):
@@ -181,6 +185,7 @@ class Jobs(models.Model):
         usd = "USD", "United States Dollar"
         ngn = "NGN", "Nigerian Naira"
         eur = "EUR", "Euros"
+        gbp = "GBP", "Great Britain Pounds"
 
     class EmploymentType(models.TextChoices):
         REMOTE = "R", "Remote"
