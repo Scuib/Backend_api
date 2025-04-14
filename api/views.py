@@ -1540,6 +1540,8 @@ def job_create(request):
                 applicant, created = Applicant.objects.get_or_create(
                     job=job_instance, user=profile.user
                 )
+                applicant.match_score = user_data["match_score"]
+                applicant.save()
 
                 # Collect recommended applicant info
                 recommended_applicants_list.append(
@@ -1849,6 +1851,7 @@ def jobs_user(request):
                 "skills": list(profile.skills.values_list("name", flat=True)),
                 "categories": list(profile.categories.values_list("name", flat=True)),
                 "experience": profile.years_of_experience,
+                "match_score": applicant.match_score,
             }
             job_data["applicants"].append(applicant_data)
 

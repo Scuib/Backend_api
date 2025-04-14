@@ -225,6 +225,7 @@ class Applicant(models.Model):
         User, on_delete=models.CASCADE, related_name="applications"
     )
     job = models.ForeignKey(Jobs, on_delete=models.CASCADE, related_name="applicants")
+    match_score = models.FloatField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
