@@ -118,6 +118,7 @@ class DisplayProfileSerializer(ModelSerializer):
             "max_salary",
             "years_of_experience",
             "phonenumbers",
+            "currency",
             "github",
             "portfolio",
             "linkedin",
