@@ -94,7 +94,7 @@ class Profile(models.Model):
     )
     max_salary = models.IntegerField(default=10)
     min_salary = models.IntegerField(default=10)
-    currency = models.CharField(max_length=20, blank=True, null=True)
+    currency = models.CharField(max_length=20, default="USD")
     phonenumbers = models.CharField(max_length=255, blank=True, null=True)
     github = models.CharField(max_length=100, null=True, blank=True)
     portfolio = models.CharField(max_length=100, null=True, blank=True)

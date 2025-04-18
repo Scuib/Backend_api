@@ -1554,6 +1554,7 @@ def job_create(request):
                         "match_score": user_data["match_score"],
                         "years_of_experience": profile.years_of_experience,
                         "salary_range": user_data["salary_range"],
+                        "currency": profile.currency,
                         "location": profile.location,
                         "employment_choice": profile.employment_type,
                         "job_location_choice": profile.job_location,
