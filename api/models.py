@@ -205,9 +205,8 @@ class Jobs(models.Model):
     skills = models.ManyToManyField(JobSkills)
     max_salary = models.IntegerField(default=5000)
     min_salary = models.IntegerField(default=0)
-    currency_type = models.CharField(
-        max_length=30, choices=CurrencyChoices.choices, default=CurrencyChoices.ngn
-    )
+    currency_type = models.CharField(max_length=30, default="USD")
+
     employment_type = models.CharField(max_length=20, choices=EmploymentType.choices)
     experience_level = models.CharField(
         max_length=10, choices=ExperienceLevel.choices, default=ExperienceLevel.ENTRY

@@ -2719,3 +2719,53 @@ def contact_us(request):
         return Response(
             {"detail": "Failed to send message. Please try again."}, status=500
         )
+
+
+@swagger_auto_schema(
+    method="get",
+    operation_summary="Count users in the database by Admin",
+    operation_description="Allows an admin to know how many users are on the platform.",
+    manual_parameters=[
+        openapi.Parameter(
+            name="Authorization",
+            in_=openapi.IN_HEADER,
+            description="Bearer {token}",
+            type=openapi.TYPE_STRING,
+            required=True,
+        ),
+    ],
+    responses={
+        204: openapi.Response(
+            description="Count of users in the database",
+        ),
+        404: openapi.Response(
+            description="No users found",
+            examples={"application/json": {"detail": "Users not found"}},
+        ),
+    },
+)
+@api_view(["GET"])
+@permission_classes([IsAdminUser])
+def count_users(request):
+    """Allows an admin to delete a user by ID"""
+    users = User.objects.all()
+    count = 0
+    recruiters = 0
+    applicants = 0
+    admin = 0
+    for user in users:
+        count += 1
+        if user.company:
+            recruiters += 1
+        applicants += 1
+        if user.is_staff:
+            admin += 1
+        
+    return Response(
+        {"count": count,
+         "recruiters": recruiters,
+         "applicants": applicants,
+         "admin": admin
+         },
+        status=status.HTTP_200_OK,
+    )

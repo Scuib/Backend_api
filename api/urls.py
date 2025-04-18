@@ -55,4 +55,5 @@ urlpatterns = [
     path("company-status/", views.update_company_status, name="Set company status"),
     path("profile/headers/", views.profile_header, name="Get profile header"),
     path("contact/", views.contact_us, name="Contact us"),
+    path("count/", views.count_users, name="count"),
 ]
