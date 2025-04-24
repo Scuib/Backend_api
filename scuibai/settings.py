@@ -234,5 +234,3 @@ SWAGGER_SETTINGS = {
     "USE_SESSION_AUTH": False,
     "SECURITY_DEFINITIONS": None,
 }
-
-print(os.getenv("DATABASE_URL"))
