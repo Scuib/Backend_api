@@ -9,6 +9,7 @@ from rest_framework import status
 from uuid import uuid4
 import cloudinary
 from django.core.mail import EmailMultiAlternatives
+from django.core.files.uploadedfile import UploadedFile
 import pandas as pd
 import json
 from django.views.decorators.csrf import csrf_exempt
@@ -930,8 +931,7 @@ def get_notifications(request):
 @parser_classes([MultiPartParser, FormParser])
 def profile_update(request):
     user = request.user
-    data = dict(request.data)
-    # data = request.data.copy()
+    data = request.data.copy()
 
     # Check if email is in field
     if "email" in data:
@@ -1038,6 +1038,7 @@ def profile_update(request):
                     resource_type=resource_type,
                 )
                 setattr(profile, field, upload_result["secure_url"])
+                data.pop(field, None)
             except cloudinary.exceptions.Error as e:
                 return Response(
                     {"detail": f"Upload failed for {field}: {str(e)}"},
@@ -1154,8 +1155,12 @@ def profile_update(request):
 def onboarding(request, user_id):
     # Check if the profile exists
     user = get_object_or_404(User, id=user_id)
-    data = dict(request.data)
-    # data = request.data.copy()
+    # data = {}
+    # for key, value in request.data.items():
+    #     if isinstance(value, UploadedFile):
+    #         continue
+    #     data[key] = value
+    data = request.data.copy()
     try:
         profile = Profile.objects.get(user=user)
     except Profile.DoesNotExist:
@@ -1249,6 +1254,7 @@ def onboarding(request, user_id):
                     resource_type=resource_type,
                 )
                 setattr(profile, field, upload_result["secure_url"])
+                data.pop(field, None)
             except cloudinary.exceptions.Error as e:
                 return Response(
                     {"detail": f"Upload failed for {field}: {str(e)}"},
