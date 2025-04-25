@@ -2759,9 +2759,14 @@ def count_users(request):
         count += 1
         if user.company:
             recruiters += 1
-        applicants += 1
+        else:
+            applicants += 1
         if user.is_staff:
             admin += 1
+        if not user.company and user.is_staff:
+            applicants -= 1
+        if user.company and user.is_staff:
+            recruiters -= 1
 
     return Response(
         {
