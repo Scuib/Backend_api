@@ -930,7 +930,8 @@ def get_notifications(request):
 @parser_classes([MultiPartParser, FormParser])
 def profile_update(request):
     user = request.user
-    data = request.data.copy()
+    data = dict(request.data)
+    # data = request.data.copy()
 
     # Check if email is in field
     if "email" in data:
@@ -1153,7 +1154,8 @@ def profile_update(request):
 def onboarding(request, user_id):
     # Check if the profile exists
     user = get_object_or_404(User, id=user_id)
-    data = request.data.copy()
+    data = dict(request.data)
+    # data = request.data.copy()
     try:
         profile = Profile.objects.get(user=user)
     except Profile.DoesNotExist:
@@ -2760,12 +2762,13 @@ def count_users(request):
         applicants += 1
         if user.is_staff:
             admin += 1
-        
+
     return Response(
-        {"count": count,
-         "recruiters": recruiters,
-         "applicants": applicants,
-         "admin": admin
-         },
+        {
+            "count": count,
+            "recruiters": recruiters,
+            "applicants": applicants,
+            "admin": admin,
+        },
         status=status.HTTP_200_OK,
     )
