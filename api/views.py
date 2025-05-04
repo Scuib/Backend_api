@@ -28,6 +28,7 @@ from .models import (
     JobSkills,
     Jobs,
     Applicant,
+    Message,
 )
 
 from .serializer import (
@@ -2783,3 +2784,145 @@ def count_users(request):
         },
         status=status.HTTP_200_OK,
     )
+
+
+skills_param = openapi.Schema(
+    type=openapi.TYPE_ARRAY,
+    items=openapi.Items(type=openapi.TYPE_STRING),
+    description="List of skills to match (any match)",
+    example=["Django", "React"],
+)
+
+location_param = openapi.Schema(
+    type=openapi.TYPE_STRING,
+    description="Exact location to match (case-insensitive)",
+    example="Lagos",
+)
+message_param = openapi.Schema(
+    type=openapi.TYPE_STRING,
+    description="Message to be sent",
+    example="I need Flutter devs for immediate employment",
+)
+
+request_body_schema = openapi.Schema(
+    type=openapi.TYPE_OBJECT,
+    properties={
+        "skills": skills_param,
+        "location": location_param,
+        "message": message_param,
+    },
+    required=["skills", "location", "message"],
+)
+
+response_schema = openapi.Schema(
+    type=openapi.TYPE_OBJECT,
+    properties={
+        "detail": openapi.Schema(type=openapi.TYPE_STRING),
+        "recommended_applicants": openapi.Schema(
+            type=openapi.TYPE_ARRAY,
+            items=openapi.Schema(
+                type=openapi.TYPE_OBJECT,
+                properties={
+                    "user_id": openapi.Schema(type=openapi.TYPE_INTEGER),
+                    "user_name": openapi.Schema(type=openapi.TYPE_STRING),
+                    "user_email": openapi.Schema(type=openapi.TYPE_STRING),
+                    "User_bio": openapi.Schema(type=openapi.TYPE_STRING),
+                    "image": openapi.Schema(
+                        type=openapi.TYPE_STRING, format="uri", nullable=True
+                    ),
+                    "location": openapi.Schema(type=openapi.TYPE_STRING),
+                    "Employment_choice": openapi.Schema(type=openapi.TYPE_STRING),
+                    "job_location_choice": openapi.Schema(type=openapi.TYPE_STRING),
+                    "skills": openapi.Schema(
+                        type=openapi.TYPE_ARRAY,
+                        items=openapi.Items(type=openapi.TYPE_STRING),
+                    ),
+                },
+            ),
+        ),
+    },
+)
+
+
+@swagger_auto_schema(
+    method="post",
+    operation_summary="Recommend Users by Skills and Location (Any Skill Match)",
+    operation_description="""
+    Recommend users who match **at least one** of the specified skills and exactly match the provided location.
+    """,
+    request_body=request_body_schema,
+    responses={200: response_schema, 400: "Bad Request", 500: "Server Error"},
+)
+@api_view(["POST"])
+def recommend_users_by_skills_and_location(request):
+    """
+    Recommends users who match any of the provided skills and location.
+    """
+    try:
+        job_data = request.data
+        sender = request.user
+        skills = job_data.get("skills", [])
+        location = job_data.get("location", "")
+        message = job_data.get("message", "")
+
+        if not skills or not location or not message:
+            return Response(
+                {"error": "All fields are required."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # Instantiate recommendation system helper
+        matcher = JobAppMatching()
+        user_profiles = matcher.load_users_from_db()
+
+        if user_profiles.empty:
+            return Response(
+                {
+                    "detail": "No users available for recommendation.",
+                    "recommended_applicants": [],
+                },
+                status=status.HTTP_200_OK,
+            )
+
+        # Use the "match any skills" logic
+        recommended_users = matcher.recommend_users_any_skills(
+            skills, location, user_profiles
+        )
+
+        recommended_applicants_list = []
+        notified_users = []
+        for user_data in recommended_users:
+            try:
+                user_id = user_data["user_id"]
+                profile = Profile.objects.get(user_id=user_id)
+
+                Message.objects.create(
+                    user=profile.user, title=f"Message from {sender.first_name}", message=message
+                )
+                notified_users.append(user_id)
+
+                recommended_applicants_list.append(
+                    {
+                        "user_id": profile.user.id,
+                        "user_name": profile.user.first_name,
+                        "user_email": profile.user.email,
+                        "location": profile.location,
+                        "skills": list(profile.skills.values_list("name", flat=True)),
+                    }
+                )
+            except Profile.DoesNotExist:
+                continue
+
+        return Response(
+            {
+                "detail": "Users matched successfully!",
+                "recommended_applicants": recommended_applicants_list,
+            },
+            status=status.HTTP_200_OK,
+        )
+
+    except Exception as e:
+        return Response(
+            {"error": f"Something went wrong: {str(e)}"},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        )

@@ -265,3 +265,11 @@ class RecommenderModel(models.Model):
 
     def __str__(self):
         return self.name
+
+
+class Message(models.Model):
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="messages")
+    title = models.CharField(max_length=255)
+    message = models.TextField()
+    is_read = models.BooleanField(default=False)
+    created_at = models.DateTimeField(auto_now_add=True)

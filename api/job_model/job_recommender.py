@@ -254,3 +254,45 @@ class JobAppMatching:
             )
 
         return recommendations
+
+    def recommend_users_any_skills(self, skills, location, user_data):
+        """
+        Recommend users who have at least one of the specified skills and match the location exactly.
+
+        Args:
+            skills (List[str]): List of skills from frontend.
+            location (str): Location from frontend.
+            user_data (pd.DataFrame): DataFrame with 'skills', 'location', 'user_name', 'user_id'.
+
+        Returns:
+            List[dict]: List of matching users.
+        """
+        # Normalize input
+        required_skills_set = set(skill.strip().lower() for skill in skills)
+        location = location.strip().lower()
+
+        def has_any_required_skills(user_skills_str):
+            user_skills = set(
+                skill.strip().lower() for skill in user_skills_str.split(";")
+            )
+            return bool(required_skills_set & user_skills)  # intersection not empty
+
+        # Apply filters
+        matches = user_data[
+            user_data["skills"].apply(has_any_required_skills)
+            & user_data["location"].str.contains(location, case=False, na=False)
+        ]
+
+        # Format output
+        recommendations = []
+        for _, user in matches.iterrows():
+            recommendations.append(
+                {
+                    "user_name": user["user_name"],
+                    "user_id": user["user_id"],
+                    "skills": user["skills"],
+                    "user_location": user["location"],
+                }
+            )
+
+        return recommendations

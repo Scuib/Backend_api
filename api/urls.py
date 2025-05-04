@@ -56,4 +56,5 @@ urlpatterns = [
     path("profile/headers/", views.profile_header, name="Get profile header"),
     path("contact/", views.contact_us, name="Contact us"),
     path("count/", views.count_users, name="count"),
+    path("boost/", views.recommend_users_by_skills_and_location, name="boost"),
 ]
