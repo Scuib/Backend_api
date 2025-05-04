@@ -16,6 +16,7 @@ from .models import (
     Jobs,
     Applicant,
     CompanyProfile,
+    Message,
 )
 
 from django.contrib.auth.hashers import make_password
@@ -186,7 +187,14 @@ class CompanyProfileSerializer(ModelSerializer):
 
     class Meta:
         model = CompanyProfile
-        fields = ["company_name", "address", "phone_number", "website", "description", "image"]
+        fields = [
+            "company_name",
+            "address",
+            "phone_number",
+            "website",
+            "description",
+            "image",
+        ]
 
 
 class DisplayUsers(ModelSerializer):
@@ -220,3 +228,9 @@ class GoogleAuthSerializer(serializers.Serializer):
         except ValueError as e:
             print("Token verification error:", e)
             raise serializers.ValidationError("Invalid Google token")
+
+
+class MessageSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Message
+        fields = ["title", "message", "is_read", "created_at"]

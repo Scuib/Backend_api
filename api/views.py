@@ -45,6 +45,7 @@ from .serializer import (
     DisplayUsers,
     GoogleAuthSerializer,
     CompanyProfileSerializer,
+    MessageSerializer,
 )
 
 from django.utils import timezone
@@ -2850,10 +2851,20 @@ response_schema = openapi.Schema(
     operation_description="""
     Recommend users who match **at least one** of the specified skills and exactly match the provided location.
     """,
+    manual_parameters=[
+        openapi.Parameter(
+            name="Authorization",
+            in_=openapi.IN_HEADER,
+            description="Bearer {token}",
+            type=openapi.TYPE_STRING,
+            required=True,
+        ),
+    ],
     request_body=request_body_schema,
     responses={200: response_schema, 400: "Bad Request", 500: "Server Error"},
 )
 @api_view(["POST"])
+@permission_classes([IsAuthenticated])
 def recommend_users_by_skills_and_location(request):
     """
     Recommends users who match any of the provided skills and location.
@@ -2907,6 +2918,7 @@ def recommend_users_by_skills_and_location(request):
                         "user_name": profile.user.first_name,
                         "user_email": profile.user.email,
                         "location": profile.location,
+                        "message": MessageSerializer(profile.user.messages.all(), many=True).data,
                         "skills": list(profile.skills.values_list("name", flat=True)),
                     }
                 )
@@ -2917,6 +2929,7 @@ def recommend_users_by_skills_and_location(request):
             {
                 "detail": "Users matched successfully!",
                 "recommended_applicants": recommended_applicants_list,
+                "notified": notified_users,
             },
             status=status.HTTP_200_OK,
         )
