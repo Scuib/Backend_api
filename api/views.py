@@ -2869,6 +2869,7 @@ def recommend_users_by_skills_and_location(request):
     """
     Recommends users who match any of the provided skills and location.
     """
+    print("Request received")
     try:
         job_data = request.data
         sender = request.user
@@ -2885,7 +2886,7 @@ def recommend_users_by_skills_and_location(request):
         # Instantiate recommendation system helper
         matcher = JobAppMatching()
         user_profiles = matcher.load_users_from_db()
-
+        print("matcher and users loaded")
         if user_profiles.empty:
             return Response(
                 {
@@ -2899,36 +2900,34 @@ def recommend_users_by_skills_and_location(request):
         recommended_users = matcher.recommend_users_any_skills(
             skills, location, user_profiles
         )
-
-        recommended_applicants_list = []
+        print("recommender activated")
         notified_users = []
+        user_ids = [u["user_id"] for u in recommended_users]
+        profiles = Profile.objects.select_related("user").filter(user_id__in=user_ids)
+        profile_map = {p.user_id: p for p in profiles}
         for user_data in recommended_users:
             try:
                 user_id = user_data["user_id"]
-                profile = Profile.objects.get(user_id=user_id)
+                profile = profile_map.get(user_id)
+                print("profiles gotten")
 
                 Message.objects.create(
-                    user=profile.user, title=f"Message from {sender.first_name}", message=message
+                    user=profile.user,
+                    title=f"Message from {sender.first_name}",
+                    sender=sender,
+                    skills=", ".join(skills),
+                    location=location,
+                    message=message,
                 )
-                notified_users.append(user_id)
+                print("message created")
 
-                recommended_applicants_list.append(
-                    {
-                        "user_id": profile.user.id,
-                        "user_name": profile.user.first_name,
-                        "user_email": profile.user.email,
-                        "location": profile.location,
-                        "message": MessageSerializer(profile.user.messages.all(), many=True).data,
-                        "skills": list(profile.skills.values_list("name", flat=True)),
-                    }
-                )
+                notified_users.append(profile.user.first_name)
             except Profile.DoesNotExist:
                 continue
 
         return Response(
             {
                 "detail": "Users matched successfully!",
-                "recommended_applicants": recommended_applicants_list,
                 "notified": notified_users,
             },
             status=status.HTTP_200_OK,

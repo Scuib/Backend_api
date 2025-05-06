@@ -269,7 +269,10 @@ class RecommenderModel(models.Model):
 
 class Message(models.Model):
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="messages")
+    sender = models.ForeignKey(User, related_name="sent_messages", on_delete=models.CASCADE, null=True, blank=True)
     title = models.CharField(max_length=255)
     message = models.TextField()
+    location = models.CharField(max_length=255, blank=True, null=True)
+    skills = models.JSONField(blank=True, null=True)
     is_read = models.BooleanField(default=False)
     created_at = models.DateTimeField(auto_now_add=True)
