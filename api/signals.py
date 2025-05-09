@@ -1,6 +1,7 @@
 # from django.shortcuts import get_object_or_404, get_list_or_404
 from django.db.models.signals import post_save, post_delete
 from django.shortcuts import get_object_or_404
+from django.db import transaction
 
 from .models import (
     User,
@@ -60,14 +61,34 @@ def send_message_email(sender, instance, created, **kwargs):
         location = instance.location
         skills = instance.skills
 
+        try:
+            wallet = Wallet.objects.select_for_update().get(user=recipient)
+        except Wallet.DoesNotExist:
+            wallet = None
+
+        # Auto-unlock logic
+        if wallet and wallet.balance >= 100:
+            with transaction.atomic():
+                # Deduct amount
+                wallet.balance -= 100
+                wallet.save()
+
+                # Unlock message
+                instance.unlocked = True
+                instance.save(update_fields=["unlocked"])
+
+            preview = message
+        else:
+            preview = "You’ve received a message. Pay ₦100 to view full content."
+
         email_html = f"""
             <p>Hi {recipient.first_name},</p>
             <p>{sender_user.first_name} has shared a job opportunity with you.</p>
-            <p><strong>Message:</strong><br>{message}</p>
+            <p><strong>Message:</strong><br>{preview}</p>
             <p>Location: {location}</p>
             <p>Skills match: {skills}</p>
             <br>
-            <p>Log in to your account to respond.</p>
+            <p>Log in to your account to respond or top up your wallet.</p>
             <p>Best,<br>Scuibai Team</p>
         """
 
