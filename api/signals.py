@@ -54,35 +54,35 @@ def create_company_signals(sender, instance, created, **kwargs):
         CompanyProfile.objects.create(owner=instance)
 
 
-# @receiver(post_save, sender=Message)
-# def send_message_email(sender, instance, created, **kwargs):
-#     if created:
-#         recipient = instance.user
-#         sender_user = instance.sender
-#         message = instance.message
-#         location = instance.location
-#         skills = instance.skills
+@receiver(post_save, sender=Message)
+def send_message_email(sender, instance, created, **kwargs):
+    if created:
+        recipient = instance.user
+        sender_user = instance.sender
+        message = instance.message
+        location = instance.location
+        skills = instance.skills
 
-#         email_html = f"""
-#             <p>Hi {recipient.first_name},</p>
-#             <p>{sender_user.first_name} has shared a job opportunity with you.</p>
-#             <p><strong>Message:</strong><br>{message}</p>
-#             <p>Location: {location}</p>
-#             <p>Skills match: {skills}</p>
-#             <br>
-#             <p>Log in to your account to respond.</p>
-#             <p>Best,<br>Scuibai Team</p>
-#         """
+        email_html = f"""
+            <p>Hi {recipient.first_name},</p>
+            <p>{sender_user.first_name} has shared a job opportunity with you.</p>
+            <p><strong>Message:</strong><br>{message}</p>
+            <p>Location: {location}</p>
+            <p>Skills match: {skills}</p>
+            <br>
+            <p>Log in to your account to respond.</p>
+            <p>Best,<br>Scuibai Team</p>
+        """
 
-#         subject = f"New Message from {sender_user.first_name}"
-#         try:
-#             resend.Emails.send(
-#                 {
-#                     "from": "Scuibai <Admin@scuib.com>",
-#                     "to": [recipient.email],
-#                     "subject": subject,
-#                     "html": email_html,
-#                 }
-#             )
-#         except Exception as e:
-#             print(f"Failed to send email to {recipient.email}: {str(e)}")
+        subject = f"New Message from {sender_user.first_name}"
+        try:
+            resend.Emails.send(
+                {
+                    "from": "Scuibai <Admin@scuib.com>",
+                    "to": [recipient.email],
+                    "subject": subject,
+                    "html": email_html,
+                }
+            )
+        except Exception as e:
+            print(f"Failed to send email to {recipient.email}: {str(e)}")

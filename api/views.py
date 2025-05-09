@@ -2869,7 +2869,6 @@ def recommend_users_by_skills_and_location(request):
     """
     Recommends users who match any of the provided skills and location.
     """
-    print("Request received")
     try:
         job_data = request.data
         sender = request.user
@@ -2886,7 +2885,6 @@ def recommend_users_by_skills_and_location(request):
         # Instantiate recommendation system helper
         matcher = JobAppMatching()
         user_profiles = matcher.load_users_from_db()
-        print("matcher and users loaded")
         if user_profiles.empty:
             return Response(
                 {
@@ -2900,7 +2898,6 @@ def recommend_users_by_skills_and_location(request):
         recommended_users = matcher.recommend_users_any_skills(
             skills, location, user_profiles
         )
-        print("recommender activated")
         notified_users = []
         user_ids = [u["user_id"] for u in recommended_users]
         profiles = Profile.objects.select_related("user").filter(user_id__in=user_ids)
@@ -2909,7 +2906,6 @@ def recommend_users_by_skills_and_location(request):
             try:
                 user_id = user_data["user_id"]
                 profile = profile_map.get(user_id)
-                print("profiles gotten")
 
                 Message.objects.create(
                     user=profile.user,
@@ -2919,7 +2915,6 @@ def recommend_users_by_skills_and_location(request):
                     location=location,
                     message=message,
                 )
-                print("message created")
 
                 notified_users.append(profile.user.first_name)
             except Profile.DoesNotExist:
