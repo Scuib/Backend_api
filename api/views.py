@@ -29,6 +29,8 @@ from .models import (
     Jobs,
     Applicant,
     Message,
+    Wallet,
+    WalletTransaction,
 )
 
 from .serializer import (
@@ -63,7 +65,7 @@ from api.job_model.data_processing import DataPreprocessor
 import resend
 from scuibai.settings import RESEND_API_KEY
 from django.core.mail import send_mail
-
+import uuid
 
 from django.utils import timezone
 from api.job_model.job_recommender import JobAppMatching
@@ -77,6 +79,13 @@ resend.api_key = settings.NEW_RESEND_API_KEY
 
 def home(request):
     return render(request, "home.html")
+
+
+def generate_reference():
+    return str(uuid.uuid4())
+
+
+UNLOCK_COST = 100.00  # Naira
 
 
 # Get token or login View
@@ -2933,3 +2942,188 @@ def recommend_users_by_skills_and_location(request):
             {"error": f"Something went wrong: {str(e)}"},
             status=status.HTTP_500_INTERNAL_SERVER_ERROR,
         )
+
+
+@swagger_auto_schema(
+    method="post",
+    operation_summary="Fund Wallet",
+    operation_description="Initializes a Paystack transaction and returns authorization URL for payment.",
+    request_body=openapi.Schema(
+        type=openapi.TYPE_OBJECT,
+        required=["amount"],
+        properties={
+            "amount": openapi.Schema(
+                type=openapi.TYPE_NUMBER, description="Amount in Naira"
+            )
+        },
+    ),
+    responses={200: "Authorization URL returned"},
+)
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def fund_wallet(request):
+    """
+    Initializes a Paystack payment and returns authorization URL.
+    """
+    amount = request.data.get("amount")
+    if not amount:
+        return Response({"error": "Amount is required."}, status=400)
+
+    reference = generate_reference()
+    headers = {
+        "Authorization": f"Bearer {settings.PAYSTACK_SECRET_KEY}",
+        "Content-Type": "application/json",
+    }
+
+    data = {
+        "email": request.user.email,
+        "amount": int(float(amount) * 100),  # Paystack requires kobo
+        "reference": reference,
+        "callback_url": "https://yourdomain.com/payment/verify",  # Optional
+    }
+
+    response = requests.post(
+        "https://api.paystack.co/transaction/initialize", json=data, headers=headers
+    )
+    result = response.json()
+
+    if result.get("status") is True:
+        # Save the transaction (pending)
+        WalletTransaction.objects.create(
+            user=request.user, amount=amount, reference=reference
+        )
+        return Response(
+            {"auth_url": result["data"]["authorization_url"], "reference": reference}
+        )
+    else:
+        return Response(
+            {"error": result.get("message", "Payment initialization failed.")},
+            status=400,
+        )
+
+
+@swagger_auto_schema(
+    method="get",
+    operation_summary="Verify Payment",
+    operation_description="Verifies a Paystack transaction using reference and credits wallet.",
+    manual_parameters=[
+        openapi.Parameter(
+            "reference",
+            openapi.IN_PATH,
+            description="Transaction reference",
+            type=openapi.TYPE_STRING,
+        )
+    ],
+    responses={200: "Wallet funded successfully"},
+)
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def verify_payment(request, reference):
+    """
+    Verifies payment from Paystack and updates wallet.
+    """
+    headers = {
+        "Authorization": f"Bearer {settings.PAYSTACK_SECRET_KEY}",
+    }
+
+    response = requests.get(
+        f"https://api.paystack.co/transaction/verify/{reference}", headers=headers
+    )
+    result = response.json()
+
+    if result.get("status") is True and result["data"]["status"] == "success":
+        amount_paid = result["data"]["amount"] / 100  # Convert to naira
+        txn = WalletTransaction.objects.filter(
+            reference=reference, user=request.user
+        ).first()
+
+        if not txn:
+            return Response({"error": "Transaction not found."}, status=404)
+
+        if txn.verified:
+            return Response({"message": "Transaction already verified."})
+
+        # Credit the user's wallet
+        wallet, _ = Wallet.objects.get_or_create(user=request.user)
+        wallet.balance += amount_paid
+        wallet.save()
+
+        txn.verified = True
+        txn.save()
+
+        return Response(
+            {"message": "Wallet funded successfully!", "balance": wallet.balance}
+        )
+
+    return Response({"error": "Verification failed."}, status=400)
+
+
+@swagger_auto_schema(
+    method="get",
+    operation_summary="Get Wallet Balance",
+    operation_description="Returns current wallet balance for authenticated user.",
+    responses={200: "Balance returned"},
+)
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def wallet_balance(request):
+    wallet, _ = Wallet.objects.get_or_create(user=request.user)
+    return Response({"balance": wallet.balance})
+
+
+@swagger_auto_schema(
+    method="get",
+    operation_summary="Unlock Full Message",
+    operation_description=f"Deducts ₦{UNLOCK_COST} from wallet to unlock full message by message ID.",
+    manual_parameters=[
+        openapi.Parameter(
+            "message_id",
+            openapi.IN_PATH,
+            description="ID of the message",
+            type=openapi.TYPE_INTEGER,
+        )
+    ],
+    responses={
+        200: openapi.Response("Message content unlocked."),
+        402: "Insufficient funds",
+    },
+)
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def unlock_message(request, message_id):
+    try:
+        message = Message.objects.get(id=message_id, user=request.user)
+
+        # Check if already unlocked
+        if hasattr(message, "unlocked") and message.unlocked:
+            return Response(
+                {"detail": "Message already unlocked.", "message": message.message}
+            )
+
+        # Deduct from wallet
+        wallet = Wallet.objects.get(user=request.user)
+        if wallet.deduct(UNLOCK_COST):
+            # You can store `unlocked=True` if your model supports it
+            message.unlocked = True  # optional field
+            message.save(update_fields=["unlocked"])  # optional
+            return Response(
+                {"detail": "Message unlocked successfully.", "message": message.message}
+            )
+        else:
+            return Response({"detail": "Insufficient wallet balance."}, status=402)
+
+    except Message.DoesNotExist:
+        return Response({"detail": "Message not found."}, status=404)
+
+
+@swagger_auto_schema(
+    method="get",
+    operation_summary="List user messages with preview if locked",
+    responses={200: MessageSerializer(many=True)},
+)
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def list_messages(request):
+    messages = Message.objects.filter(user=request.user).order_by("-created_at")
+    serializer = MessageSerializer(messages, many=True)
+    return Response(serializer.data)

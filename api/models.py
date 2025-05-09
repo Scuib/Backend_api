@@ -269,10 +269,49 @@ class RecommenderModel(models.Model):
 
 class Message(models.Model):
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="messages")
-    sender = models.ForeignKey(User, related_name="sent_messages", on_delete=models.CASCADE, null=True, blank=True)
+    sender = models.ForeignKey(
+        User,
+        related_name="sent_messages",
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+    )
     title = models.CharField(max_length=255)
     message = models.TextField()
     location = models.CharField(max_length=255, blank=True, null=True)
     skills = models.JSONField(blank=True, null=True)
     is_read = models.BooleanField(default=False)
+    unlocked = models.BooleanField(default=False)
     created_at = models.DateTimeField(auto_now_add=True)
+
+
+class Wallet(models.Model):
+    user = models.OneToOneField(User, on_delete=models.CASCADE, related_name="wallet")
+    balance = models.DecimalField(max_digits=12, decimal_places=2, default=0.00)
+
+    def deposit(self, amount):
+        self.balance += amount
+        self.save()
+
+    def deduct(self, amount):
+        if self.balance >= amount:
+            self.balance -= amount
+            self.save()
+            return True
+        return False
+
+    def __str__(self):
+        return f"{self.user.email} - ₦{self.balance}"
+
+
+class WalletTransaction(models.Model):
+    user = models.ForeignKey(
+        User, on_delete=models.CASCADE, related_name="transactions"
+    )
+    amount = models.DecimalField(max_digits=12, decimal_places=2)
+    reference = models.CharField(max_length=100, unique=True)
+    verified = models.BooleanField(default=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"{self.user.email} - ₦{self.amount} - {'Verified' if self.verified else 'Pending'}"

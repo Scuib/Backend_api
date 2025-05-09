@@ -3,12 +3,9 @@ from django.db.models.signals import post_save, post_delete
 from django.shortcuts import get_object_or_404
 
 from .models import (
-    JobSkills,
-    Jobs,
     User,
     Profile,
-    UserSkills,
-    UserCategories,
+    Wallet,
     CompanyProfile,
 )
 from django.dispatch import receiver
@@ -86,3 +83,9 @@ def send_message_email(sender, instance, created, **kwargs):
             )
         except Exception as e:
             print(f"Failed to send email to {recipient.email}: {str(e)}")
+
+
+@receiver(post_save, sender=User)
+def create_user_wallet(sender, instance, created, **kwargs):
+    if created:
+        Wallet.objects.create(user=instance)

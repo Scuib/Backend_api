@@ -231,6 +231,14 @@ class GoogleAuthSerializer(serializers.Serializer):
 
 
 class MessageSerializer(serializers.ModelSerializer):
+    content = serializers.SerializerMethodField()
+
     class Meta:
         model = Message
-        fields = ["title", "message", "is_read", "created_at"]
+        fields = ["sender", "title", "content", "unlocked", "created_at"]
+
+    def get_content(self, obj):
+        if obj.unlocked:
+            return obj.message
+        teaser = obj.message[:50]  # First 50 characters of the message
+        return f"Preview: {teaser}... Pay ₦100 to view the full message."
