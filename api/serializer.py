@@ -16,6 +16,7 @@ from .models import (
     Jobs,
     Applicant,
     CompanyProfile,
+    Message,
 )
 
 from django.contrib.auth.hashers import make_password
@@ -118,6 +119,7 @@ class DisplayProfileSerializer(ModelSerializer):
             "max_salary",
             "years_of_experience",
             "phonenumbers",
+            "currency",
             "github",
             "portfolio",
             "linkedin",
@@ -185,7 +187,14 @@ class CompanyProfileSerializer(ModelSerializer):
 
     class Meta:
         model = CompanyProfile
-        fields = ["company_name", "address", "phone_number", "website", "description", "image"]
+        fields = [
+            "company_name",
+            "address",
+            "phone_number",
+            "website",
+            "description",
+            "image",
+        ]
 
 
 class DisplayUsers(ModelSerializer):
@@ -219,3 +228,17 @@ class GoogleAuthSerializer(serializers.Serializer):
         except ValueError as e:
             print("Token verification error:", e)
             raise serializers.ValidationError("Invalid Google token")
+
+
+class MessageSerializer(serializers.ModelSerializer):
+    content = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Message
+        fields = ["sender", "title", "content", "unlocked", "created_at"]
+
+    def get_content(self, obj):
+        if obj.unlocked:
+            return obj.message
+        teaser = obj.message[:50]  # First 50 characters of the message
+        return f"Preview: {teaser}... Pay ₦100 to view the full message."

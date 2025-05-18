@@ -1,21 +1,19 @@
 # from django.shortcuts import get_object_or_404, get_list_or_404
 from django.db.models.signals import post_save, post_delete
 from django.shortcuts import get_object_or_404
+from django.db import transaction
 
 from .models import (
-    JobSkills,
-    Jobs,
     User,
     Profile,
-    UserSkills,
-    UserCategories,
+    Wallet,
     CompanyProfile,
 )
 from django.dispatch import receiver
-import cloudinary.uploader
 from scuibai.settings import BASE_DIR
-from api.job_model.data_processing import DataPreprocessor
-from api.job_model.job_recommender import JobAppMatching
+from .models import Message
+import resend
+
 
 from .custom_signal import job_created
 
@@ -54,40 +52,61 @@ def create_company_signals(sender, instance, created, **kwargs):
         CompanyProfile.objects.create(owner=instance)
 
 
-# Call when a new Job is created
-# Sort out job applicants
+@receiver(post_save, sender=Message)
+def send_message_email(sender, instance, created, **kwargs):
+    if created:
+        recipient = instance.user
+        sender_user = instance.sender
+        message = instance.message
+        location = instance.location
+        skills = instance.skills
+
+        try:
+            wallet = Wallet.objects.select_for_update().get(user=recipient)
+        except Wallet.DoesNotExist:
+            wallet = None
+
+        # Auto-unlock logic
+        if wallet and wallet.balance >= 100:
+            with transaction.atomic():
+                # Deduct amount
+                wallet.balance -= 100
+                wallet.save()
+
+                # Unlock message
+                instance.unlocked = True
+                instance.save(update_fields=["unlocked"])
+
+            preview = message
+        else:
+            preview = "You’ve received a message. Pay ₦100 to view full content."
+
+        email_html = f"""
+            <p>Hi {recipient.first_name},</p>
+            <p>{sender_user.first_name} has shared a job opportunity with you.</p>
+            <p><strong>Message:</strong><br>{preview}</p>
+            <p>Location: {location}</p>
+            <p>Skills match: {skills}</p>
+            <br>
+            <p>Log in to your account to respond or top up your wallet.</p>
+            <p>Best,<br>Scuibai Team</p>
+        """
+
+        subject = f"New Message from {sender_user.first_name}"
+        try:
+            resend.Emails.send(
+                {
+                    "from": "Scuibai <Admin@scuib.com>",
+                    "to": [recipient.email],
+                    "subject": subject,
+                    "html": email_html,
+                }
+            )
+        except Exception as e:
+            print(f"Failed to send email to {recipient.email}: {str(e)}")
 
 
-# @receiver(job_created)
-# def create_applicants_signals(sender, instance, **kwargs):
-#     # Initialize and prepare the data
-#     preprocessor = DataPreprocessor()
-#     job_posting, user_profiles = preprocessor.load_data(instance.id)
-#     preprocessor.preprocess_data()
-#     preprocessor.match_experience()
-#     preprocessor.match_category()
-#     preprocessor.match_salary()
-
-#     # Get qualified users
-#     qualified = preprocessor.get_matching_scores()
-
-#     # Initialize the Job Recommender and train it with the prepared data
-#     recommender = JobAppMatching()
-#     # recommender.train(preprocessor)
-
-#     # Make recommendations based on the preprocessed data
-#     # recommended_users = recommender.recommend_users(preprocessor)
-#     recommended_users = recommender.recommend_users(job_id=instance.id)
-
-#     # Extract the user IDs from the recommendations
-#     recommended_user_ids = recommended_users["id"].tolist()
-
-#     # Try to create or update the Applicants model with recommended users
-#     try:
-#         application = Applicants.objects.get(job=instance)
-#         # Update existing applicants
-#         application.user.set(User.objects.filter(id__in=recommended_user_ids))
-#     except Applicants.DoesNotExist:
-#         # Create a new applicants entry
-#         application = Applicants.objects.create(job=instance)
-#         application.user.set(User.objects.filter(id__in=recommended_user_ids))
+@receiver(post_save, sender=User)
+def create_user_wallet(sender, instance, created, **kwargs):
+    if created:
+        Wallet.objects.create(user=instance)

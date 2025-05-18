@@ -9,6 +9,7 @@ from rest_framework import status
 from uuid import uuid4
 import cloudinary
 from django.core.mail import EmailMultiAlternatives
+from django.core.files.uploadedfile import UploadedFile
 import pandas as pd
 import json
 from django.views.decorators.csrf import csrf_exempt
@@ -27,6 +28,9 @@ from .models import (
     JobSkills,
     Jobs,
     Applicant,
+    Message,
+    Wallet,
+    WalletTransaction,
 )
 
 from .serializer import (
@@ -43,6 +47,7 @@ from .serializer import (
     DisplayUsers,
     GoogleAuthSerializer,
     CompanyProfileSerializer,
+    MessageSerializer,
 )
 
 from django.utils import timezone
@@ -60,7 +65,7 @@ from api.job_model.data_processing import DataPreprocessor
 import resend
 from scuibai.settings import RESEND_API_KEY
 from django.core.mail import send_mail
-
+import uuid
 
 from django.utils import timezone
 from api.job_model.job_recommender import JobAppMatching
@@ -74,6 +79,13 @@ resend.api_key = settings.NEW_RESEND_API_KEY
 
 def home(request):
     return render(request, "home.html")
+
+
+def generate_reference():
+    return str(uuid.uuid4())
+
+
+UNLOCK_COST = 100.00  # Naira
 
 
 # Get token or login View
@@ -111,7 +123,7 @@ def register(request):
         html = template.render(context)
 
         params: resend.Emails.SendParams = {
-            "from": "Godwin <godwin@scuib.com>",
+            "from": "Scuibai <godwin@scuib.com>",
             "to": [user.email],
             "subject": "VERIFY YOUR EMAIL",
             "html": html,
@@ -131,7 +143,12 @@ def register(request):
         return Response(
             {
                 "message": "User Registered Successfully, Check email for otp code",
-                "data": {"key": key, "exp": exp},
+                "data": {
+                    "key": key,
+                    "exp": exp,
+                    "is_Verified": user.verified,
+                    "email": user.email,
+                },
             },
         )
 
@@ -322,7 +339,7 @@ def login(request):
                     status=status.HTTP_401_UNAUTHORIZED,
                 )
         except EmailAddress.DoesNotExist:
-            pass 
+            pass
 
         if check_password(password, user.password):
             refresh = RefreshToken.for_user(user)
@@ -335,6 +352,8 @@ def login(request):
                     "first_name": user.first_name,
                     "is_company": user.company,
                     "has_onboarded": user.has_onboarded,
+                    "is_verified": user.verified,
+                    "email": user.email,
                 }
             )
         else:
@@ -414,6 +433,7 @@ def verify_email(request):
                     "first_name": user.first_name,
                     "is_company": user.company,
                     "has_onboarded": user.has_onboarded,
+                    "is_Verified": user.verified,
                 },
                 status=status.HTTP_200_OK,
             )
@@ -459,15 +479,52 @@ def reset_password(request):
     Send (uid, token) in a url
     """
     data = request.data
-    if data:
+    if data and "email" in data:
+        result = ResetPassword_key(email=data["email"])
+        if not result:
+            return Response(
+                {"errors": "User with this email does not exist."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
 
-        key, uid = ResetPassword_key(email=data["email"])  # type: ignore pylance warning
+        key, uid = result
+        user = get_object_or_404(User, email=data["email"])
+        exp = timezone.now() + timezone.timedelta(hours=1)
+
+        # Load and render the HTML email
+        template = get_template("password_reset/password_reset.html")
+        context = {
+            "user": user,
+            "key": key,
+            "uid": uid,
+            "expiry_date": exp.strftime("%Y-%m-%d %H:%M:%S"),
+        }
+        html = template.render(context)
+
+        # Build params for Resend
+        params: resend.Emails.SendParams = {
+            "from": "Scuibai <Admin@scuib.com>",
+            "to": [user.email],
+            "subject": "Reset Your Password",
+            "html": html,
+        }
+
+        try:
+            r = resend.Emails.send(params)
+        except Exception as e:
+            return Response(
+                {"errors": f"Failed to send email: {str(e)}"},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
 
         return Response(
-            {"detail": {"uid": uid, "key": key}}, status=status.HTTP_201_CREATED
+            {"detail": "Password reset link sent to email."},
+            status=status.HTTP_200_OK,
         )
+
     return Response(
-        {"errors": "Something went wrong!"}, status=status.HTTP_400_BAD_REQUEST
+        {"errors": "Email is required."},
+        status=status.HTTP_400_BAD_REQUEST,
     )
 
 
@@ -803,6 +860,13 @@ def get_notifications(request):
             required=False,
         ),
         openapi.Parameter(
+            name="currency",
+            in_=openapi.IN_FORM,
+            description="User's currency type (optional)",
+            type=openapi.TYPE_STRING,
+            required=False,
+        ),
+        openapi.Parameter(
             name="employment_type",
             in_=openapi.IN_FORM,
             description="F: Full-Time, P: Part-Time, C: Contract (optional)",
@@ -813,6 +877,34 @@ def get_notifications(request):
             name="job_location",
             in_=openapi.IN_FORM,
             description="R: Remote, H: Hybrid, O: Onsite (optional)",
+            type=openapi.TYPE_STRING,
+            required=False,
+        ),
+        openapi.Parameter(
+            name="github",
+            in_=openapi.IN_FORM,
+            description="User's github url (optional)",
+            type=openapi.TYPE_STRING,
+            required=False,
+        ),
+        openapi.Parameter(
+            name="linkedin",
+            in_=openapi.IN_FORM,
+            description="User's linkedin url (optional)",
+            type=openapi.TYPE_STRING,
+            required=False,
+        ),
+        openapi.Parameter(
+            name="twitter",
+            in_=openapi.IN_FORM,
+            description="User's twitter url (optional)",
+            type=openapi.TYPE_STRING,
+            required=False,
+        ),
+        openapi.Parameter(
+            name="portfolio",
+            in_=openapi.IN_FORM,
+            description="User's portfolio url (optional)",
             type=openapi.TYPE_STRING,
             required=False,
         ),
@@ -918,9 +1010,18 @@ def profile_update(request):
             if category:
                 profile.categories.remove(category)
 
+    MAX_FILE_SIZE = 5 * 1024 * 1024
     cloudinary_fields = ["image", "resume", "cover_letter"]
     for field in cloudinary_fields:
         if field in request.FILES:
+            uploaded_file = request.FILES[field]
+
+            # Check file size before attempting upload
+            if uploaded_file.size > MAX_FILE_SIZE:
+                return Response(
+                    {"detail": f"{field} exceeds 5MB size limit."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
             # Delete old file if exists
             existing_file = getattr(profile, field)
             if existing_file:
@@ -937,16 +1038,23 @@ def profile_update(request):
                 folder = "profile_docs/"
                 resource_type = "raw"
 
+            file_name = uploaded_file.name
             # Upload new file
-            upload_result = cloudinary.uploader.upload(
-                request.FILES[field],
-                folder=folder,
-                resource_type=resource_type,  # Use 'raw' for PDFs, 'image' for images
-            )
-
-            # Save the file URL to the profile
-            setattr(profile, field, upload_result["secure_url"])
-
+            try:
+                uploaded_file.seek(0)  # Reset file pointer
+                file_bytes = uploaded_file.read()
+                upload_result = cloudinary.uploader.upload(
+                    (file_name, file_bytes),
+                    folder=folder,
+                    resource_type=resource_type,
+                )
+                setattr(profile, field, upload_result["secure_url"])
+                data.pop(field, None)
+            except cloudinary.exceptions.Error as e:
+                return Response(
+                    {"detail": f"Upload failed for {field}: {str(e)}"},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
     # Save the updated profile
     profile.save()
 
@@ -1053,16 +1161,17 @@ def profile_update(request):
     },
 )
 @api_view(["PUT"])
-@permission_classes([AllowAny])
+@permission_classes([IsAuthenticated])
 @parser_classes([MultiPartParser, FormParser])
 def onboarding(request, user_id):
     # Check if the profile exists
     user = get_object_or_404(User, id=user_id)
+    # data = {}
+    # for key, value in request.data.items():
+    #     if isinstance(value, UploadedFile):
+    #         continue
+    #     data[key] = value
     data = request.data.copy()
-    if not user:
-        return Response(
-            {"detail": "User does not exist"}, status=status.HTTP_404_NOT_FOUND
-        )
     try:
         profile = Profile.objects.get(user=user)
     except Profile.DoesNotExist:
@@ -1096,11 +1205,12 @@ def onboarding(request, user_id):
 
         # Remove old skills
         for skill_name in current_skills - new_skills_set:
-            skill = UserSkills.objects.get(name=skill_name)
-            profile.skills.remove(skill)
+            skill = UserSkills.objects.filter(name=skill_name).first()
+            if skill:
+                profile.skills.remove(skill)
 
     # Handle skill updates
-    if "categories" in request.data:
+    if "categories" in data:
         new_categories = data.pop("categories")
         current_categories = set(profile.categories.values_list("name", flat=True))
         new_categories_set = set(new_categories)
@@ -1112,12 +1222,22 @@ def onboarding(request, user_id):
 
         # Remove old skills
         for category_name in current_categories - new_categories_set:
-            category = UserCategories.objects.get(name=category_name)
-            profile.categories.remove(category)
+            category = UserCategories.objects.filter(name=category_name).first()
+            if category:
+                profile.categories.remove(category)
 
+    MAX_FILE_SIZE = 5 * 1024 * 1024
     cloudinary_fields = ["image", "resume"]
     for field in cloudinary_fields:
         if field in request.FILES:
+            uploaded_file = request.FILES[field]
+
+            # Check file size before attempting upload
+            if uploaded_file.size > MAX_FILE_SIZE:
+                return Response(
+                    {"detail": f"{field} exceeds 5MB size limit."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
             # Delete old file if exists
             existing_file = getattr(profile, field)
             if existing_file:
@@ -1134,19 +1254,27 @@ def onboarding(request, user_id):
                 folder = "profile_docs/"
                 resource_type = "raw"
 
+            file_name = uploaded_file.name
             # Upload new file
-            upload_result = cloudinary.uploader.upload(
-                request.FILES[field],
-                folder=folder,
-                resource_type=resource_type,  # Use 'raw' for PDFs, 'image' for images
-            )
-
-            # Save the file URL to the profile
-            setattr(profile, field, upload_result["secure_url"])
+            try:
+                uploaded_file.seek(0)  # Reset file pointer
+                file_bytes = uploaded_file.read()
+                upload_result = cloudinary.uploader.upload(
+                    (file_name, file_bytes),
+                    folder=folder,
+                    resource_type=resource_type,
+                )
+                setattr(profile, field, upload_result["secure_url"])
+                data.pop(field, None)
+            except cloudinary.exceptions.Error as e:
+                return Response(
+                    {"detail": f"Upload failed for {field}: {str(e)}"},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
     profile.save()
 
     # Update profile with the remaining fields
-    serialized_data = ProfileSerializer(profile, data=request.data, partial=True)
+    serialized_data = ProfileSerializer(profile, data=data, partial=True)
     if serialized_data.is_valid():
         serialized_data.save()
         user.has_onboarded = True
@@ -1154,9 +1282,7 @@ def onboarding(request, user_id):
 
         return Response({"detail": "Succesful!"}, status=status.HTTP_200_OK)
 
-    return Response(
-        {"detail": "An error occured!"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR
-    )
+    return Response(serialized_data.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
 # Delete Authenticated User
@@ -1400,7 +1526,7 @@ def job_create(request):
                 status=status.HTTP_201_CREATED,
             )
 
-        # Get top 5 matching applicants using the recommendation function
+        # Get matching applicants using the recommendation function
         recommended_users = matcher.recommend_users(job_data, user_profiles)
 
         # Prepare notification
@@ -1408,11 +1534,17 @@ def job_create(request):
             "id": str(uuid4()),
             "type": "job",
             "message": "You have been matched to a job",
-            "datetime": timezone.now().isoformat(),
+            "created_at": timezone.now().isoformat(),
             "details": {
+                "recruiter": job_instance.owner.company_profile.company_name,
+                "recruiter_email": job_instance.owner.email,
                 "job_name": job_instance.title,
                 "job_description": job_instance.description,
                 "job_skills": job_skills,
+                "experience_level": job_instance.experience_level,
+                "years_of_experience": job_instance.years_of_experience,
+                "max_salary": job_instance.max_salary,
+                "min_salary": job_instance.min_salary,
             },
         }
 
@@ -1427,6 +1559,8 @@ def job_create(request):
                 applicant, created = Applicant.objects.get_or_create(
                     job=job_instance, user=profile.user
                 )
+                applicant.match_score = user_data["match_score"]
+                applicant.save()
 
                 # Collect recommended applicant info
                 recommended_applicants_list.append(
@@ -1439,6 +1573,7 @@ def job_create(request):
                         "match_score": user_data["match_score"],
                         "years_of_experience": profile.years_of_experience,
                         "salary_range": user_data["salary_range"],
+                        "currency": profile.currency,
                         "location": profile.location,
                         "employment_choice": profile.employment_type,
                         "job_location_choice": profile.job_location,
@@ -1736,6 +1871,7 @@ def jobs_user(request):
                 "skills": list(profile.skills.values_list("name", flat=True)),
                 "categories": list(profile.categories.values_list("name", flat=True)),
                 "experience": profile.years_of_experience,
+                "match_score": applicant.match_score,
             }
             job_data["applicants"].append(applicant_data)
 
@@ -2142,7 +2278,7 @@ def all_profiles(request):
         ),
         openapi.Parameter(
             name="user_id",
-            in_=openapi.IN_QUERY,
+            in_=openapi.IN_PATH,
             description="ID of the user to delete",
             type=openapi.TYPE_INTEGER,
             required=True,
@@ -2164,27 +2300,14 @@ def all_profiles(request):
 )
 @api_view(["DELETE"])
 @permission_classes([IsAdminUser])
-def delete_user(request):
+def delete_user_by_admin(request, user_id):
     """Allows an admin to delete a user by ID"""
-    user_id = request.query_params.get("user_id")
-
-    if not user_id:
-        return Response(
-            {"detail": "Missing user_id parameter"},
-            status=status.HTTP_400_BAD_REQUEST,
-        )
-    try:
-        user = User.objects.get(id=user_id)
-        user.delete()
-        return Response(
-            {"detail": "User deleted successfully"},
-            status=status.HTTP_204_NO_CONTENT,
-        )
-    except User.DoesNotExist:
-        return Response(
-            {"detail": "User not found"},
-            status=status.HTTP_404_NOT_FOUND,
-        )
+    user = get_object_or_404(User, id=user_id)
+    user.delete()
+    return Response(
+        {"detail": "User deleted successfully"},
+        status=status.HTTP_204_NO_CONTENT,
+    )
 
 
 @swagger_auto_schema(
@@ -2261,6 +2384,9 @@ def google_auth(request):
             user = user_serializer.save()
             user.verified = True
             user.auth_provider = "google"
+            EmailAddress.objects.create(
+                user=user, email=user.email, verified=True, primary=True
+            )
             user.save()
         else:
             return Response(user_serializer.errors, status=400)
@@ -2275,6 +2401,8 @@ def google_auth(request):
             "first_name": user.first_name,
             "is_company": user.company,
             "has_onboarded": user.has_onboarded,
+            "is_verified": user.verified,
+            "email": user.email,
         },
         status=status.HTTP_200_OK,
     )
@@ -2543,3 +2671,459 @@ def profile_header(request):
         return Response(status=status.HTTP_404_NOT_FOUND)
 
     return Response(data, status=status.HTTP_200_OK)
+
+
+@swagger_auto_schema(
+    method="post",
+    operation_summary="Get Message from the Frontend",
+    operation_description="Receive message from the frontend and send it to the admin user",
+    request_body=openapi.Schema(
+        type=openapi.TYPE_OBJECT,
+        required=["name", "email", "message"],
+        properties={
+            "name": openapi.Schema(
+                type=openapi.TYPE_STRING, description="Name of the sender"
+            ),
+            "email": openapi.Schema(
+                type=openapi.TYPE_STRING,
+                format=openapi.FORMAT_EMAIL,
+                description="Email of the sender",
+            ),
+            "message": openapi.Schema(
+                type=openapi.TYPE_STRING, description="Message content"
+            ),
+        },
+    ),
+    responses={
+        200: openapi.Response(description="Message sent successfully."),
+        400: openapi.Response(description="Missing or invalid fields."),
+        500: openapi.Response(description="Failed to send message."),
+    },
+)
+@api_view(["POST"])
+@permission_classes([AllowAny])
+def contact_us(request):
+    name = request.data.get("name")
+    email = request.data.get("email")
+    message = request.data.get("message")
+
+    if not name or not email or not message:
+        return Response(
+            {"detail": "Name, email, and message are required."}, status=400
+        )
+
+    # Render the HTML email using a Django template
+    template = get_template("contact/contact_email.html")
+    context = {
+        "name": name,
+        "email": email,
+        "message": message,
+    }
+    html = template.render(context)
+
+    params: resend.Emails.SendParams = {
+        "from": "Scuibai <admin@scuib.com>",
+        "to": ["scuib.com@gmail.com", "okpephillips.dev@gmail.com"],
+        "subject": f"New Contact Form Message from {name}",
+        "html": html,
+    }
+
+    try:
+        resend.Emails.send(params)
+        return Response(
+            {"detail": "Message sent successfully!"}, status=status.HTTP_200_OK
+        )
+    except Exception as e:
+        print(f"Contact form error: {e}")
+        return Response(
+            {"detail": "Failed to send message. Please try again."}, status=500
+        )
+
+
+@swagger_auto_schema(
+    method="get",
+    operation_summary="Count users in the database by Admin",
+    operation_description="Allows an admin to know how many users are on the platform.",
+    manual_parameters=[
+        openapi.Parameter(
+            name="Authorization",
+            in_=openapi.IN_HEADER,
+            description="Bearer {token}",
+            type=openapi.TYPE_STRING,
+            required=True,
+        ),
+    ],
+    responses={
+        204: openapi.Response(
+            description="Count of users in the database",
+        ),
+        404: openapi.Response(
+            description="No users found",
+            examples={"application/json": {"detail": "Users not found"}},
+        ),
+    },
+)
+@api_view(["GET"])
+@permission_classes([IsAdminUser])
+def count_users(request):
+    """Allows an admin to delete a user by ID"""
+    users = User.objects.all()
+    count = 0
+    recruiters = 0
+    applicants = 0
+    admin = 0
+    for user in users:
+        count += 1
+        if user.company:
+            recruiters += 1
+        else:
+            applicants += 1
+        if user.is_staff:
+            admin += 1
+        if not user.company and user.is_staff:
+            applicants -= 1
+        if user.company and user.is_staff:
+            recruiters -= 1
+
+    return Response(
+        {
+            "count": count,
+            "recruiters": recruiters,
+            "applicants": applicants,
+            "admin": admin,
+        },
+        status=status.HTTP_200_OK,
+    )
+
+
+skills_param = openapi.Schema(
+    type=openapi.TYPE_ARRAY,
+    items=openapi.Items(type=openapi.TYPE_STRING),
+    description="List of skills to match (any match)",
+    example=["Django", "React"],
+)
+
+location_param = openapi.Schema(
+    type=openapi.TYPE_STRING,
+    description="Exact location to match (case-insensitive)",
+    example="Lagos",
+)
+message_param = openapi.Schema(
+    type=openapi.TYPE_STRING,
+    description="Message to be sent",
+    example="I need Flutter devs for immediate employment",
+)
+
+request_body_schema = openapi.Schema(
+    type=openapi.TYPE_OBJECT,
+    properties={
+        "skills": skills_param,
+        "location": location_param,
+        "message": message_param,
+    },
+    required=["skills", "location", "message"],
+)
+
+response_schema = openapi.Schema(
+    type=openapi.TYPE_OBJECT,
+    properties={
+        "detail": openapi.Schema(type=openapi.TYPE_STRING),
+        "recommended_applicants": openapi.Schema(
+            type=openapi.TYPE_ARRAY,
+            items=openapi.Schema(
+                type=openapi.TYPE_OBJECT,
+                properties={
+                    "user_id": openapi.Schema(type=openapi.TYPE_INTEGER),
+                    "user_name": openapi.Schema(type=openapi.TYPE_STRING),
+                    "user_email": openapi.Schema(type=openapi.TYPE_STRING),
+                    "User_bio": openapi.Schema(type=openapi.TYPE_STRING),
+                    "image": openapi.Schema(
+                        type=openapi.TYPE_STRING, format="uri", nullable=True
+                    ),
+                    "location": openapi.Schema(type=openapi.TYPE_STRING),
+                    "Employment_choice": openapi.Schema(type=openapi.TYPE_STRING),
+                    "job_location_choice": openapi.Schema(type=openapi.TYPE_STRING),
+                    "skills": openapi.Schema(
+                        type=openapi.TYPE_ARRAY,
+                        items=openapi.Items(type=openapi.TYPE_STRING),
+                    ),
+                },
+            ),
+        ),
+    },
+)
+
+
+@swagger_auto_schema(
+    method="post",
+    operation_summary="Recommend Users by Skills and Location (Any Skill Match)",
+    operation_description="""
+    Recommend users who match **at least one** of the specified skills and exactly match the provided location.
+    """,
+    manual_parameters=[
+        openapi.Parameter(
+            name="Authorization",
+            in_=openapi.IN_HEADER,
+            description="Bearer {token}",
+            type=openapi.TYPE_STRING,
+            required=True,
+        ),
+    ],
+    request_body=request_body_schema,
+    responses={200: response_schema, 400: "Bad Request", 500: "Server Error"},
+)
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def recommend_users_by_skills_and_location(request):
+    """
+    Recommends users who match any of the provided skills and location.
+    """
+    try:
+        job_data = request.data
+        sender = request.user
+        skills = job_data.get("skills", [])
+        location = job_data.get("location", "")
+        message = job_data.get("message", "")
+
+        if not skills or not location or not message:
+            return Response(
+                {"error": "All fields are required."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # Instantiate recommendation system helper
+        matcher = JobAppMatching()
+        user_profiles = matcher.load_users_from_db()
+        if user_profiles.empty:
+            return Response(
+                {
+                    "detail": "No users available for recommendation.",
+                    "recommended_applicants": [],
+                },
+                status=status.HTTP_200_OK,
+            )
+
+        # Use the "match any skills" logic
+        recommended_users = matcher.recommend_users_any_skills(
+            skills, location, user_profiles
+        )
+        notified_users = []
+        user_ids = [u["user_id"] for u in recommended_users]
+        profiles = Profile.objects.select_related("user").filter(user_id__in=user_ids)
+        profile_map = {p.user_id: p for p in profiles}
+        for user_data in recommended_users:
+            try:
+                user_id = user_data["user_id"]
+                profile = profile_map.get(user_id)
+
+                Message.objects.create(
+                    user=profile.user,
+                    title=f"Message from {sender.first_name}",
+                    sender=sender,
+                    skills=", ".join(skills),
+                    location=location,
+                    message=message,
+                )
+
+                notified_users.append(profile.user.first_name)
+            except Profile.DoesNotExist:
+                continue
+
+        return Response(
+            {
+                "detail": "Users matched successfully!",
+                "notified": notified_users,
+            },
+            status=status.HTTP_200_OK,
+        )
+
+    except Exception as e:
+        return Response(
+            {"error": f"Something went wrong: {str(e)}"},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        )
+
+
+@swagger_auto_schema(
+    method="post",
+    operation_summary="Fund Wallet",
+    operation_description="Initializes a Paystack transaction and returns authorization URL for payment.",
+    request_body=openapi.Schema(
+        type=openapi.TYPE_OBJECT,
+        required=["amount"],
+        properties={
+            "amount": openapi.Schema(
+                type=openapi.TYPE_NUMBER, description="Amount in Naira"
+            )
+        },
+    ),
+    responses={200: "Authorization URL returned"},
+)
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def fund_wallet(request):
+    """
+    Initializes a Paystack payment and returns authorization URL.
+    """
+    amount = request.data.get("amount")
+    if not amount:
+        return Response({"error": "Amount is required."}, status=400)
+
+    reference = generate_reference()
+    headers = {
+        "Authorization": f"Bearer {settings.PAYSTACK_SECRET_KEY}",
+        "Content-Type": "application/json",
+    }
+
+    data = {
+        "email": request.user.email,
+        "amount": int(float(amount) * 100),  # Paystack requires kobo
+        "reference": reference,
+        "callback_url": "https://yourdomain.com/payment/verify",  # Optional
+    }
+
+    response = requests.post(
+        "https://api.paystack.co/transaction/initialize", json=data, headers=headers
+    )
+    result = response.json()
+
+    if result.get("status") is True:
+        # Save the transaction (pending)
+        WalletTransaction.objects.create(
+            user=request.user, amount=amount, reference=reference
+        )
+        return Response(
+            {"auth_url": result["data"]["authorization_url"], "reference": reference}
+        )
+    else:
+        return Response(
+            {"error": result.get("message", "Payment initialization failed.")},
+            status=400,
+        )
+
+
+@swagger_auto_schema(
+    method="get",
+    operation_summary="Verify Payment",
+    operation_description="Verifies a Paystack transaction using reference and credits wallet.",
+    manual_parameters=[
+        openapi.Parameter(
+            "reference",
+            openapi.IN_PATH,
+            description="Transaction reference",
+            type=openapi.TYPE_STRING,
+        )
+    ],
+    responses={200: "Wallet funded successfully"},
+)
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def verify_payment(request, reference):
+    """
+    Verifies payment from Paystack and updates wallet.
+    """
+    headers = {
+        "Authorization": f"Bearer {settings.PAYSTACK_SECRET_KEY}",
+    }
+
+    response = requests.get(
+        f"https://api.paystack.co/transaction/verify/{reference}", headers=headers
+    )
+    result = response.json()
+
+    if result.get("status") is True and result["data"]["status"] == "success":
+        amount_paid = result["data"]["amount"] / 100  # Convert to naira
+        txn = WalletTransaction.objects.filter(
+            reference=reference, user=request.user
+        ).first()
+
+        if not txn:
+            return Response({"error": "Transaction not found."}, status=404)
+
+        if txn.verified:
+            return Response({"message": "Transaction already verified."})
+
+        # Credit the user's wallet
+        wallet, _ = Wallet.objects.get_or_create(user=request.user)
+        wallet.balance += amount_paid
+        wallet.save()
+
+        txn.verified = True
+        txn.save()
+
+        return Response(
+            {"message": "Wallet funded successfully!", "balance": wallet.balance}
+        )
+
+    return Response({"error": "Verification failed."}, status=400)
+
+
+@swagger_auto_schema(
+    method="get",
+    operation_summary="Get Wallet Balance",
+    operation_description="Returns current wallet balance for authenticated user.",
+    responses={200: "Balance returned"},
+)
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def wallet_balance(request):
+    wallet, _ = Wallet.objects.get_or_create(user=request.user)
+    return Response({"balance": wallet.balance})
+
+
+@swagger_auto_schema(
+    method="get",
+    operation_summary="Unlock Full Message",
+    operation_description=f"Deducts ₦{UNLOCK_COST} from wallet to unlock full message by message ID.",
+    manual_parameters=[
+        openapi.Parameter(
+            "message_id",
+            openapi.IN_PATH,
+            description="ID of the message",
+            type=openapi.TYPE_INTEGER,
+        )
+    ],
+    responses={
+        200: openapi.Response("Message content unlocked."),
+        402: "Insufficient funds",
+    },
+)
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def unlock_message(request, message_id):
+    try:
+        message = Message.objects.get(id=message_id, user=request.user)
+
+        # Check if already unlocked
+        if hasattr(message, "unlocked") and message.unlocked:
+            return Response(
+                {"detail": "Message already unlocked.", "message": message.message}
+            )
+
+        # Deduct from wallet
+        wallet = Wallet.objects.get(user=request.user)
+        if wallet.deduct(UNLOCK_COST):
+            # You can store `unlocked=True` if your model supports it
+            message.unlocked = True  # optional field
+            message.save(update_fields=["unlocked"])  # optional
+            return Response(
+                {"detail": "Message unlocked successfully.", "message": message.message}
+            )
+        else:
+            return Response({"detail": "Insufficient wallet balance."}, status=402)
+
+    except Message.DoesNotExist:
+        return Response({"detail": "Message not found."}, status=404)
+
+
+@swagger_auto_schema(
+    method="get",
+    operation_summary="List user messages with preview if locked",
+    responses={200: MessageSerializer(many=True)},
+)
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def list_messages(request):
+    messages = Message.objects.filter(user=request.user).order_by("-created_at")
+    serializer = MessageSerializer(messages, many=True)
+    return Response(serializer.data)

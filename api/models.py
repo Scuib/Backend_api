@@ -33,6 +33,7 @@ class User(AbstractUser):
     REQUIRED_FIELDS = ["first_name"]
 
     objects = CustomUserManager()
+
     def __str__(self) -> str:
         return self.email
 
@@ -91,8 +92,9 @@ class Profile(models.Model):
         choices=JobEmploymentChoices.choices,
         default=JobEmploymentChoices.Full_Time,
     )
-    max_salary = models.IntegerField(default=100)
+    max_salary = models.IntegerField(default=10)
     min_salary = models.IntegerField(default=10)
+    currency = models.CharField(max_length=20, default="USD")
     phonenumbers = models.CharField(max_length=255, blank=True, null=True)
     github = models.CharField(max_length=100, null=True, blank=True)
     portfolio = models.CharField(max_length=100, null=True, blank=True)
@@ -107,8 +109,10 @@ class Profile(models.Model):
         max_length=10, choices=ExperienceLevel.choices, default=ExperienceLevel.ENTRY
     )
     years_of_experience = models.IntegerField(default=1)
-    resume = CloudinaryField("resume", null=True, blank=True)
-    cover_letter = CloudinaryField("cover_letter", null=True, blank=True)
+    resume = CloudinaryField("resume", resource_type="raw", null=True, blank=True)
+    cover_letter = CloudinaryField(
+        "cover_letter", resource_type="raw", null=True, blank=True
+    )
     image = CloudinaryField("image", null=True, blank=True)
 
     def __str__(self):
@@ -181,6 +185,7 @@ class Jobs(models.Model):
         usd = "USD", "United States Dollar"
         ngn = "NGN", "Nigerian Naira"
         eur = "EUR", "Euros"
+        gbp = "GBP", "Great Britain Pounds"
 
     class EmploymentType(models.TextChoices):
         REMOTE = "R", "Remote"
@@ -200,9 +205,8 @@ class Jobs(models.Model):
     skills = models.ManyToManyField(JobSkills)
     max_salary = models.IntegerField(default=5000)
     min_salary = models.IntegerField(default=0)
-    currency_type = models.CharField(
-        max_length=30, choices=CurrencyChoices.choices, default=CurrencyChoices.ngn
-    )
+    currency_type = models.CharField(max_length=30, default="USD")
+
     employment_type = models.CharField(max_length=20, choices=EmploymentType.choices)
     experience_level = models.CharField(
         max_length=10, choices=ExperienceLevel.choices, default=ExperienceLevel.ENTRY
@@ -220,6 +224,7 @@ class Applicant(models.Model):
         User, on_delete=models.CASCADE, related_name="applications"
     )
     job = models.ForeignKey(Jobs, on_delete=models.CASCADE, related_name="applicants")
+    match_score = models.FloatField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -260,3 +265,53 @@ class RecommenderModel(models.Model):
 
     def __str__(self):
         return self.name
+
+
+class Message(models.Model):
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="messages")
+    sender = models.ForeignKey(
+        User,
+        related_name="sent_messages",
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+    )
+    title = models.CharField(max_length=255)
+    message = models.TextField()
+    location = models.CharField(max_length=255, blank=True, null=True)
+    skills = models.JSONField(blank=True, null=True)
+    is_read = models.BooleanField(default=False)
+    unlocked = models.BooleanField(default=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+
+class Wallet(models.Model):
+    user = models.OneToOneField(User, on_delete=models.CASCADE, related_name="wallet")
+    balance = models.DecimalField(max_digits=12, decimal_places=2, default=0.00)
+
+    def deposit(self, amount):
+        self.balance += amount
+        self.save()
+
+    def deduct(self, amount):
+        if self.balance >= amount:
+            self.balance -= amount
+            self.save()
+            return True
+        return False
+
+    def __str__(self):
+        return f"{self.user.email} - ₦{self.balance}"
+
+
+class WalletTransaction(models.Model):
+    user = models.ForeignKey(
+        User, on_delete=models.CASCADE, related_name="transactions"
+    )
+    amount = models.DecimalField(max_digits=12, decimal_places=2)
+    reference = models.CharField(max_length=100, unique=True)
+    verified = models.BooleanField(default=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"{self.user.email} - ₦{self.amount} - {'Verified' if self.verified else 'Pending'}"
