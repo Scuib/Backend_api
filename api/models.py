@@ -5,7 +5,7 @@ from django.contrib.auth.models import AbstractUser, PermissionsMixin
 from django.urls import translate_url
 from django.utils.translation import gettext_lazy as _
 import uuid
-
+from decimal import Decimal
 from .managers import CustomUserManager
 from cloudinary.models import CloudinaryField
 
@@ -293,6 +293,7 @@ class Wallet(models.Model):
         return f"{self.user.email} - ₦{self.balance}"
 
     def deposit(self, amount, reference=None, source="manual"):
+        amount = Decimal(str(amount))
         if amount <= 0:
             raise ValueError("Deposit amount must be positive.")
         with transaction.atomic():
@@ -308,6 +309,7 @@ class Wallet(models.Model):
             )
 
     def deduct(self, amount, description=None):
+        amount = Decimal(str(amount))
         if amount <= 0:
             raise ValueError("Deduction amount must be positive.")
         if self.balance >= amount:
