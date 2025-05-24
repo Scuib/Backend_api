@@ -1,11 +1,11 @@
 from os import name
 from unicodedata import category
-from django.db import models
+from django.db import models, transaction
 from django.contrib.auth.models import AbstractUser, PermissionsMixin
 from django.urls import translate_url
 from django.utils.translation import gettext_lazy as _
-
-
+import uuid
+from decimal import Decimal
 from .managers import CustomUserManager
 from cloudinary.models import CloudinaryField
 
@@ -289,29 +289,74 @@ class Wallet(models.Model):
     user = models.OneToOneField(User, on_delete=models.CASCADE, related_name="wallet")
     balance = models.DecimalField(max_digits=12, decimal_places=2, default=0.00)
 
-    def deposit(self, amount):
-        self.balance += amount
-        self.save()
-
-    def deduct(self, amount):
-        if self.balance >= amount:
-            self.balance -= amount
-            self.save()
-            return True
-        return False
-
     def __str__(self):
         return f"{self.user.email} - ₦{self.balance}"
 
+    def deposit(self, amount, reference=None, source="manual"):
+        amount = Decimal(str(amount))
+        if amount <= 0:
+            raise ValueError("Deposit amount must be positive.")
+        with transaction.atomic():
+            self.balance += amount
+            self.save()
+            WalletTransaction.objects.create(
+                wallet=self,
+                amount=amount,
+                type="deposit",
+                reference=reference or self._generate_reference(),
+                status="success",
+                source=source,
+            )
+
+    def deduct(self, amount, description=None):
+        amount = Decimal(str(amount))
+        if amount <= 0:
+            raise ValueError("Deduction amount must be positive.")
+        if self.balance >= amount:
+            with transaction.atomic():
+                self.balance -= amount
+                self.save()
+                WalletTransaction.objects.create(
+                    wallet=self,
+                    amount=amount,
+                    type="spend",
+                    reference=self._generate_reference(),
+                    status="success",
+                    description=description,
+                    source="wallet",
+                )
+            return True
+        return False
+
+    def _generate_reference(self):
+        return str(uuid.uuid4())
+
 
 class WalletTransaction(models.Model):
-    user = models.ForeignKey(
-        User, on_delete=models.CASCADE, related_name="transactions"
+    TRANSACTION_TYPES = (
+        ("deposit", "Deposit"),
+        ("spend", "Spend"),
+        ("bonus", "Bonus"),
+    )
+
+    STATUS_CHOICES = (
+        ("pending", "Pending"),
+        ("success", "Success"),
+        ("failed", "Failed"),
+    )
+
+    wallet = models.ForeignKey(
+        Wallet, on_delete=models.CASCADE, related_name="transactions"
     )
     amount = models.DecimalField(max_digits=12, decimal_places=2)
+    type = models.CharField(max_length=20, choices=TRANSACTION_TYPES, default="deposit")
     reference = models.CharField(max_length=100, unique=True)
-    verified = models.BooleanField(default=False)
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default="pending")
+    source = models.CharField(max_length=50, default="wallet")
+    description = models.TextField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):
-        return f"{self.user.email} - ₦{self.amount} - {'Verified' if self.verified else 'Pending'}"
+        return (
+            f"{self.wallet.user.email} - ₦{self.amount} - {self.get_status_display()}"
+        )

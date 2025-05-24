@@ -48,6 +48,7 @@ from .serializer import (
     GoogleAuthSerializer,
     CompanyProfileSerializer,
     MessageSerializer,
+    WalletTransactionSerializer,
 )
 
 from django.utils import timezone
@@ -66,6 +67,7 @@ import resend
 from scuibai.settings import RESEND_API_KEY
 from django.core.mail import send_mail
 import uuid
+from decimal import Decimal
 
 from django.utils import timezone
 from api.job_model.job_recommender import JobAppMatching
@@ -2948,6 +2950,15 @@ def recommend_users_by_skills_and_location(request):
     method="post",
     operation_summary="Fund Wallet",
     operation_description="Initializes a Paystack transaction and returns authorization URL for payment.",
+    manual_parameters=[
+        openapi.Parameter(
+            name="Authorization",
+            in_=openapi.IN_HEADER,
+            description="Bearer {token}",
+            type=openapi.TYPE_STRING,
+            required=True,
+        ),
+    ],
     request_body=openapi.Schema(
         type=openapi.TYPE_OBJECT,
         required=["amount"],
@@ -2989,9 +3000,17 @@ def fund_wallet(request):
 
     if result.get("status") is True:
         # Save the transaction (pending)
+        wallet, _ = Wallet.objects.get_or_create(user=request.user)
         WalletTransaction.objects.create(
-            user=request.user, amount=amount, reference=reference
+            wallet=wallet,
+            amount=amount,
+            type="deposit",
+            reference=reference,
+            status="pending",
+            source="wallet",
+            description="Paystack funding initialized",
         )
+
         return Response(
             {"auth_url": result["data"]["authorization_url"], "reference": reference}
         )
@@ -3012,7 +3031,14 @@ def fund_wallet(request):
             openapi.IN_PATH,
             description="Transaction reference",
             type=openapi.TYPE_STRING,
-        )
+        ),
+        openapi.Parameter(
+            name="Authorization",
+            in_=openapi.IN_HEADER,
+            description="Bearer {token}",
+            type=openapi.TYPE_STRING,
+            required=True,
+        ),
     ],
     responses={200: "Wallet funded successfully"},
 )
@@ -3032,36 +3058,52 @@ def verify_payment(request, reference):
     result = response.json()
 
     if result.get("status") is True and result["data"]["status"] == "success":
-        amount_paid = result["data"]["amount"] / 100  # Convert to naira
+        amount_paid = Decimal(result["data"]["amount"]) / 100  # Convert to naira
+
+        wallet = Wallet.objects.filter(user=request.user).first()
+
+        if not wallet:
+            return Response({"error": "Wallet not found."}, status=404)
+
         txn = WalletTransaction.objects.filter(
-            reference=reference, user=request.user
+            wallet=wallet, reference=reference
         ).first()
 
         if not txn:
             return Response({"error": "Transaction not found."}, status=404)
 
-        if txn.verified:
+        if txn.status == "success":
             return Response({"message": "Transaction already verified."})
 
-        # Credit the user's wallet
-        wallet, _ = Wallet.objects.get_or_create(user=request.user)
         wallet.balance += amount_paid
         wallet.save()
 
-        txn.verified = True
+        txn.status = "success"
+        txn.description = "Wallet funded via Paystack"
         txn.save()
 
         return Response(
             {"message": "Wallet funded successfully!", "balance": wallet.balance}
         )
 
-    return Response({"error": "Verification failed."}, status=400)
+    return Response(
+        {"error": "Verification failed or transaction not successful."}, status=400
+    )
 
 
 @swagger_auto_schema(
     method="get",
     operation_summary="Get Wallet Balance",
     operation_description="Returns current wallet balance for authenticated user.",
+    manual_parameters=[
+        openapi.Parameter(
+            name="Authorization",
+            in_=openapi.IN_HEADER,
+            description="Bearer {token}",
+            type=openapi.TYPE_STRING,
+            required=True,
+        ),
+    ],
     responses={200: "Balance returned"},
 )
 @api_view(["GET"])
@@ -3081,7 +3123,14 @@ def wallet_balance(request):
             openapi.IN_PATH,
             description="ID of the message",
             type=openapi.TYPE_INTEGER,
-        )
+        ),
+        openapi.Parameter(
+            name="Authorization",
+            in_=openapi.IN_HEADER,
+            description="Bearer {token}",
+            type=openapi.TYPE_STRING,
+            required=True,
+        ),
     ],
     responses={
         200: openapi.Response("Message content unlocked."),
@@ -3102,10 +3151,9 @@ def unlock_message(request, message_id):
 
         # Deduct from wallet
         wallet = Wallet.objects.get(user=request.user)
-        if wallet.deduct(UNLOCK_COST):
-            # You can store `unlocked=True` if your model supports it
-            message.unlocked = True  # optional field
-            message.save(update_fields=["unlocked"])  # optional
+        if wallet.deduct(UNLOCK_COST, "unlock message"):
+            message.unlocked = True
+            message.save(update_fields=["unlocked"])
             return Response(
                 {"detail": "Message unlocked successfully.", "message": message.message}
             )
@@ -3119,6 +3167,15 @@ def unlock_message(request, message_id):
 @swagger_auto_schema(
     method="get",
     operation_summary="List user messages with preview if locked",
+    manual_parameters=[
+        openapi.Parameter(
+            name="Authorization",
+            in_=openapi.IN_HEADER,
+            description="Bearer {token}",
+            type=openapi.TYPE_STRING,
+            required=True,
+        ),
+    ],
     responses={200: MessageSerializer(many=True)},
 )
 @api_view(["GET"])
@@ -3126,4 +3183,28 @@ def unlock_message(request, message_id):
 def list_messages(request):
     messages = Message.objects.filter(user=request.user).order_by("-created_at")
     serializer = MessageSerializer(messages, many=True)
+    return Response(serializer.data)
+
+
+@swagger_auto_schema(
+    method="get",
+    operation_summary="List user messages with preview if locked",
+    manual_parameters=[
+        openapi.Parameter(
+            name="Authorization",
+            in_=openapi.IN_HEADER,
+            description="Bearer {token}",
+            type=openapi.TYPE_STRING,
+            required=True,
+        ),
+    ],
+    responses={200: WalletTransactionSerializer(many=True)},
+)
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def transaction_history(request):
+    transactions = WalletTransaction.objects.filter(wallet__user=request.user).order_by(
+        "-created_at"
+    )
+    serializer = WalletTransactionSerializer(transactions, many=True)
     return Response(serializer.data)

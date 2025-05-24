@@ -66,4 +66,5 @@ urlpatterns = [
         name="unlock-message",
     ),
     path("messages/", views.list_messages, name="list-messages"),
+    path("wallet/transactions/", views.transaction_history, name="wallet-transactions"),
 ]

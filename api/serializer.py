@@ -17,6 +17,7 @@ from .models import (
     Applicant,
     CompanyProfile,
     Message,
+    WalletTransaction,
 )
 
 from django.contrib.auth.hashers import make_password
@@ -235,10 +236,23 @@ class MessageSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Message
-        fields = ["sender", "title", "content", "unlocked", "created_at"]
+        fields = ["id", "sender", "title", "content", "unlocked", "created_at"]
 
     def get_content(self, obj):
         if obj.unlocked:
             return obj.message
         teaser = obj.message[:50]  # First 50 characters of the message
         return f"Preview: {teaser}... Pay ₦100 to view the full message."
+
+
+class WalletTransactionSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = WalletTransaction
+        fields = [
+            "id",
+            "amount",
+            "type",
+            "status",
+            "description",
+            "created_at",
+        ]
