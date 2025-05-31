@@ -358,3 +358,14 @@ class WalletTransaction(models.Model):
         return (
             f"{self.wallet.user.email} - ₦{self.amount} - {self.get_status_display()}"
         )
+
+
+class JobTweet(models.Model):
+    tweet_id = models.BigIntegerField(unique=True)
+    user_id = models.CharField(max_length=255)
+    text = models.TextField()
+    created_at = models.DateTimeField()
+    tweet_link = models.URLField()
+
+    def __str__(self):
+        return f"{self.user_id}: {self.text[:50]}..."

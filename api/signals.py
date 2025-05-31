@@ -58,34 +58,27 @@ def send_message_email(sender, instance, created, **kwargs):
         recipient = instance.user
         sender_user = instance.sender
         message = instance.content
-
-        try:
-            wallet = Wallet.objects.select_for_update().get(user=recipient)
-        except Wallet.DoesNotExist:
-            wallet = None
-
-        # Auto-unlock logic
-        if wallet and wallet.balance >= 100:
-            with transaction.atomic():
-                # Deduct amount
-                wallet.balance -= 100
-                wallet.save()
-
-                # Unlock message
-                instance.unlocked = True
-                instance.save(update_fields=["unlocked"])
-
-            preview = message
-        else:
-            preview = "You’ve received a message. Pay ₦100 to view full content."
+        teaser = message[:50]  # First 50 characters of the message
+        preview = f"Preview: {teaser}... Pay ₦100 to view the full message."
 
         email_html = f"""
+        <html>
+        <body style="font-family: Arial, sans-serif; font-size: 14px; color: #333;">
             <p>Hi {recipient.first_name},</p>
+
             <p>{sender_user.first_name} has shared a job opportunity with you.</p>
+
             <p><strong>Message:</strong><br>{preview}</p>
-            <br>
-            <p>Log in to your account to respond or top up your wallet.</p>
-            <p>Best,<br>Scuibai Team</p>
+
+            <p>
+            Log in to your account to view the full message and respond.
+            <br><br>
+            If you have any questions, feel free to contact support.
+            </p>
+
+            <p>Best regards,<br>Scuibai Team</p>
+        </body>
+        </html>
         """
 
         subject = instance.title

@@ -18,6 +18,7 @@ from .models import (
     CompanyProfile,
     Message,
     WalletTransaction,
+    JobTweet,
 )
 
 from django.contrib.auth.hashers import make_password
@@ -272,3 +273,9 @@ class WalletTransactionSerializer(serializers.ModelSerializer):
             "description",
             "created_at",
         ]
+
+
+class JobTweetSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = JobTweet
+        fields = "__all__"
