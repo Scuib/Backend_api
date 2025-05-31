@@ -31,6 +31,7 @@ from .models import (
     Message,
     Wallet,
     WalletTransaction,
+    JobTweet,
 )
 
 from .serializer import (
@@ -49,6 +50,7 @@ from .serializer import (
     CompanyProfileSerializer,
     MessageSerializer,
     WalletTransactionSerializer,
+    JobTweetSerializer,
 )
 
 from django.utils import timezone
@@ -74,6 +76,7 @@ from api.job_model.job_recommender import JobAppMatching
 
 from drf_yasg.utils import swagger_auto_schema
 from drf_yasg import openapi
+import snscrape.modules.twitter as sntwitter
 
 # Activate the resend with the api key
 resend.api_key = settings.NEW_RESEND_API_KEY
@@ -2854,7 +2857,7 @@ response_schema = openapi.Schema(
     method="post",
     operation_summary="Recommend Users by Skills and Location (Any Skill Match)",
     operation_description="""
-    Recommend users who match **at least one** of the specified skills and exactly match the provided location.
+    Recommend users who match at least one of the specified skills and exactly match the provided location.
     """,
     manual_parameters=[
         openapi.Parameter(
@@ -2930,7 +2933,7 @@ def recommend_users_by_skills_and_location(request):
         return Response(
             {
                 "detail": "Users matched successfully!",
-                "notified": matched_users,
+                "matched_users": matched_users,
             },
             status=status.HTTP_200_OK,
         )
@@ -2957,7 +2960,7 @@ def recommend_users_by_skills_and_location(request):
     ],
     request_body=openapi.Schema(
         type=openapi.TYPE_OBJECT,
-        required=["title", "content", "recipients_id"],
+        required=["title", "content", "recipients"],
         properties={
             "title": openapi.Schema(
                 type=openapi.TYPE_STRING, description="Title of the message"
@@ -2965,7 +2968,7 @@ def recommend_users_by_skills_and_location(request):
             "content": openapi.Schema(
                 type=openapi.TYPE_STRING, description="Content of the message"
             ),
-            "content": openapi.Schema(
+            "recipients_id": openapi.Schema(
                 type=openapi.TYPE_ARRAY,
                 items=openapi.Items(type=openapi.TYPE_NUMBER),
                 description="List of user_ids of recipients of the message",
@@ -2986,8 +2989,8 @@ def message_boost(request):
     try:
         data = request.data
         recipients_id = data.get("recipients_id", [])
-        title = data.title
-        content = data.content
+        title = data.get("title")
+        content = data.get("content")
         sender = request.user
 
         if not recipients_id or not title or not content:
@@ -3249,7 +3252,7 @@ def unlock_message(request, message_id):
             return Response(
                 {
                     "detail": "Message unlocked successfully.",
-                    "message": message.message,
+                    "message": message.content,
                     "sender": sender_data,
                     "id": message.id,
                 }
@@ -3282,10 +3285,54 @@ def list_messages(request):
     serializer = MessageSerializer(messages, many=True)
     return Response(serializer.data)
 
+@swagger_auto_schema(
+    method="delete",
+    operation_summary="Delete a message",
+    operation_description="Allows a logged in user to delete a message by id.",
+    manual_parameters=[
+        openapi.Parameter(
+            name="Authorization",
+            in_=openapi.IN_HEADER,
+            description="Bearer {token}",
+            type=openapi.TYPE_STRING,
+            required=True,
+        ),
+        openapi.Parameter(
+            name="message_id",
+            in_=openapi.IN_PATH,
+            description="ID of the message to delete",
+            type=openapi.TYPE_INTEGER,
+            required=True,
+        ),
+    ],
+    responses={
+        204: openapi.Response(
+            description="Deleted",
+        ),
+        404: openapi.Response(
+            description="Message not found",
+            examples={"application/json": {"detail": "Message not found"}},
+        ),
+        400: openapi.Response(
+            description="Bad Request",
+            examples={"application/json": {"detail": "Missing message_id parameter"}},
+        ),
+    },
+)
+@api_view(["DELETE"])
+@permission_classes([IsAuthenticated])
+def delete_message(request, message_id):
+    message = get_object_or_404(Message, id=message_id)
+    message.delete()
+    return Response(
+        {"detail": "Message deleted successfully"},
+        status=status.HTTP_204_NO_CONTENT,
+    )
+
 
 @swagger_auto_schema(
     method="get",
-    operation_summary="List user messages with preview if locked",
+    operation_summary="Transaction History shows all debit and credit activities of the user",
     manual_parameters=[
         openapi.Parameter(
             name="Authorization",
@@ -3305,3 +3352,38 @@ def transaction_history(request):
     )
     serializer = WalletTransactionSerializer(transactions, many=True)
     return Response(serializer.data)
+
+
+@swagger_auto_schema(
+    method="post",
+    operation_summary="Returns twitter jobs scraped",
+    responses={200: JobTweetSerializer(many=True)},
+)
+@api_view(["POST"])
+@permission_classes([AllowAny])
+def fetch_twitter_jobs(limit=50):
+    """Fetch jobs from twitter via scraping"""
+    query = "#hiring OR #remotejobs OR #techjobs lang:en"
+    tweets = sntwitter.TwitterSearchScraper(query).get_items()
+
+    new_jobs = []
+    for i, tweet in enumerate(tweets):
+        if i >= limit:
+            break
+
+        data = {
+            "tweet_id": tweet.id,
+            "user_id": tweet.user.username,
+            "text": tweet.content,
+            "created_at": tweet.date,
+            "tweet_link": f"https://twitter.com/{tweet.user.username}/status/{tweet.id}",
+        }
+
+        # Save only new tweets
+        if not JobTweet.objects.filter(tweet_id=tweet.id).exists():
+            job = JobTweet(**data)
+            job.save()
+            new_jobs.append(job)
+
+    serializer = JobTweetSerializer(new_jobs, many=True)
+    return Response({"fetched": len(new_jobs), "jobs": serializer.data})

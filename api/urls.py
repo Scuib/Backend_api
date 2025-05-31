@@ -66,5 +66,10 @@ urlpatterns = [
         name="unlock-message",
     ),
     path("messages/", views.list_messages, name="list-messages"),
+    path("messages/send/", views.message_boost, name="send-messages"),
+    path(
+        "messages/delete/<int:message_id>/", views.delete_message, name="delete-message"
+    ),
     path("wallet/transactions/", views.transaction_history, name="wallet-transactions"),
+    path("fetch-twitter-jobs/", views.fetch_twitter_jobs, name="fetch-twitter-jobs"),
 ]
