@@ -277,9 +277,7 @@ class Message(models.Model):
         blank=True,
     )
     title = models.CharField(max_length=255)
-    message = models.TextField()
-    location = models.CharField(max_length=255, blank=True, null=True)
-    skills = models.JSONField(blank=True, null=True)
+    content = models.TextField()
     is_read = models.BooleanField(default=False)
     unlocked = models.BooleanField(default=False)
     created_at = models.DateTimeField(auto_now_add=True)

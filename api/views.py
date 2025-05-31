@@ -2810,20 +2810,14 @@ location_param = openapi.Schema(
     description="Exact location to match (case-insensitive)",
     example="Lagos",
 )
-message_param = openapi.Schema(
-    type=openapi.TYPE_STRING,
-    description="Message to be sent",
-    example="I need Flutter devs for immediate employment",
-)
 
 request_body_schema = openapi.Schema(
     type=openapi.TYPE_OBJECT,
     properties={
         "skills": skills_param,
         "location": location_param,
-        "message": message_param,
     },
-    required=["skills", "location", "message"],
+    required=["skills", "location"],
 )
 
 response_schema = openapi.Schema(
@@ -2882,12 +2876,10 @@ def recommend_users_by_skills_and_location(request):
     """
     try:
         job_data = request.data
-        sender = request.user
         skills = job_data.get("skills", [])
         location = job_data.get("location", "")
-        message = job_data.get("message", "")
 
-        if not skills or not location or not message:
+        if not skills or not location:
             return Response(
                 {"error": "All fields are required."},
                 status=status.HTTP_400_BAD_REQUEST,
@@ -2909,7 +2901,7 @@ def recommend_users_by_skills_and_location(request):
         recommended_users = matcher.recommend_users_any_skills(
             skills, location, user_profiles
         )
-        notified_users = []
+        matched_users = []
         user_ids = [u["user_id"] for u in recommended_users]
         profiles = Profile.objects.select_related("user").filter(user_id__in=user_ids)
         profile_map = {p.user_id: p for p in profiles}
@@ -2917,24 +2909,113 @@ def recommend_users_by_skills_and_location(request):
             try:
                 user_id = user_data["user_id"]
                 profile = profile_map.get(user_id)
-
-                Message.objects.create(
-                    user=profile.user,
-                    title=f"Message from {sender.first_name}",
-                    sender=sender,
-                    skills=", ".join(skills),
-                    location=location,
-                    message=message,
+                matched_users.append(
+                    {
+                        "user_id": profile.user.id,
+                        "user_name": profile.user.first_name,
+                        "user_email": profile.user.email,
+                        "User_bio": profile.bio,
+                        "image": profile.image.url,
+                        "years_of_experience": profile.years_of_experience,
+                        "location": profile.location,
+                        "Employment_choice": profile.employment_type,
+                        "job_location_choice": profile.job_location,
+                        "skills": list(profile.skills.values_list("name", flat=True)),
+                    }
                 )
 
-                notified_users.append(profile.user.first_name)
             except Profile.DoesNotExist:
                 continue
 
         return Response(
             {
                 "detail": "Users matched successfully!",
-                "notified": notified_users,
+                "notified": matched_users,
+            },
+            status=status.HTTP_200_OK,
+        )
+
+    except Exception as e:
+        return Response(
+            {"error": f"Something went wrong: {str(e)}"},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        )
+
+
+@swagger_auto_schema(
+    method="post",
+    operation_summary="Boost Message to selected users",
+    operation_description="This endpoint allows a recruiter to send messaege to selected users that match their requirements",
+    manual_parameters=[
+        openapi.Parameter(
+            name="Authorization",
+            in_=openapi.IN_HEADER,
+            description="Bearer {token}",
+            type=openapi.TYPE_STRING,
+            required=True,
+        ),
+    ],
+    request_body=openapi.Schema(
+        type=openapi.TYPE_OBJECT,
+        required=["title", "content", "recipients_id"],
+        properties={
+            "title": openapi.Schema(
+                type=openapi.TYPE_STRING, description="Title of the message"
+            ),
+            "content": openapi.Schema(
+                type=openapi.TYPE_STRING, description="Content of the message"
+            ),
+            "content": openapi.Schema(
+                type=openapi.TYPE_ARRAY,
+                items=openapi.Items(type=openapi.TYPE_NUMBER),
+                description="List of user_ids of recipients of the message",
+                example=[24, 5],
+            ),
+        },
+    ),
+    responses={
+        200: "Boost message sent!",
+        400: "Bad request. All fields are required",
+        401: "Unauthorized",
+    },
+)
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def message_boost(request):
+    """Sends a boost message to selected users"""
+    try:
+        data = request.data
+        recipients_id = data.get("recipients_id", [])
+        title = data.title
+        content = data.content
+        sender = request.user
+
+        if not recipients_id or not title or not content:
+            return Response(
+                {"error": "All fields are required."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        profiles = Profile.objects.select_related("user").filter(
+            user_id__in=recipients_id
+        )
+        profile_map = {p.user_id: p for p in profiles}
+        for user_id in recipients_id:
+            try:
+                profile = profile_map.get(user_id)
+
+                Message.objects.create(
+                    user=profile.user,
+                    title=f"Message from {sender.first_name}",
+                    sender=sender,
+                    content=content,
+                )
+            except Profile.DoesNotExist:
+                continue
+
+        return Response(
+            {
+                "detail": "Message sent successfully!",
             },
             status=status.HTTP_200_OK,
         )
@@ -3145,8 +3226,16 @@ def unlock_message(request, message_id):
 
         # Check if already unlocked
         if hasattr(message, "unlocked") and message.unlocked:
+            sender_data = (
+                UserSerializer(message.sender).data if message.sender else None
+            )
             return Response(
-                {"detail": "Message already unlocked.", "message": message.message}
+                {
+                    "detail": "Message already unlocked.",
+                    "message": message.content,
+                    "sender": sender_data,
+                    "id": message.id,
+                }
             )
 
         # Deduct from wallet
@@ -3154,8 +3243,16 @@ def unlock_message(request, message_id):
         if wallet.deduct(UNLOCK_COST, "unlock message"):
             message.unlocked = True
             message.save(update_fields=["unlocked"])
+            sender_data = (
+                UserSerializer(message.sender).data if message.sender else None
+            )
             return Response(
-                {"detail": "Message unlocked successfully.", "message": message.message}
+                {
+                    "detail": "Message unlocked successfully.",
+                    "message": message.message,
+                    "sender": sender_data,
+                    "id": message.id,
+                }
             )
         else:
             return Response({"detail": "Insufficient wallet balance."}, status=402)
