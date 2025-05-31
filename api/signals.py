@@ -57,9 +57,7 @@ def send_message_email(sender, instance, created, **kwargs):
     if created:
         recipient = instance.user
         sender_user = instance.sender
-        message = instance.message
-        location = instance.location
-        skills = instance.skills
+        message = instance.content
 
         try:
             wallet = Wallet.objects.select_for_update().get(user=recipient)
@@ -85,14 +83,12 @@ def send_message_email(sender, instance, created, **kwargs):
             <p>Hi {recipient.first_name},</p>
             <p>{sender_user.first_name} has shared a job opportunity with you.</p>
             <p><strong>Message:</strong><br>{preview}</p>
-            <p>Location: {location}</p>
-            <p>Skills match: {skills}</p>
             <br>
             <p>Log in to your account to respond or top up your wallet.</p>
             <p>Best,<br>Scuibai Team</p>
         """
 
-        subject = f"New Message from {sender_user.first_name}"
+        subject = instance.title
         try:
             resend.Emails.send(
                 {

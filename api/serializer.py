@@ -39,6 +39,7 @@ class LoginSerializer(serializers.Serializer):
 class UserSerializer(serializers.ModelSerializer):
     password = serializers.CharField(write_only=True)
     password2 = serializers.CharField(write_only=True)
+    profile = serializers.SerializerMethodField()
 
     class Meta:
         model = User
@@ -48,6 +49,7 @@ class UserSerializer(serializers.ModelSerializer):
             "last_name",
             "password",
             "password2",
+            "profile",
         ]
 
     def validate(self, attrs):
@@ -68,6 +70,13 @@ class UserSerializer(serializers.ModelSerializer):
         # print(user)
         user.save()
         return user
+
+    def get_profile(self, user):
+        if hasattr(user, "profile"):
+            return MinimalProfileSerializer(user.profile).data
+        elif hasattr(user, "company_profile"):
+            return CompanyProfileSerializer(user.company_profile).data
+        return None
 
 
 class MyTokenObtainPairSerializer(TokenObtainPairSerializer):
@@ -98,6 +107,12 @@ class ProfileSerializer(ModelSerializer):
     class Meta:
         model = Profile
         fields = "__all__"
+
+
+class MinimalProfileSerializer(ModelSerializer):
+    class Meta:
+        model = Profile
+        fields = ["image"]
 
 
 class DisplayProfileSerializer(ModelSerializer):
@@ -233,6 +248,7 @@ class GoogleAuthSerializer(serializers.Serializer):
 
 class MessageSerializer(serializers.ModelSerializer):
     content = serializers.SerializerMethodField()
+    sender = UserSerializer()
 
     class Meta:
         model = Message
@@ -240,8 +256,8 @@ class MessageSerializer(serializers.ModelSerializer):
 
     def get_content(self, obj):
         if obj.unlocked:
-            return obj.message
-        teaser = obj.message[:50]  # First 50 characters of the message
+            return obj.content
+        teaser = obj.content[:50]  # First 50 characters of the message
         return f"Preview: {teaser}... Pay ₦100 to view the full message."
 
 
