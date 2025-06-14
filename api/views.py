@@ -13,6 +13,7 @@ from django.core.files.uploadedfile import UploadedFile
 import pandas as pd
 import json
 from django.views.decorators.csrf import csrf_exempt
+import time
 
 from .models import (
     CompanyProfile,
@@ -2486,6 +2487,7 @@ def google_auth(request):
 )
 @api_view(["POST"])
 def post_job_without_auth(request):
+    start = time.perf_counter()
     job_data = request.data
     job_data["skills"] = ";".join(job_data["skills"])
     # Prepare data for recommendation system
@@ -2546,7 +2548,7 @@ def post_job_without_auth(request):
 
         except Profile.DoesNotExist:
             continue
-
+    print("This endpoint took:", time.perf_counter() - start)
     return Response(
         {
             "detail": "Job processed successfully!",
