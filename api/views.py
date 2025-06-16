@@ -13,6 +13,7 @@ from django.core.files.uploadedfile import UploadedFile
 import pandas as pd
 import json
 from django.views.decorators.csrf import csrf_exempt
+import time
 
 from .models import (
     CompanyProfile,
@@ -2115,86 +2116,6 @@ def waitlist(request):
         )
 
 
-""" PAYMENT """
-
-
-@api_view(["POST"])
-@permission_classes([IsAuthenticated])
-def initialize_payment(request):
-    user = get_object_or_404(User, id=request.user.id)
-
-    if user.company:
-        return Response(
-            {"detail": _("Subscription does not support a company")},
-            status=status.HTTP_403_FORBIDDEN,
-        )
-
-    print(request.data.get("amount"), type(request.data.get("amount")))
-    amount = int(request.data.get("amount"))
-    email = user.email
-    plan = request.data.get("plan")
-
-    headers = {
-        "Authorization": f"Bearer {settings.PAYSTACK_SECRET_KEY}",
-        "Content-Type": "application/json",
-    }
-
-    if "PLUS" == plan and amount < 100:
-        return Response(
-            {"detail": "Amount must be at least 100 for PLUS plan."},
-            status=status.HTTP_400_BAD_REQUEST,
-        )
-    elif "PRO" == plan and amount < 1000:
-        return Response(
-            {"detail": "Amount must be at least 1000 for PRO plan."},
-            status=status.HTTP_400_BAD_REQUEST,
-        )
-
-    data = {
-        "email": email,
-        "amount": amount * 100,  # Paystack expects the amount in kobo
-        "callback_url": "https://www.scuib.com/payment/verify/",
-    }
-
-    response = requests.post(
-        "https://api.paystack.co/transaction/initialize", headers=headers, json=data
-    )
-    response_data = response.json()
-
-    if response.status_code == 200:
-        return Response({"payment_url": response_data["data"]["authorization_url"]})
-    else:
-        return Response(
-            {"error": response_data["message"]}, status=status.HTTP_400_BAD_REQUEST
-        )
-
-
-@api_view(["GET"])
-@permission_classes([IsAuthenticated])
-def verify_payment(request):
-    reference = request.query_params.get("reference")
-    plan = request.query_params.get("plan")
-
-    headers = {
-        "Authorization": f"Bearer {settings.PAYSTACK_SECRET_KEY}",
-    }
-
-    response = requests.get(
-        f"https://api.paystack.co/transaction/verify/{reference}", headers=headers
-    )
-    response_data = response.json()
-
-    print(response_data)
-    if response_data["status"] == "success":
-        amount = response_data["amount"] // 100
-        Subscription.objects.create(user=request.user, amount=amount, plan=plan)
-        return Response({"message": "Payment successful"})
-    else:
-        return Response(
-            {"error": "Payment verification failed"}, status=status.HTTP_400_BAD_REQUEST
-        )
-
-
 @swagger_auto_schema(
     method="get",
     operation_summary="Returns all users in the database. Restricted to only admin users",
@@ -2486,6 +2407,7 @@ def google_auth(request):
 )
 @api_view(["POST"])
 def post_job_without_auth(request):
+    start = time.perf_counter()
     job_data = request.data
     job_data["skills"] = ";".join(job_data["skills"])
     # Prepare data for recommendation system
@@ -2546,7 +2468,7 @@ def post_job_without_auth(request):
 
         except Profile.DoesNotExist:
             continue
-
+    print("This endpoint took:", time.perf_counter() - start)
     return Response(
         {
             "detail": "Job processed successfully!",
@@ -3074,7 +2996,7 @@ def fund_wallet(request):
         "email": request.user.email,
         "amount": int(float(amount) * 100),  # Paystack requires kobo
         "reference": reference,
-        "callback_url": "https://yourdomain.com/payment/verify",  # Optional
+        "callback_url": "http://localhost:3000/payment/verify",  # Optional
     }
 
     response = requests.post(
@@ -3284,6 +3206,7 @@ def list_messages(request):
     messages = Message.objects.filter(user=request.user).order_by("-created_at")
     serializer = MessageSerializer(messages, many=True)
     return Response(serializer.data)
+
 
 @swagger_auto_schema(
     method="delete",

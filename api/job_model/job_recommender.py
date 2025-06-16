@@ -3,6 +3,11 @@ from sklearn.metrics.pairwise import cosine_similarity
 import numpy as np
 from sklearn.feature_extraction.text import TfidfVectorizer
 from ..models import Jobs, User, UserSkills, Profile
+import time
+
+from django.db.models import F, Value
+from django.db.models.functions import Lower
+from django.contrib.postgres.aggregates import StringAgg
 
 # Currency map for locations
 currency_map = {
@@ -49,35 +54,52 @@ class JobAppMatching:
             return None
 
     def load_users_from_db(self):
-        """Fetch all candidates from the database."""
+        start = time.perf_counter()
         users = (
             User.objects.filter(company=False)
-            .select_related("profile")  # Fetch profiles in one query
-            .prefetch_related("userskills_set")  # Fetch skills efficiently
+            .select_related("profile")
+            .prefetch_related("user_skills")  # matches related_name
+            .annotate(
+                skills_agg=StringAgg("user_skills__name", delimiter=";", distinct=True),
+                experience_level=Lower("profile__experience_level"),
+                location=Lower("profile__location"),
+                job_location=Lower("profile__job_location"),
+                years_of_experience=F("profile__years_of_experience"),
+                min_salary=F("profile__min_salary"),
+                max_salary=F("profile__max_salary"),
+                currency=F("profile__currency"),
+            )
+            .values(
+                "id",
+                "first_name",
+                "last_name",
+                "skills_agg",
+                "experience_level",
+                "years_of_experience",
+                "location",
+                "job_location",
+                "min_salary",
+                "max_salary",
+                "currency",
+            )
         )
 
-        user_data = []
-        for user in users:
-            profile = getattr(user, "profile", None)
-            if not profile:
-                continue  # Skip users without a profile
-
-            skills = ";".join(user.userskills_set.values_list("name", flat=True))
-            user_data.append(
-                {
-                    "user_id": user.id,
-                    "user_name": f"{user.first_name} {user.last_name}",
-                    "skills": skills,
-                    "experience_level": profile.experience_level.lower().strip(),
-                    "years_of_experience": profile.years_of_experience,
-                    "location": (profile.location or "").lower().strip(),
-                    "job_location": profile.job_location.lower().strip(),
-                    "min_salary": profile.min_salary or 0,
-                    "max_salary": profile.max_salary or 0,
-                    "currency_type": profile.currency,
-                }
-            )
-
+        user_data = [
+            {
+                "user_id": user["id"],
+                "user_name": f"{user['first_name']} {user['last_name']}",
+                "skills": user["skills_agg"] or "",
+                "experience_level": user["experience_level"] or "",
+                "years_of_experience": user["years_of_experience"] or 0,
+                "location": user["location"] or "",
+                "job_location": user["job_location"] or "",
+                "min_salary": user["min_salary"] or 0,
+                "max_salary": user["max_salary"] or 0,
+                "currency_type": user["currency"] or "",
+            }
+            for user in users
+        ]
+        print("Loaded users in:", time.perf_counter() - start)
         return pd.DataFrame(user_data)
 
     def enrich_jobs_with_currency(self, jobs):

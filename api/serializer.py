@@ -111,6 +111,8 @@ class ProfileSerializer(ModelSerializer):
 
 
 class MinimalProfileSerializer(ModelSerializer):
+    image = serializers.ImageField(use_url=True)
+
     class Meta:
         model = Profile
         fields = ["image"]

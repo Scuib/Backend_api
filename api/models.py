@@ -42,8 +42,10 @@ class User(AbstractUser):
 
 
 class UserSkills(models.Model):
-    user = models.ForeignKey(User, on_delete=models.CASCADE)
-    name = models.CharField(max_length=100)
+    user = models.ForeignKey(
+        User, on_delete=models.CASCADE, related_name="user_skills", db_index=True
+    )
+    name = models.CharField(max_length=100, db_index=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
