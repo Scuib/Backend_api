@@ -102,39 +102,6 @@ class JobAppMatching:
         print("Loaded users in:", time.perf_counter() - start)
         return pd.DataFrame(user_data)
 
-    # def load_users_from_db(self):
-    #     """Fetch all candidates from the database."""
-    #     start = time.perf_counter()
-    #     users = (
-    #         User.objects.filter(company=False)
-    #         .select_related("profile")  # Fetch profiles in one query
-    #         .prefetch_related("userskills_set")  # Fetch skills efficiently
-    #     )
-
-    #     user_data = []
-    #     for user in users:
-    #         profile = getattr(user, "profile", None)
-    #         if not profile:
-    #             continue  # Skip users without a profile
-
-    #         skills = ";".join(user.userskills_set.values_list("name", flat=True))
-    #         user_data.append(
-    #             {
-    #                 "user_id": user.id,
-    #                 "user_name": f"{user.first_name} {user.last_name}",
-    #                 "skills": skills,
-    #                 "experience_level": profile.experience_level.lower().strip(),
-    #                 "years_of_experience": profile.years_of_experience,
-    #                 "location": (profile.location or "").lower().strip(),
-    #                 "job_location": profile.job_location.lower().strip(),
-    #                 "min_salary": profile.min_salary or 0,
-    #                 "max_salary": profile.max_salary or 0,
-    #                 "currency_type": profile.currency,
-    #             }
-    #         )
-    #     print("Loaded users in:", time.perf_counter() - start)
-    #     return pd.DataFrame(user_data)
-
     def enrich_jobs_with_currency(self, jobs):
         # Add a currency symbol column to the job data
         jobs["currency_symbol"] = jobs["location"].map(

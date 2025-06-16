@@ -3076,7 +3076,7 @@ def fund_wallet(request):
         "email": request.user.email,
         "amount": int(float(amount) * 100),  # Paystack requires kobo
         "reference": reference,
-        "callback_url": "https://yourdomain.com/payment/verify",  # Optional
+        "callback_url": "http://localhost:3000/payment/verify",  # Optional
     }
 
     response = requests.post(
@@ -3286,6 +3286,7 @@ def list_messages(request):
     messages = Message.objects.filter(user=request.user).order_by("-created_at")
     serializer = MessageSerializer(messages, many=True)
     return Response(serializer.data)
+
 
 @swagger_auto_schema(
     method="delete",
