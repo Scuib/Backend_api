@@ -2931,7 +2931,7 @@ def message_boost(request):
 
                 Message.objects.create(
                     user=profile.user,
-                    title=f"Message from {sender.first_name}",
+                    title=title,
                     sender=sender,
                     content=content,
                 )
