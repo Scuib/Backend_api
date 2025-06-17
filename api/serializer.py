@@ -76,7 +76,7 @@ class UserSerializer(serializers.ModelSerializer):
         if hasattr(user, "profile"):
             return MinimalProfileSerializer(user.profile).data
         elif hasattr(user, "company_profile"):
-            return CompanyProfileSerializer(user.company_profile).data
+            return MinimalCompanyProfileSerializer(user.company_profile).data
         return None
 
 
@@ -111,6 +111,14 @@ class ProfileSerializer(ModelSerializer):
 
 
 class MinimalProfileSerializer(ModelSerializer):
+    image = serializers.ImageField(use_url=True)
+
+    class Meta:
+        model = Profile
+        fields = ["image"]
+
+
+class MinimalCompanyProfileSerializer(ModelSerializer):
     image = serializers.ImageField(use_url=True)
 
     class Meta:

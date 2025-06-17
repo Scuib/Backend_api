@@ -3157,6 +3157,7 @@ def unlock_message(request, message_id):
             return Response(
                 {
                     "detail": "Message already unlocked.",
+                    "title": message.title,
                     "message": message.content,
                     "sender": sender_data,
                     "id": message.id,
