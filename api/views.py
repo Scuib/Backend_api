@@ -81,7 +81,7 @@ import snscrape.modules.twitter as sntwitter
 
 # Activate the resend with the api key
 resend.api_key = settings.NEW_RESEND_API_KEY
-
+BOOST_MESSAGE_COST = 50
 
 def home(request):
     return render(request, "home.html")
@@ -2920,6 +2920,11 @@ def message_boost(request):
                 {"error": "All fields are required."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
+        total_cost = BOOST_MESSAGE_COST * len(recipients_id)
+        # Check if wallet has sufficient balance
+        wallet = Wallet.objects.get(user=sender)
+        if not wallet.deduct(total_cost, f"Sent {len(recipients_id)} boost messages"):
+            return Response({"detail": "Insufficient wallet balance."}, status=402)
 
         profiles = Profile.objects.select_related("user").filter(
             user_id__in=recipients_id
