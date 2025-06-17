@@ -52,6 +52,7 @@ from .serializer import (
     MessageSerializer,
     WalletTransactionSerializer,
     JobTweetSerializer,
+    SentMessageSerializer,
 )
 
 from django.utils import timezone
@@ -82,6 +83,7 @@ import snscrape.modules.twitter as sntwitter
 # Activate the resend with the api key
 resend.api_key = settings.NEW_RESEND_API_KEY
 BOOST_MESSAGE_COST = 50
+
 
 def home(request):
     return render(request, "home.html")
@@ -3211,6 +3213,28 @@ def unlock_message(request, message_id):
 def list_messages(request):
     messages = Message.objects.filter(user=request.user).order_by("-created_at")
     serializer = MessageSerializer(messages, many=True)
+    return Response(serializer.data)
+
+
+@swagger_auto_schema(
+    method="get",
+    operation_summary="List messages that the user sent",
+    manual_parameters=[
+        openapi.Parameter(
+            name="Authorization",
+            in_=openapi.IN_HEADER,
+            description="Bearer {token}",
+            type=openapi.TYPE_STRING,
+            required=True,
+        ),
+    ],
+    responses={200: MessageSerializer(many=True)},
+)
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def sent_messages(request):
+    messages = Message.objects.filter(sender=request.user).order_by("-created_at")
+    serializer = SentMessageSerializer(messages, many=True)
     return Response(serializer.data)
 
 

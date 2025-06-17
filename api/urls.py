@@ -65,6 +65,7 @@ urlpatterns = [
     ),
     path("messages/", views.list_messages, name="list-messages"),
     path("messages/send/", views.message_boost, name="send-messages"),
+    path("messages/sent/", views.sent_messages, name="sent-messages"),
     path(
         "messages/delete/<int:message_id>/", views.delete_message, name="delete-message"
     ),
