@@ -3161,6 +3161,9 @@ def unlock_message(request, message_id):
             sender_data = (
                 UserSerializer(message.sender).data if message.sender else None
             )
+            if not message.is_read:
+                message.is_read = True
+                message.save(update_fields=["is_read"])
             return Response(
                 {
                     "detail": "Message already unlocked.",
@@ -3175,7 +3178,8 @@ def unlock_message(request, message_id):
         wallet = Wallet.objects.get(user=request.user)
         if wallet.deduct(UNLOCK_COST, "unlock message"):
             message.unlocked = True
-            message.save(update_fields=["unlocked"])
+            message.is_read = True
+            message.save(update_fields=["unlocked", "is_read"])
             sender_data = (
                 UserSerializer(message.sender).data if message.sender else None
             )
