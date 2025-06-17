@@ -122,7 +122,7 @@ class MinimalCompanyProfileSerializer(ModelSerializer):
     image = serializers.ImageField(use_url=True)
 
     class Meta:
-        model = Profile
+        model = CompanyProfile
         fields = ["image"]
 
 
@@ -205,6 +205,7 @@ class JobSerializer(serializers.ModelSerializer):
 
 
 class CompanySerializer(ModelSerializer):
+    profile = serializers.SerializerMethodField()
     class Meta:
         model = CompanyProfile
         fields = "__all__"
