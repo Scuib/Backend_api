@@ -79,10 +79,11 @@ from api.job_model.job_recommender import JobAppMatching
 from drf_yasg.utils import swagger_auto_schema
 from drf_yasg import openapi
 import snscrape.modules.twitter as sntwitter
+from .utils import cleanup_messages
 
 # Activate the resend with the api key
 resend.api_key = settings.NEW_RESEND_API_KEY
-BOOST_MESSAGE_COST = 50
+BOOST_MESSAGE_COST = 20  # Naira
 
 
 def home(request):
@@ -93,7 +94,7 @@ def generate_reference():
     return str(uuid.uuid4())
 
 
-UNLOCK_COST = 100.00  # Naira
+UNLOCK_COST = 30.00  # Naira
 
 
 # Get token or login View
@@ -3215,8 +3216,9 @@ def unlock_message(request, message_id):
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
 def list_messages(request):
+    cleanup_messages()
     messages = Message.objects.filter(user=request.user).order_by("-created_at")
-    serializer = MessageSerializer(messages, many=True)
+    serializer = MessageSerializer(messages, many=True, context={"request": request})
     return Response(serializer.data)
 
 
