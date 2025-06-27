@@ -52,6 +52,7 @@ from .serializer import (
     MessageSerializer,
     WalletTransactionSerializer,
     JobTweetSerializer,
+    SentMessageSerializer,
 )
 
 from django.utils import timezone
@@ -81,6 +82,7 @@ import snscrape.modules.twitter as sntwitter
 
 # Activate the resend with the api key
 resend.api_key = settings.NEW_RESEND_API_KEY
+BOOST_MESSAGE_COST = 50
 
 
 def home(request):
@@ -2920,6 +2922,11 @@ def message_boost(request):
                 {"error": "All fields are required."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
+        total_cost = BOOST_MESSAGE_COST * len(recipients_id)
+        # Check if wallet has sufficient balance
+        wallet = Wallet.objects.get(user=sender)
+        if not wallet.deduct(total_cost, f"Sent {len(recipients_id)} boost messages"):
+            return Response({"detail": "Insufficient wallet balance."}, status=402)
 
         profiles = Profile.objects.select_related("user").filter(
             user_id__in=recipients_id
@@ -2931,7 +2938,7 @@ def message_boost(request):
 
                 Message.objects.create(
                     user=profile.user,
-                    title=f"Message from {sender.first_name}",
+                    title=title,
                     sender=sender,
                     content=content,
                 )
@@ -3154,9 +3161,13 @@ def unlock_message(request, message_id):
             sender_data = (
                 UserSerializer(message.sender).data if message.sender else None
             )
+            if not message.is_read:
+                message.is_read = True
+                message.save(update_fields=["is_read"])
             return Response(
                 {
                     "detail": "Message already unlocked.",
+                    "title": message.title,
                     "message": message.content,
                     "sender": sender_data,
                     "id": message.id,
@@ -3167,7 +3178,8 @@ def unlock_message(request, message_id):
         wallet = Wallet.objects.get(user=request.user)
         if wallet.deduct(UNLOCK_COST, "unlock message"):
             message.unlocked = True
-            message.save(update_fields=["unlocked"])
+            message.is_read = True
+            message.save(update_fields=["unlocked", "is_read"])
             sender_data = (
                 UserSerializer(message.sender).data if message.sender else None
             )
@@ -3205,6 +3217,28 @@ def unlock_message(request, message_id):
 def list_messages(request):
     messages = Message.objects.filter(user=request.user).order_by("-created_at")
     serializer = MessageSerializer(messages, many=True)
+    return Response(serializer.data)
+
+
+@swagger_auto_schema(
+    method="get",
+    operation_summary="List messages that the user sent",
+    manual_parameters=[
+        openapi.Parameter(
+            name="Authorization",
+            in_=openapi.IN_HEADER,
+            description="Bearer {token}",
+            type=openapi.TYPE_STRING,
+            required=True,
+        ),
+    ],
+    responses={200: MessageSerializer(many=True)},
+)
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def sent_messages(request):
+    messages = Message.objects.filter(sender=request.user).order_by("-created_at")
+    serializer = SentMessageSerializer(messages, many=True)
     return Response(serializer.data)
 
 

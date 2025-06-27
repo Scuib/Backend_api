@@ -76,7 +76,7 @@ class UserSerializer(serializers.ModelSerializer):
         if hasattr(user, "profile"):
             return MinimalProfileSerializer(user.profile).data
         elif hasattr(user, "company_profile"):
-            return CompanyProfileSerializer(user.company_profile).data
+            return MinimalCompanyProfileSerializer(user.company_profile).data
         return None
 
 
@@ -115,6 +115,14 @@ class MinimalProfileSerializer(ModelSerializer):
 
     class Meta:
         model = Profile
+        fields = ["image"]
+
+
+class MinimalCompanyProfileSerializer(ModelSerializer):
+    image = serializers.ImageField(use_url=True)
+
+    class Meta:
+        model = CompanyProfile
         fields = ["image"]
 
 
@@ -197,6 +205,7 @@ class JobSerializer(serializers.ModelSerializer):
 
 
 class CompanySerializer(ModelSerializer):
+    profile = serializers.SerializerMethodField()
     class Meta:
         model = CompanyProfile
         fields = "__all__"
@@ -258,10 +267,19 @@ class MessageSerializer(serializers.ModelSerializer):
         fields = ["id", "sender", "title", "content", "unlocked", "created_at"]
 
     def get_content(self, obj):
+        request = self.context.get("request")
+        if obj.sender == request.user:
+            return obj.content
         if obj.unlocked:
             return obj.content
         teaser = obj.content[:50]  # First 50 characters of the message
         return f"Preview: {teaser}... Pay ₦100 to view the full message."
+
+
+class SentMessageSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Message
+        fields = ["id", "title", "content", "unlocked", "is_read", "created_at"]
 
 
 class WalletTransactionSerializer(serializers.ModelSerializer):
