@@ -68,6 +68,9 @@ class JobAppMatching:
                 min_salary=F("profile__min_salary"),
                 max_salary=F("profile__max_salary"),
                 currency=F("profile__currency"),
+                categories_agg=StringAgg(
+                    "profile__categories__name", delimiter=";", distinct=True
+                ),
             )
             .values(
                 "id",
@@ -81,6 +84,7 @@ class JobAppMatching:
                 "min_salary",
                 "max_salary",
                 "currency",
+                "categories_agg",
             )
         )
 
@@ -96,10 +100,10 @@ class JobAppMatching:
                 "min_salary": user["min_salary"] or 0,
                 "max_salary": user["max_salary"] or 0,
                 "currency_type": user["currency"] or "",
+                "categories": user["categories_agg"] or "",
             }
             for user in users
         ]
-        print("Loaded users in:", time.perf_counter() - start)
         return pd.DataFrame(user_data)
 
     def enrich_jobs_with_currency(self, jobs):
@@ -313,6 +317,52 @@ class JobAppMatching:
                     "user_name": user["user_name"],
                     "user_id": user["user_id"],
                     "skills": user["skills"],
+                    "user_location": user["location"],
+                }
+            )
+
+        return recommendations
+
+    def recommend_users_any_categories(self, categories, location, user_data):
+        """
+        Recommend users who have at least one of the specified categories
+        and match the location.
+
+        Args:
+            categories (List[str]): List of categories from frontend.
+            location (str): Location from frontend.
+            user_data (pd.DataFrame): DataFrame with 'categories', 'location', 'user_name', 'user_id'.
+
+        Returns:
+            List[dict]: List of matching users.
+        """
+        # Normalize input
+        required_categories_set = set(cat.strip().lower() for cat in categories)
+        location = location.strip().lower()
+
+        def has_any_required_categories(user_categories):
+            user_categories = set(
+                cat.strip().lower()
+                for cat in user_categories.split(";")
+            )
+            return bool(
+                required_categories_set & user_categories
+            )  # intersection not empty
+
+        # Apply filters
+        matches = user_data[
+            user_data["categories"].apply(has_any_required_categories)
+            & user_data["location"].str.contains(location, case=False, na=False)
+        ]
+
+        # Format output
+        recommendations = []
+        for _, user in matches.iterrows():
+            recommendations.append(
+                {
+                    "user_name": user["user_name"],
+                    "user_id": user["user_id"],
+                    "categories": user["categories"],
                     "user_location": user["location"],
                 }
             )

@@ -2732,6 +2732,12 @@ skills_param = openapi.Schema(
     description="List of skills to match (any match)",
     example=["Django", "React"],
 )
+categories_param = openapi.Schema(
+    type=openapi.TYPE_ARRAY,
+    items=openapi.Items(type=openapi.TYPE_STRING),
+    description="Category to match",
+    example=["Backend", "Frontend"],
+)
 
 location_param = openapi.Schema(
     type=openapi.TYPE_STRING,
@@ -2746,6 +2752,14 @@ request_body_schema = openapi.Schema(
         "location": location_param,
     },
     required=["skills", "location"],
+)
+request_body_schema_category = openapi.Schema(
+    type=openapi.TYPE_OBJECT,
+    properties={
+        "categories": categories_param,
+        "location": location_param,
+    },
+    required=["categories", "location"],
 )
 
 response_schema = openapi.Schema(
@@ -3346,3 +3360,99 @@ def fetch_twitter_jobs(limit=50):
 
     serializer = JobTweetSerializer(new_jobs, many=True)
     return Response({"fetched": len(new_jobs), "jobs": serializer.data})
+
+
+@swagger_auto_schema(
+    method="post",
+    operation_summary="Recommend Users by Category and Location (Any Category Match)",
+    operation_description="""
+    Recommend users who match at least one of the specified categories and exactly match the provided location.
+    """,
+    manual_parameters=[
+        openapi.Parameter(
+            name="Authorization",
+            in_=openapi.IN_HEADER,
+            description="Bearer {token}",
+            type=openapi.TYPE_STRING,
+            required=True,
+        ),
+    ],
+    request_body=request_body_schema_category,
+    responses={200: response_schema, 400: "Bad Request", 500: "Server Error"},
+)
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def recommend_users_by_categories_and_location(request):
+    """
+    Recommends users who match any of the provided categories and location.
+    Categories are stored as text in Job model.
+    """
+    try:
+        job_data = request.data
+        categories = job_data.get("categories", [])  # expecting a list of categories
+        location = job_data.get("location", "")
+
+        if not categories or not location:
+            return Response(
+                {"error": "All fields are required."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # Instantiate recommendation system helper
+        matcher = JobAppMatching()
+        user_profiles = matcher.load_users_from_db()
+        if user_profiles.empty:
+            return Response(
+                {
+                    "detail": "No users available for recommendation.",
+                    "matched_users": [],
+                },
+                status=status.HTTP_200_OK,
+            )
+
+        # Use the "match any categories" logic
+        recommended_users = matcher.recommend_users_any_categories(
+            categories, location, user_profiles
+        )
+
+        matched_users = []
+        user_ids = [u["user_id"] for u in recommended_users]
+        profiles = Profile.objects.select_related("user").filter(user_id__in=user_ids)
+        profile_map = {p.user_id: p for p in profiles}
+
+        for user_data in recommended_users:
+            try:
+                user_id = user_data["user_id"]
+                profile = profile_map.get(user_id)
+                matched_users.append(
+                    {
+                        "user_id": profile.user.id,
+                        "user_name": profile.user.first_name,
+                        "user_email": profile.user.email,
+                        "user_bio": profile.bio,
+                        "image": profile.image.url if profile.image else None,
+                        "years_of_experience": profile.years_of_experience,
+                        "location": profile.location,
+                        "employment_choice": profile.employment_type,
+                        "job_location_choice": profile.job_location,
+                        "categories": list(
+                            profile.categories.values_list("name", flat=True)
+                        ),
+                    }
+                )
+            except Profile.DoesNotExist:
+                continue
+
+        return Response(
+            {
+                "detail": "Users matched successfully!",
+                "matched_users": matched_users,
+            },
+            status=status.HTTP_200_OK,
+        )
+
+    except Exception as e:
+        return Response(
+            {"error": f"Something went wrong: {str(e)}"},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        )

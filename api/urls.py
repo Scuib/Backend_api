@@ -55,6 +55,11 @@ urlpatterns = [
     path("contact/", views.contact_us, name="Contact us"),
     path("count/", views.count_users, name="count"),
     path("boost/", views.recommend_users_by_skills_and_location, name="boost"),
+    path(
+        "boost-category/",
+        views.recommend_users_by_categories_and_location,
+        name="boost-categories",
+    ),
     path("wallet/fund/", views.fund_wallet, name="fund_wallet"),
     path("wallet/verify/<str:reference>/", views.verify_payment, name="verify_payment"),
     path("wallet/balance/", views.wallet_balance, name="wallet_balance"),
