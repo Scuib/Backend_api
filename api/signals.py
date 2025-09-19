@@ -58,7 +58,7 @@ def send_message_email(sender, instance, created, **kwargs):
         recipient = instance.user
         sender_user = instance.sender
         message = instance.content
-        teaser = message[:50]  # First 50 characters of the message
+        teaser = message[:100]  # First 100 characters of the message
         preview = f"Preview: {teaser}... Pay ₦100 to view the full message."
 
         email_html = f"""

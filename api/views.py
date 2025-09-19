@@ -3456,3 +3456,182 @@ def recommend_users_by_categories_and_location(request):
             {"error": f"Something went wrong: {str(e)}"},
             status=status.HTTP_500_INTERNAL_SERVER_ERROR,
         )
+
+
+@swagger_auto_schema(
+    method="post",
+    operation_summary="Create a Job (Category-based Matching)",
+    operation_description="This endpoint allows authenticated companies to create a job listing. The system will match the job with suitable applicants using CATEGORIES instead of skills.",
+    manual_parameters=[
+        openapi.Parameter(
+            name="Authorization",
+            in_=openapi.IN_HEADER,
+            description="Bearer {token}",
+            type=openapi.TYPE_STRING,
+            required=True,
+        ),
+    ],
+    request_body=openapi.Schema(
+        type=openapi.TYPE_OBJECT,
+        required=[
+            "title",
+            "description",
+            "location",
+            "experience_level",
+            "years_of_experience",
+            "categories",
+            "employment_type",
+        ],
+        properties={
+            "title": openapi.Schema(type=openapi.TYPE_STRING, description="Job title"),
+            "description": openapi.Schema(
+                type=openapi.TYPE_STRING, description="Job description"
+            ),
+            "experience_level": openapi.Schema(
+                type=openapi.TYPE_STRING,
+                description="Experience level (Entry, Mid, Senior, Lead)",
+            ),
+            "location": openapi.Schema(
+                type=openapi.TYPE_STRING, description="Job location"
+            ),
+            "employment_type": openapi.Schema(
+                type=openapi.TYPE_STRING,
+                description="Employment type - O: Onsite, R: Remote, H: Hybrid",
+            ),
+            "max_salary": openapi.Schema(
+                type=openapi.TYPE_NUMBER, description="Maximum salary offered"
+            ),
+            "min_salary": openapi.Schema(
+                type=openapi.TYPE_NUMBER, description="Minimum salary offered"
+            ),
+            "years_of_experience": openapi.Schema(
+                type=openapi.TYPE_NUMBER, description="Years of experience"
+            ),
+            "currency_type": openapi.Schema(
+                type=openapi.TYPE_STRING,
+                enum=["USD", "EUR", "NGN", "GBP"],
+                description="Currency for salary",
+            ),
+            "categories": openapi.Schema(
+                type=openapi.TYPE_ARRAY,
+                items=openapi.Items(type=openapi.TYPE_STRING),
+                description="List of categories required for the job",
+            ),
+        },
+    ),
+    responses={
+        201: openapi.Response(
+            description="Job successfully created with category-based matching",
+        ),
+        400: openapi.Response(description="Invalid job data"),
+        404: openapi.Response(description="User is not a company"),
+    },
+)
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def job_create_with_categories(request):
+    user = request.user
+
+    if not user.company:
+        return Response(
+            {"error": "Only Companies can create Jobs"},
+            status=status.HTTP_404_NOT_FOUND,
+        )
+
+    request.data["owner"] = user.id
+
+    # Extract categories from request
+    new_categories = request.data.pop("categories", [])
+
+    serialized_data = JobSerializer(data=request.data)
+
+    if serialized_data.is_valid():
+        job_instance = serialized_data.save()
+
+        # Create and associate job categories
+        for cat in new_categories:
+            job_cat, _ = UserCategories.objects.get_or_create(name=cat)
+            job_instance.categories.add(job_cat)
+        
+
+        # Get job categories
+        job_categories = list(job_instance.categories.values_list("name", flat=True))
+
+        data = {
+            "job_id": job_instance.id,
+            "owner_id": job_instance.owner.id,
+            "company_name": job_instance.owner.first_name,
+            "company_email": job_instance.owner.email,
+            "categories": job_categories,
+            "title": job_instance.title,
+            "description": job_instance.description,
+            "location": job_instance.location,
+            "employment_type": job_instance.employment_type,
+            "max_salary": job_instance.max_salary,
+            "min_salary": job_instance.min_salary,
+            "currency_type": job_instance.currency_type,
+        }
+
+        matcher = JobAppMatching()
+
+        job_data = matcher.load_job_from_db(job_instance.id)
+        if not job_data:
+            return Response(
+                {"error": "Job data could not be retrieved."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        job_df = pd.DataFrame([job_data])
+        matcher.enrich_jobs_with_currency(job_df)
+
+        user_profiles = matcher.load_users_from_db()
+        if user_profiles.empty:
+            return Response(
+                {
+                    "detail": "Job successfully posted!",
+                    "data": data,
+                    "recommended_applicants": [],
+                },
+                status=status.HTTP_201_CREATED,
+            )
+
+        # Get matches by categories (instead of skills)
+        recommended_users = matcher.recommend_users_categories(
+            job_data, user_profiles
+        )
+
+        recommended_applicants_list = []
+        for user_data in recommended_users:
+            try:
+                user_id = user_data["user_id"]
+                profile = Profile.objects.get(user_id=user_id)
+
+                recommended_applicants_list.append(
+                    {
+                        "user_id": profile.user.id,
+                        "user_name": profile.user.first_name,
+                        "user_email": profile.user.email,
+                        "user_bio": profile.bio,
+                        "image": profile.image.url if profile.image else None,
+                        "years_of_experience": profile.years_of_experience,
+                        "location": profile.location,
+                        "employment_choice": profile.employment_type,
+                        "job_location_choice": profile.job_location,
+                        "categories": list(
+                            profile.categories.values_list("name", flat=True)
+                        ),
+                    }
+                )
+            except Profile.DoesNotExist:
+                continue
+
+        data["recommended_applicants"] = recommended_applicants_list
+
+        return Response(
+            {"detail": "Job successfully posted!", "data": data},
+            status=status.HTTP_201_CREATED,
+        )
+
+    return Response(
+        {"error": serialized_data.errors}, status=status.HTTP_400_BAD_REQUEST
+    )

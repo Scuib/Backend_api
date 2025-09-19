@@ -30,6 +30,11 @@ urlpatterns = [
     path("onboarding/<int:user_id>/", views.onboarding, name="onboarding"),
     path("profile/delete/", views.profile_delete, name="delete-user"),
     path("job/create/", views.job_create, name="job-create"),
+    path(
+        "job/create-category/",
+        views.job_create_with_categories,
+        name="job-create with category",
+    ),
     path("job/update/<int:job_id>/", views.job_update, name="job-update"),
     path("job/user/", views.jobs_user, name="user_jobs"),
     path("job/all/", views.jobs_all, name="all_jobs"),

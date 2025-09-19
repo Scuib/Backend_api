@@ -195,6 +195,7 @@ class ApplicantSerializer(ModelSerializer):
 
 class JobSerializer(serializers.ModelSerializer):
     skills = serializers.SerializerMethodField()
+    categories = serializers.SerializerMethodField()
 
     class Meta:
         model = Jobs
@@ -202,6 +203,9 @@ class JobSerializer(serializers.ModelSerializer):
 
     def get_skills(self, obj):
         return list(obj.skills.values_list("name", flat=True))
+
+    def get_categories(self, obj):
+        return list(obj.categories.values_list("name", flat=True))
 
 
 class CompanySerializer(ModelSerializer):

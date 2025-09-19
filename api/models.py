@@ -203,7 +203,9 @@ class Jobs(models.Model):
     title = models.CharField(max_length=50)
     description = models.TextField()
     location = models.CharField(max_length=255)
-    categories = models.TextField(null=True)
+    categories = models.ManyToManyField(
+        "UserCategories", related_name="jobs", blank=True
+    )
     skills = models.ManyToManyField(JobSkills)
     max_salary = models.IntegerField(default=5000)
     min_salary = models.IntegerField(default=0)
