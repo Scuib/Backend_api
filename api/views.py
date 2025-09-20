@@ -79,7 +79,7 @@ from api.job_model.job_recommender import JobAppMatching
 from drf_yasg.utils import swagger_auto_schema
 from drf_yasg import openapi
 import snscrape.modules.twitter as sntwitter
-from .utils import cleanup_messages
+from .utils import cleanup_messages, cleanup_old_jobs
 
 # Activate the resend with the api key
 resend.api_key = settings.NEW_RESEND_API_KEY
@@ -1760,6 +1760,7 @@ def job_update(request, job_id):
 @api_view(["GET"])
 @permission_classes([AllowAny])
 def jobs_all(request):
+    cleanup_old_jobs()
     jobs = Jobs.objects.all()
     serialized_jobs = JobSerializer(jobs, many=True)
     return Response(serialized_jobs.data, status=status.HTTP_200_OK)
@@ -3552,7 +3553,6 @@ def job_create_with_categories(request):
         for cat in new_categories:
             job_cat, _ = UserCategories.objects.get_or_create(name=cat)
             job_instance.categories.add(job_cat)
-        
 
         # Get job categories
         job_categories = list(job_instance.categories.values_list("name", flat=True))
@@ -3596,9 +3596,7 @@ def job_create_with_categories(request):
             )
 
         # Get matches by categories (instead of skills)
-        recommended_users = matcher.recommend_users_categories(
-            job_data, user_profiles
-        )
+        recommended_users = matcher.recommend_users_categories(job_data, user_profiles)
 
         recommended_applicants_list = []
         for user_data in recommended_users:
