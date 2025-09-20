@@ -1,7 +1,7 @@
 from django.core.cache import cache
 from django.utils.timezone import now
 from datetime import timedelta
-from .models import Message
+from .models import Jobs, Message
 
 
 def cleanup_messages():
