@@ -53,7 +53,12 @@ urlpatterns = [
     path(
         "create-job/",
         views.post_job_without_auth,
-        name="Test job creation without login",
+        name="job creation without login",
+    ),
+    path(
+        "create-job-category/",
+        views.match_job_with_categories,
+        name="job creation with categories",
     ),
     path("company-status/", views.update_company_status, name="Set company status"),
     path("profile/headers/", views.profile_header, name="Get profile header"),
