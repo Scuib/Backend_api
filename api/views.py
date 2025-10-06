@@ -2607,7 +2607,9 @@ def match_job_with_categories(request):
                     "location": profile.location,
                     "Employment_choice": profile.employment_type,
                     "job_location_choice": profile.job_location,
-                    "categories": list(profile.categories.values_list("name", flat=True)),
+                    "categories": list(
+                        profile.categories.values_list("name", flat=True)
+                    ),
                 }
             )
 
@@ -2952,7 +2954,7 @@ response_schema = openapi.Schema(
     responses={200: response_schema, 400: "Bad Request", 500: "Server Error"},
 )
 @api_view(["POST"])
-@permission_classes([IsAuthenticated])
+@permission_classes([AllowAny])
 def recommend_users_by_skills_and_location(request):
     """
     Recommends users who match any of the provided skills and location.
@@ -3522,7 +3524,7 @@ def fetch_twitter_jobs(limit=50):
     responses={200: response_schema, 400: "Bad Request", 500: "Server Error"},
 )
 @api_view(["POST"])
-@permission_classes([IsAuthenticated])
+@permission_classes([AllowAny])
 def recommend_users_by_categories_and_location(request):
     """
     Recommends users who match any of the provided categories and location.
