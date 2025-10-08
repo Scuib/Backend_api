@@ -1847,7 +1847,7 @@ def jobs_user(request):
                 "title": job.title,
                 "description": job.description,
                 "location": job.location,
-                "role": job.categories,
+                "role": list(job.categories.values_list("name", flat=True)),
                 "type": job.employment_type,
                 "skills": list(job.skills.values_list("name", flat=True)),
                 "pay_range": f"{job.min_salary} - {job.max_salary}",
