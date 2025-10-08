@@ -1175,12 +1175,11 @@ def profile_update(request):
 def onboarding(request, user_id):
     # Check if the profile exists
     user = get_object_or_404(User, id=user_id)
-    # data = {}
-    # for key, value in request.data.items():
-    #     if isinstance(value, UploadedFile):
-    #         continue
-    #     data[key] = value
-    data = request.data.copy()
+
+    data = dict(request.data)
+    for f in request.FILES:
+        data.pop(f, None)
+
     try:
         profile = Profile.objects.get(user=user)
     except Profile.DoesNotExist:
