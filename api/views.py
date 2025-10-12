@@ -1,3 +1,4 @@
+import os
 import requests
 import cloudinary.uploader
 from django.shortcuts import render, get_object_or_404
@@ -1047,17 +1048,22 @@ def profile_update(request):
                 folder = "profile_docs/"
                 resource_type = "raw"
 
-            file_name = uploaded_file.name
+            file_name, file_ext = os.path.splitext(uploaded_file.name)
+            public_id = f"{folder}/{file_name}"
+
             # Upload new file
             try:
                 uploaded_file.seek(0)  # Reset file pointer
-                file_bytes = uploaded_file.read()
                 upload_result = cloudinary.uploader.upload(
-                    (file_name, file_bytes),
-                    folder=folder,
+                    uploaded_file,
+                    public_id=public_id,
                     resource_type=resource_type,
+                    use_filename=False,
+                    unique_filename=False,
+                    overwrite=True,
+                    format=file_ext.lstrip("."),
                 )
-                setattr(profile, field, upload_result["secure_url"])
+                setattr(profile, field, upload_result["public_id"])
                 data.pop(field, None)
             except cloudinary.exceptions.Error as e:
                 return Response(
@@ -1125,20 +1131,6 @@ def profile_update(request):
             required=False,
         ),
         openapi.Parameter(
-            name="image",
-            in_=openapi.IN_FORM,
-            description="Profile image (file upload)",
-            type=openapi.TYPE_FILE,
-            required=False,
-        ),
-        openapi.Parameter(
-            name="resume",
-            in_=openapi.IN_FORM,
-            description="Resume file (PDF upload)",
-            type=openapi.TYPE_FILE,
-            required=False,
-        ),
-        openapi.Parameter(
             name="years_of_experience",
             in_=openapi.IN_FORM,
             description="Years of experience in number (optional)",
@@ -1149,6 +1141,13 @@ def profile_update(request):
             name="experience_level",
             in_=openapi.IN_FORM,
             description="Experience level can be Entry, Mid, Senior, Lead (optional)",
+            type=openapi.TYPE_STRING,
+            required=False,
+        ),
+        openapi.Parameter(
+            name="Location",
+            in_=openapi.IN_FORM,
+            description="User's geographical location [e.g Lagos]",
             type=openapi.TYPE_STRING,
             required=False,
         ),
@@ -1262,17 +1261,22 @@ def onboarding(request, user_id):
                 folder = "profile_docs/"
                 resource_type = "raw"
 
-            file_name = uploaded_file.name
+            file_name, file_ext = os.path.splitext(uploaded_file.name)
+            public_id = f"{folder}/{file_name}"
+
             # Upload new file
             try:
                 uploaded_file.seek(0)  # Reset file pointer
-                file_bytes = uploaded_file.read()
                 upload_result = cloudinary.uploader.upload(
-                    (file_name, file_bytes),
-                    folder=folder,
+                    uploaded_file,
+                    public_id=public_id,
                     resource_type=resource_type,
+                    use_filename=False,
+                    unique_filename=False,
+                    overwrite=True,
+                    format=file_ext.lstrip("."),
                 )
-                setattr(profile, field, upload_result["secure_url"])
+                setattr(profile, field, upload_result["public_id"])
                 data.pop(field, None)
             except cloudinary.exceptions.Error as e:
                 return Response(
@@ -2940,15 +2944,6 @@ response_schema = openapi.Schema(
     operation_description="""
     Recommend users who match at least one of the specified skills and exactly match the provided location.
     """,
-    manual_parameters=[
-        openapi.Parameter(
-            name="Authorization",
-            in_=openapi.IN_HEADER,
-            description="Bearer {token}",
-            type=openapi.TYPE_STRING,
-            required=True,
-        ),
-    ],
     request_body=request_body_schema,
     responses={200: response_schema, 400: "Bad Request", 500: "Server Error"},
 )
@@ -3510,15 +3505,6 @@ def fetch_twitter_jobs(limit=50):
     operation_description="""
     Recommend users who match at least one of the specified categories and exactly match the provided location.
     """,
-    manual_parameters=[
-        openapi.Parameter(
-            name="Authorization",
-            in_=openapi.IN_HEADER,
-            description="Bearer {token}",
-            type=openapi.TYPE_STRING,
-            required=True,
-        ),
-    ],
     request_body=request_body_schema_category,
     responses={200: response_schema, 400: "Bad Request", 500: "Server Error"},
 )
