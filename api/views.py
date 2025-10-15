@@ -325,7 +325,7 @@ def logout(request):
 def login(request):
     serializer = LoginSerializer(data=request.data)
     if serializer.is_valid():
-        email = serializer.validated_data["email"]  # type: ignore
+        email = serializer.validated_data["email"].lower().strip()
         password = serializer.validated_data["password"]  # type: ignore
 
         try:
