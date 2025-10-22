@@ -280,11 +280,32 @@ class Message(models.Model):
         null=True,
         blank=True,
     )
+    thread = models.ForeignKey(
+        "BoostChatThread",
+        on_delete=models.CASCADE,
+        related_name="messages",
+        null=True,
+        blank=True,
+    )
     title = models.CharField(max_length=255)
     content = models.TextField()
     is_read = models.BooleanField(default=False)
     unlocked = models.BooleanField(default=False)
     created_at = models.DateTimeField(auto_now_add=True)
+
+
+class BoostChatThread(models.Model):
+    boost_id = models.CharField(max_length=50, unique=True)
+    recruiter = models.ForeignKey(
+        User, on_delete=models.CASCADE, related_name="boost_threads"
+    )
+    participants = models.ManyToManyField(
+        User, related_name="joined_boost_threads", blank=True
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"Thread for {self.boost_id}"
 
 
 class Wallet(models.Model):
