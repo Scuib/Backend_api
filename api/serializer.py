@@ -210,6 +210,7 @@ class JobSerializer(serializers.ModelSerializer):
 
 class CompanySerializer(ModelSerializer):
     profile = serializers.SerializerMethodField()
+
     class Meta:
         model = CompanyProfile
         fields = "__all__"
@@ -268,7 +269,16 @@ class MessageSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Message
-        fields = ["id", "sender", "title", "content", "unlocked", "created_at"]
+        fields = [
+            "id",
+            "sender",
+            "title",
+            "content",
+            "boost_id",
+            "thread",
+            "unlocked",
+            "created_at",
+        ]
 
     def get_content(self, obj):
         request = self.context.get("request")

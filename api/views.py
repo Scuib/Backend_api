@@ -17,6 +17,8 @@ from django.views.decorators.csrf import csrf_exempt
 import time
 
 from .models import (
+    BoostChatThread,
+    BoostUnlock,
     CompanyProfile,
     Profile,
     User,
@@ -1117,14 +1119,14 @@ def profile_update(request):
             required=False,
         ),
         openapi.Parameter(
-            name="Skills",
+            name="skills",
             in_=openapi.IN_FORM,
             description="List of skills to update (optional)",
             type=openapi.TYPE_STRING,
             required=False,
         ),
         openapi.Parameter(
-            name="Categories",
+            name="categories",
             in_=openapi.IN_FORM,
             description="List of categories to update (optional)",
             type=openapi.TYPE_STRING,
@@ -1145,7 +1147,7 @@ def profile_update(request):
             required=False,
         ),
         openapi.Parameter(
-            name="Location",
+            name="location",
             in_=openapi.IN_FORM,
             description="User's geographical location [e.g Lagos]",
             type=openapi.TYPE_STRING,
@@ -3080,22 +3082,32 @@ def message_boost(request):
         if not wallet.deduct(total_cost, f"Sent {len(recipients_id)} boost messages"):
             return Response({"detail": "Insufficient wallet balance."}, status=402)
 
+        # Create a unique boost ID
+        boost_id = str(uuid.uuid4())[:8]  # Short unique ID
+
+        # Create chat thread
+        thread = BoostChatThread.objects.create(boost_id=boost_id, recruiter=sender)
+
         profiles = Profile.objects.select_related("user").filter(
             user_id__in=recipients_id
         )
         profile_map = {p.user_id: p for p in profiles}
         for user_id in recipients_id:
-            try:
-                profile = profile_map.get(user_id)
-
-                Message.objects.create(
-                    user=profile.user,
-                    title=title,
-                    sender=sender,
-                    content=content,
-                )
-            except Profile.DoesNotExist:
+            profile = profile_map.get(user_id)
+            if not profile:
                 continue
+
+            # Create message linked to thread
+            Message.objects.create(
+                user=profile.user,
+                title=title,
+                sender=sender,
+                content=content,
+                boost_id=boost_id,
+                thread=thread,
+            )
+            # Add recipient to chat participants
+            thread.participants.add(profile.user)
 
         return Response(
             {
@@ -3109,6 +3121,118 @@ def message_boost(request):
             {"error": f"Something went wrong: {str(e)}"},
             status=status.HTTP_500_INTERNAL_SERVER_ERROR,
         )
+
+
+@swagger_auto_schema(
+    method="post",
+    operation_summary="Post message in Boost chat",
+    operation_description="This endpoint allows users to post messages in the chat room",
+    manual_parameters=[
+        openapi.Parameter(
+            name="Authorization",
+            in_=openapi.IN_HEADER,
+            description="Bearer {token}",
+            type=openapi.TYPE_STRING,
+            required=True,
+        ),
+    ],
+    request_body=openapi.Schema(
+        type=openapi.TYPE_OBJECT,
+        required=["title", "content", "recipients"],
+        properties={
+            "content": openapi.Schema(
+                type=openapi.TYPE_STRING, description="Content of the message"
+            ),
+        },
+    ),
+    responses={
+        200: "Boost message sent!",
+        400: "Bad request. All fields are required",
+        401: "Unauthorized",
+    },
+)
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def post_boost_chat_message(request, boost_id):
+    """Send a chat message under a boost thread."""
+    user = request.user
+    content = request.data.get("content")
+    if not content:
+        return Response({"detail": "Message content required"}, status=400)
+
+    thread = get_object_or_404(BoostChatThread, boost_id=boost_id)
+
+    # Recruiter or unlocked users can send
+    is_recruiter = thread.recruiter == user
+    is_unlocked = BoostUnlock.objects.filter(boost_id=boost_id, user=user).exists()
+
+    if not (is_recruiter or is_unlocked):
+        return Response({"detail": "You cannot post in this chat."}, status=403)
+
+    message = Message.objects.create(
+        user=user,
+        sender=user,
+        thread=thread,
+        title=f"Chat - Boost {boost_id}",
+        content=content,
+        unlocked=is_unlocked,
+    )
+
+    thread.participants.add(user)
+
+    return Response(
+        {
+            "detail": "Message sent successfully",
+            "message": {
+                "sender": user.email,
+                "content": content,
+                "created_at": message.created_at,
+            },
+        },
+        status=201,
+    )
+
+
+@swagger_auto_schema(
+    method="get",
+    operation_summary="List user messages with preview if locked",
+    manual_parameters=[
+        openapi.Parameter(
+            name="Authorization",
+            in_=openapi.IN_HEADER,
+            description="Bearer {token}",
+            type=openapi.TYPE_STRING,
+            required=True,
+        ),
+    ],
+    responses={200: MessageSerializer(many=True)},
+)
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def get_boost_chat_messages(request, boost_id):
+    """Get all chat messages for a boost thread."""
+    user = request.user
+    thread = get_object_or_404(BoostChatThread, boost_id=boost_id)
+
+    is_recruiter = thread.recruiter == user
+    is_unlocked = BoostUnlock.objects.filter(boost_id=boost_id, user=user).exists()
+
+    messages = thread.messages.order_by("created_at")
+    total_count = messages.count()
+
+    # Restrict view for users who haven't unlocked
+    if not (is_recruiter or is_unlocked):
+        messages = messages[:2]  # Show only first 2 messages
+
+    serializer = MessageSerializer(messages, many=True)
+
+    return Response(
+        {
+            "messages": serializer.data,
+            "total_messages": total_count,
+            "is_unlocked": is_unlocked,
+        }
+    )
 
 
 @swagger_auto_schema(
@@ -3307,44 +3431,48 @@ def wallet_balance(request):
 def unlock_message(request, message_id):
     try:
         message = Message.objects.get(id=message_id, user=request.user)
+        boost_id = message.boost_id
 
-        # Check if already unlocked
-        if hasattr(message, "unlocked") and message.unlocked:
+        if not boost_id:
+            return Response(
+                {"detail": "This message is not linked to a boost."}, status=400
+            )
+
+        if BoostUnlock.objects.filter(boost_id=boost_id, user=request.user).exists():
             sender_data = (
                 UserSerializer(message.sender).data if message.sender else None
             )
-            if not message.is_read:
-                message.is_read = True
-                message.save(update_fields=["is_read"])
+
             return Response(
                 {
-                    "detail": "Message already unlocked.",
-                    "title": message.title,
+                    "detail": "Boost chat unlocked successfully!",
+                    "boost_id": boost_id,
                     "message": message.content,
                     "sender": sender_data,
-                    "id": message.id,
                 }
             )
 
-        # Deduct from wallet
         wallet = Wallet.objects.get(user=request.user)
-        if wallet.deduct(UNLOCK_COST, "unlock message"):
-            message.unlocked = True
-            message.is_read = True
-            message.save(update_fields=["unlocked", "is_read"])
-            sender_data = (
-                UserSerializer(message.sender).data if message.sender else None
-            )
-            return Response(
-                {
-                    "detail": "Message unlocked successfully.",
-                    "message": message.content,
-                    "sender": sender_data,
-                    "id": message.id,
-                }
-            )
-        else:
+        if not wallet.deduct(UNLOCK_COST, f"Unlocked boost chat {boost_id}"):
             return Response({"detail": "Insufficient wallet balance."}, status=402)
+
+        BoostUnlock.objects.create(boost_id=boost_id, user=request.user)
+
+        # Mark the message as unlocked for backward compatibility
+        message.unlocked = True
+        message.is_read = True
+        message.save(update_fields=["unlocked", "is_read"])
+
+        sender_data = UserSerializer(message.sender).data if message.sender else None
+
+        return Response(
+            {
+                "detail": "Boost chat unlocked successfully!",
+                "boost_id": boost_id,
+                "message": message.content,
+                "sender": sender_data,
+            }
+        )
 
     except Message.DoesNotExist:
         return Response({"detail": "Message not found."}, status=404)

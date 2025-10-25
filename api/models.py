@@ -287,6 +287,7 @@ class Message(models.Model):
         null=True,
         blank=True,
     )
+    boost_id = models.CharField(max_length=50, null=True, blank=True)
     title = models.CharField(max_length=255)
     content = models.TextField()
     is_read = models.BooleanField(default=False)
@@ -306,6 +307,20 @@ class BoostChatThread(models.Model):
 
     def __str__(self):
         return f"Thread for {self.boost_id}"
+
+
+class BoostUnlock(models.Model):
+    boost_id = models.CharField(max_length=50)
+    user = models.ForeignKey(
+        User, on_delete=models.CASCADE, related_name="unlocked_boosts"
+    )
+    unlocked_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        unique_together = ("boost_id", "user")
+
+    def __str__(self):
+        return f"{self.user.email} unlocked {self.boost_id}"
 
 
 class Wallet(models.Model):
