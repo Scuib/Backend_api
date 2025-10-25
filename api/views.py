@@ -3224,7 +3224,7 @@ def get_boost_chat_messages(request, boost_id):
     if not (is_recruiter or is_unlocked):
         messages = messages[:2]  # Show only first 2 messages
 
-    serializer = MessageSerializer(messages, many=True)
+    serializer = MessageSerializer(messages, many=True, context={"request": request})
 
     return Response(
         {
