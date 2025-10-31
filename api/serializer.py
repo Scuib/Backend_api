@@ -104,7 +104,18 @@ class UserCategoriesSerializer(ModelSerializer):
         fields = ["name"]
 
 
-class ProfileSerializer(ModelSerializer):
+class ProfileSerializer(serializers.ModelSerializer):
+    skills = serializers.SlugRelatedField(
+        many=True,
+        slug_field="name",  # or whatever field identifies the skill
+        queryset=UserSkills.objects.all(),
+    )
+    categories = serializers.SlugRelatedField(
+        many=True,
+        slug_field="name",  # same idea here
+        queryset=UserCategories.objects.all(),
+    )
+
     class Meta:
         model = Profile
         fields = "__all__"

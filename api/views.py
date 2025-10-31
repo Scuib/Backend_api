@@ -1104,57 +1104,8 @@ def profile_update(request):
             type=openapi.TYPE_STRING,
             required=True,
         ),
-        openapi.Parameter(
-            name="first_name",
-            in_=openapi.IN_FORM,
-            description="User's first name",
-            type=openapi.TYPE_STRING,
-            required=False,
-        ),
-        openapi.Parameter(
-            name="last_name",
-            in_=openapi.IN_FORM,
-            description="User's last name",
-            type=openapi.TYPE_STRING,
-            required=False,
-        ),
-        openapi.Parameter(
-            name="skills",
-            in_=openapi.IN_FORM,
-            description="List of skills to update (optional)",
-            type=openapi.TYPE_STRING,
-            required=False,
-        ),
-        openapi.Parameter(
-            name="categories",
-            in_=openapi.IN_FORM,
-            description="List of categories to update (optional)",
-            type=openapi.TYPE_STRING,
-            required=False,
-        ),
-        openapi.Parameter(
-            name="years_of_experience",
-            in_=openapi.IN_FORM,
-            description="Years of experience in number (optional)",
-            type=openapi.TYPE_NUMBER,
-            required=False,
-        ),
-        openapi.Parameter(
-            name="experience_level",
-            in_=openapi.IN_FORM,
-            description="Experience level can be Entry, Mid, Senior, Lead (optional)",
-            type=openapi.TYPE_STRING,
-            required=False,
-        ),
-        openapi.Parameter(
-            name="location",
-            in_=openapi.IN_FORM,
-            description="User's geographical location [e.g Lagos]",
-            type=openapi.TYPE_STRING,
-            required=False,
-        ),
     ],
-    consumes=["multipart/form-data"],
+    request_body=ProfileSerializer,
     responses={
         200: openapi.Response(
             description="Profile updated successfully",
@@ -1172,10 +1123,11 @@ def profile_update(request):
 )
 @api_view(["PUT"])
 @permission_classes([IsAuthenticated])
-@parser_classes([MultiPartParser, FormParser])
+# @parser_classes([MultiPartParser, FormParser])
 def onboarding(request, user_id):
     # Check if the profile exists
     user = get_object_or_404(User, id=user_id)
+    print(user)
 
     data = dict(request.data)
     for f in request.FILES:
