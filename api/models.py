@@ -203,7 +203,9 @@ class Jobs(models.Model):
     title = models.CharField(max_length=50)
     description = models.TextField()
     location = models.CharField(max_length=255)
-    categories = models.TextField(null=True)
+    categories = models.ManyToManyField(
+        "UserCategories", related_name="jobs", blank=True
+    )
     skills = models.ManyToManyField(JobSkills)
     max_salary = models.IntegerField(default=5000)
     min_salary = models.IntegerField(default=0)
@@ -278,11 +280,47 @@ class Message(models.Model):
         null=True,
         blank=True,
     )
+    thread = models.ForeignKey(
+        "BoostChatThread",
+        on_delete=models.CASCADE,
+        related_name="messages",
+        null=True,
+        blank=True,
+    )
+    boost_id = models.CharField(max_length=50, null=True, blank=True)
     title = models.CharField(max_length=255)
     content = models.TextField()
     is_read = models.BooleanField(default=False)
     unlocked = models.BooleanField(default=False)
     created_at = models.DateTimeField(auto_now_add=True)
+
+
+class BoostChatThread(models.Model):
+    boost_id = models.CharField(max_length=50, unique=True)
+    recruiter = models.ForeignKey(
+        User, on_delete=models.CASCADE, related_name="boost_threads"
+    )
+    participants = models.ManyToManyField(
+        User, related_name="joined_boost_threads", blank=True
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"Thread for {self.boost_id}"
+
+
+class BoostUnlock(models.Model):
+    boost_id = models.CharField(max_length=50)
+    user = models.ForeignKey(
+        User, on_delete=models.CASCADE, related_name="unlocked_boosts"
+    )
+    unlocked_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        unique_together = ("boost_id", "user")
+
+    def __str__(self):
+        return f"{self.user.email} unlocked {self.boost_id}"
 
 
 class Wallet(models.Model):

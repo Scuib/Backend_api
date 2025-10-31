@@ -195,6 +195,7 @@ class ApplicantSerializer(ModelSerializer):
 
 class JobSerializer(serializers.ModelSerializer):
     skills = serializers.SerializerMethodField()
+    categories = serializers.SerializerMethodField()
 
     class Meta:
         model = Jobs
@@ -203,9 +204,13 @@ class JobSerializer(serializers.ModelSerializer):
     def get_skills(self, obj):
         return list(obj.skills.values_list("name", flat=True))
 
+    def get_categories(self, obj):
+        return list(obj.categories.values_list("name", flat=True))
+
 
 class CompanySerializer(ModelSerializer):
     profile = serializers.SerializerMethodField()
+
     class Meta:
         model = CompanyProfile
         fields = "__all__"
@@ -264,7 +269,16 @@ class MessageSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Message
-        fields = ["id", "sender", "title", "content", "unlocked", "created_at"]
+        fields = [
+            "id",
+            "sender",
+            "title",
+            "content",
+            "boost_id",
+            "thread",
+            "unlocked",
+            "created_at",
+        ]
 
     def get_content(self, obj):
         request = self.context.get("request")

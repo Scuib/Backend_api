@@ -30,6 +30,11 @@ urlpatterns = [
     path("onboarding/<int:user_id>/", views.onboarding, name="onboarding"),
     path("profile/delete/", views.profile_delete, name="delete-user"),
     path("job/create/", views.job_create, name="job-create"),
+    path(
+        "job/create-category/",
+        views.job_create_with_categories,
+        name="job-create with category",
+    ),
     path("job/update/<int:job_id>/", views.job_update, name="job-update"),
     path("job/user/", views.jobs_user, name="user_jobs"),
     path("job/all/", views.jobs_all, name="all_jobs"),
@@ -48,13 +53,23 @@ urlpatterns = [
     path(
         "create-job/",
         views.post_job_without_auth,
-        name="Test job creation without login",
+        name="job creation without login",
+    ),
+    path(
+        "create-job-category/",
+        views.match_job_with_categories,
+        name="job creation with categories",
     ),
     path("company-status/", views.update_company_status, name="Set company status"),
     path("profile/headers/", views.profile_header, name="Get profile header"),
     path("contact/", views.contact_us, name="Contact us"),
     path("count/", views.count_users, name="count"),
     path("boost/", views.recommend_users_by_skills_and_location, name="boost"),
+    path(
+        "boost-category/",
+        views.recommend_users_by_categories_and_location,
+        name="boost-categories",
+    ),
     path("wallet/fund/", views.fund_wallet, name="fund_wallet"),
     path("wallet/verify/<str:reference>/", views.verify_payment, name="verify_payment"),
     path("wallet/balance/", views.wallet_balance, name="wallet_balance"),
@@ -64,7 +79,17 @@ urlpatterns = [
         name="unlock-message",
     ),
     path("messages/", views.list_messages, name="list-messages"),
+    path(
+        "messages/chat/<str:boost_id>/",
+        views.get_boost_chat_messages,
+        name="chat-messages",
+    ),
     path("messages/send/", views.message_boost, name="send-messages"),
+    path(
+        "messages/chat/<str:boost_id>/send/",
+        views.post_boost_chat_message,
+        name="send-chat-messages",
+    ),
     path("messages/sent/", views.sent_messages, name="sent-messages"),
     path(
         "messages/delete/<int:message_id>/", views.delete_message, name="delete-message"

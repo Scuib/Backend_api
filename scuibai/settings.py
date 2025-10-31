@@ -2,8 +2,6 @@ from pathlib import Path
 import resend
 import os
 from dotenv import load_dotenv
-import cloudinary.api
-import cloudinary.uploader
 import cloudinary
 import dj_database_url
 
@@ -13,7 +11,7 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 
 # SECURITY WARNING: keep the secret key used in production secret!
 SECRET_KEY = os.getenv("SECRET_KEY")
-SECRET_KEY = "django-insecure-_)bt2+o-)hm$!m7z$wvxhnfuf@w&9o-w2i@b)_6p-z(2z*c67o"
+
 
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = os.getenv("DEBUG")

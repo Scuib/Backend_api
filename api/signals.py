@@ -55,11 +55,21 @@ def create_company_signals(sender, instance, created, **kwargs):
 @receiver(post_save, sender=Message)
 def send_message_email(sender, instance, created, **kwargs):
     if created:
+        boost_id = getattr(instance, "boost_id", None)  # adjust if stored differently
+
+        # Send email ONLY if it's the first message in that thread
+        if boost_id:
+            thread_count = Message.objects.filter(
+                boost_id=boost_id, user=instance.user
+            ).count()
+
+            if thread_count > 1:
+                return
         recipient = instance.user
         sender_user = instance.sender
         message = instance.content
-        teaser = message[:50]  # First 50 characters of the message
-        preview = f"Preview: {teaser}... Pay ₦100 to view the full message."
+        teaser = message[:100]  # First 100 characters of the message
+        preview = f"Preview: {teaser}... Unlock to view the full message."
 
         email_html = f"""
         <html>
