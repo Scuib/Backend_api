@@ -1433,6 +1433,7 @@ def job_create(request):
 
         # Get job skills
         job_skills = list(job_instance.skills.values_list("name", flat=True))
+        job_categories = list(job_instance.categories.values_list("name", flat=True))
 
         # Prepare job data for the response
         data = {
@@ -1441,7 +1442,7 @@ def job_create(request):
             "company_name": job_instance.owner.first_name,
             "company_email": job_instance.owner.email,
             "skills": job_skills,
-            "category": job_instance.categories,
+            "category": job_categories,
             "title": job_instance.title,
             "description": job_instance.description,
             "location": job_instance.location,
