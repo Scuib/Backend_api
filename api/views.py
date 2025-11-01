@@ -1431,146 +1431,152 @@ def job_create(request):
             job_skill, created = JobSkills.objects.get_or_create(name=skill)
             job_instance.skills.add(job_skill)
 
-        # Get job skills
-        job_skills = list(job_instance.skills.values_list("name", flat=True))
-        job_categories = list(job_instance.categories.values_list("name", flat=True))
-
-        # Prepare job data for the response
-        data = {
-            "job_id": job_instance.id,
-            "owner_id": job_instance.owner.id,
-            "company_name": job_instance.owner.first_name,
-            "company_email": job_instance.owner.email,
-            "skills": job_skills,
-            "category": job_categories,
-            "title": job_instance.title,
-            "description": job_instance.description,
-            "location": job_instance.location,
-            "employment_type": job_instance.employment_type,
-            "max_salary": job_instance.max_salary,
-            "min_salary": job_instance.min_salary,
-            "currency_type": job_instance.currency_type,
-        }
-
-        # Send job creation signal (if applicable)
-        # job_created.send(sender=Jobs, instance=job_instance)
-
-        # Use the recommendation system to find suitable applicants
-        matcher = JobAppMatching()
-
-        job_data = matcher.load_job_from_db(job_instance.id)
-
-        if not job_data:
-            return Response(
-                {"error": "Job data could not be retrieved."},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-
-        # Convert job data into Pandas DataFrame format
-        job_df = pd.DataFrame([job_data])
-
-        matcher.enrich_jobs_with_currency(job_df)
-        # Load all users as potential candidates
-        user_profiles = matcher.load_users_from_db()
-
-        if user_profiles.empty:
-            return Response(
-                {
-                    "detail": _("Job successfully posted!"),
-                    "data": data,
-                    "recommended_applicants": [],
-                },
-                status=status.HTTP_201_CREATED,
-            )
-
-        if user_profiles["skills"].str.strip().eq("").all():
-            return Response(
-                {
-                    "detail": _("Job successfully posted!"),
-                    "data": data,
-                    "recommended_applicants": [],
-                },
-                status=status.HTTP_201_CREATED,
-            )
-
-        # Get matching applicants using the recommendation function
-        recommended_users = matcher.recommend_users(job_data, user_profiles)
-
-        # Prepare notification
-        notification = {
-            "id": str(uuid4()),
-            "type": "job",
-            "message": "You have been matched to a job",
-            "created_at": timezone.now().isoformat(),
-            "details": {
-                "recruiter": job_instance.owner.company_profile.company_name,
-                "recruiter_email": job_instance.owner.email,
-                "job_name": job_instance.title,
-                "job_description": job_instance.description,
-                "job_skills": job_skills,
-                "experience_level": job_instance.experience_level,
-                "years_of_experience": job_instance.years_of_experience,
-                "max_salary": job_instance.max_salary,
-                "min_salary": job_instance.min_salary,
-            },
-        }
-
-        recommended_applicants_list = []
-
-        for user_data in recommended_users:
-            try:
-                user_id = user_data["user_id"]
-                profile = Profile.objects.get(user_id=user_id)
-
-                # Ensure applicants are linked to the job
-                applicant, created = Applicant.objects.get_or_create(
-                    job=job_instance, user=profile.user
-                )
-                applicant.match_score = user_data["match_score"]
-                applicant.save()
-
-                # Collect recommended applicant info
-                recommended_applicants_list.append(
-                    {
-                        "user_id": profile.user.id,
-                        "user_name": profile.user.first_name,
-                        "user_email": profile.user.email,
-                        "User_bio": profile.bio,
-                        "image": profile.image.url,
-                        "match_score": user_data["match_score"],
-                        "years_of_experience": profile.years_of_experience,
-                        "salary_range": user_data["salary_range"],
-                        "currency": profile.currency,
-                        "location": profile.location,
-                        "employment_choice": profile.employment_type,
-                        "job_location_choice": profile.job_location,
-                        "skills": list(profile.skills.values_list("name", flat=True)),
-                    }
-                )
-
-                # Add notifications if not already present
-                if not profile.notifications:
-                    profile.notifications = []
-
-                if notification not in profile.notifications:
-                    profile.notifications.append(notification)
-                    profile.save()
-
-            except Profile.DoesNotExist:
-                print(f"Profile not found for user ID {user_id}")
-                continue
-
-        # Add recommended applicants to response
-        data["recommended_applicants"] = recommended_applicants_list
-
         return Response(
-            {"detail": _("Job successfully posted!"), "data": data},
+            {
+                "detail": _("Job successfully posted!"),
+                "job_id": job_instance.id,
+            },
             status=status.HTTP_201_CREATED,
         )
-
-    # Handle invalid data
     return Response(
         {"error": serialized_data.errors}, status=status.HTTP_400_BAD_REQUEST
+    )
+
+
+@swagger_auto_schema(
+    method="get",
+    operation_summary="Get Job recommendation",
+    operation_description="This endpoint allows authenticated companies to get matching applicants based on their job",
+    manual_parameters=[
+        openapi.Parameter(
+            name="Authorization",
+            in_=openapi.IN_HEADER,
+            description="Bearer {token}",
+            type=openapi.TYPE_STRING,
+            required=True,
+        ),
+    ],
+    responses={
+        201: openapi.Response(
+            description="Job successfully created",
+            examples={
+                "application/json": {
+                    "detail": "Job successfully posted!",
+                    "recommended_applicants": [
+                        {
+                            "user_id": 34,
+                            "user_name": "Jane Doe",
+                            "user_email": "janedoe@example.com",
+                            "match_score": 85.7,
+                            "years_of_experience": 5,
+                            "salary_range": "50K-80K",
+                            "location": "New York",
+                            "skills": ["Python", "Django"],
+                        }
+                    ],
+                },
+            },
+        ),
+        400: openapi.Response(
+            description="Bad request",
+            examples={
+                "application/json": {
+                    "error": "Invalid job id",
+                }
+            },
+        ),
+        404: openapi.Response(
+            description="Not Found",
+            examples={
+                "application/json": {
+                    "error": "Not found",
+                }
+            },
+        ),
+    },
+)
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def get_recommendation(request, job_id):
+    user = request.user
+
+    if not user.company:
+        return Response(
+            "Only Companies can create Jobs", status=status.HTTP_404_NOT_FOUND
+        )
+
+    # Use the recommendation system to find suitable applicants
+    matcher = JobAppMatching()
+
+    job_data = matcher.load_job_from_db(job_id)
+
+    if not job_data:
+        return Response(
+            {"error": "Job data could not be retrieved."},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    # Convert job data into Pandas DataFrame format
+    job_df = pd.DataFrame([job_data])
+
+    matcher.enrich_jobs_with_currency(job_df)
+    # Load all users as potential candidates
+
+    user_profiles = matcher.load_users_from_db()
+
+    if user_profiles.empty or user_profiles["skills"].str.strip().eq("").all():
+        return Response(
+            {
+                "recommended_applicants": [],
+            },
+            status=status.HTTP_200_OK,
+        )
+
+    # Get matching applicants using the recommendation function
+    recommended_users = matcher.recommend_users(job_data, user_profiles)
+
+    recommended_applicants_list = []
+
+    # Fetch all profiles in one go, including related data
+    user_ids = [u["user_id"] for u in recommended_users]
+    profiles = (
+        Profile.objects.filter(user_id__in=user_ids)
+        .select_related("user")  # optimize user join
+        .prefetch_related("skills")  # optimize M2M fetch
+    )
+
+    # Map for O(1) access
+    profile_map = {p.user_id: p for p in profiles}
+
+    for user_data in recommended_users:
+        user_id = user_data["user_id"]
+        profile = profile_map.get(user_id)
+        if not profile:
+            continue
+
+        recommended_applicants_list.append(
+            {
+                "user_id": profile.user.id,
+                "user_name": profile.user.first_name,
+                "user_email": profile.user.email,
+                "User_bio": profile.bio,
+                "image": profile.image.url if profile.image else None,
+                "match_score": user_data["match_score"],
+                "years_of_experience": profile.years_of_experience,
+                "salary_range": user_data["salary_range"],
+                "currency": profile.currency,
+                "location": profile.location,
+                "employment_choice": profile.employment_type,
+                "job_location_choice": profile.job_location,
+                "skills": list(profile.skills.values_list("name", flat=True)),
+            }
+        )
+
+    return Response(
+        {
+            "recommended_applicants": recommended_applicants_list,
+        },
+        status=status.HTTP_200_OK,
     )
 
 
@@ -2525,19 +2531,9 @@ def match_job_with_categories(request):
     # Load all users as potential candidates
     user_profiles = matcher.load_users_from_db()
 
-    if user_profiles.empty:
+    if user_profiles.empty or user_profiles["skills"].str.strip().eq("").all():
         return Response(
             {
-                "detail": "Job processed successfully!",
-                "recommended_applicants": [],
-            },
-            status=status.HTTP_200_OK,
-        )
-
-    if user_profiles["categories"].str.strip().eq("").all():
-        return Response(
-            {
-                "detail": "Job processed successfully!",
                 "recommended_applicants": [],
             },
             status=status.HTTP_200_OK,
@@ -2547,35 +2543,43 @@ def match_job_with_categories(request):
     recommended_users = matcher.recommend_users_categories(job_data, user_profiles)
 
     recommended_applicants_list = []
+
+    # Fetch all profiles in one go, including related data
+    user_ids = [u["user_id"] for u in recommended_users]
+    profiles = (
+        Profile.objects.filter(user_id__in=user_ids)
+        .select_related("user")  # optimize user join
+        .prefetch_related("skills")  # optimize M2M fetch
+    )
+
+    # Map for O(1) access
+    profile_map = {p.user_id: p for p in profiles}
+
     for user_data in recommended_users:
-        try:
-            user_id = user_data["user_id"]
-            profile = Profile.objects.get(user_id=user_id)
-
-            recommended_applicants_list.append(
-                {
-                    "user_id": profile.user.id,
-                    "user_name": profile.user.first_name,
-                    "user_email": profile.user.email,
-                    "User_bio": profile.bio,
-                    "image": profile.image.url if profile.image else None,
-                    "match_score": user_data["match_score"],
-                    "years_of_experience": profile.years_of_experience,
-                    "salary_range": user_data["salary_range"],
-                    "location": profile.location,
-                    "Employment_choice": profile.employment_type,
-                    "job_location_choice": profile.job_location,
-                    "categories": list(
-                        profile.categories.values_list("name", flat=True)
-                    ),
-                }
-            )
-
-        except Profile.DoesNotExist:
+        user_id = user_data["user_id"]
+        profile = profile_map.get(user_id)
+        if not profile:
             continue
+
+        recommended_applicants_list.append(
+            {
+                "user_id": profile.user.id,
+                "user_name": profile.user.first_name,
+                "user_email": profile.user.email,
+                "User_bio": profile.bio,
+                "image": profile.image.url if profile.image else None,
+                "match_score": user_data["match_score"],
+                "years_of_experience": profile.years_of_experience,
+                "salary_range": user_data["salary_range"],
+                "currency": profile.currency,
+                "location": profile.location,
+                "employment_choice": profile.employment_type,
+                "job_location_choice": profile.job_location,
+                "categories": list(profile.categories.values_list("name", flat=True)),
+            }
+        )
     return Response(
         {
-            "detail": "Job processed successfully!",
             "recommended_applicants": recommended_applicants_list,
         },
         status=status.HTTP_200_OK,
@@ -3029,11 +3033,6 @@ def message_boost(request):
                 {"error": "All fields are required."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
-        total_cost = BOOST_MESSAGE_COST * len(recipients_id)
-        # Check if wallet has sufficient balance
-        wallet = Wallet.objects.get(user=sender)
-        if not wallet.deduct(total_cost, f"Sent {len(recipients_id)} boost messages"):
-            return Response({"detail": "Insufficient wallet balance."}, status=402)
 
         # Create a unique boost ID
         boost_id = str(uuid.uuid4())[:8]  # Short unique ID
