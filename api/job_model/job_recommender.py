@@ -216,6 +216,20 @@ class JobAppMatching:
         job_max_salary = int(job_profile.get("max_salary", 0))
         job_currency = job_profile["currency_type"]
 
+        # Filter users who have at least one matching skill
+
+        def has_matching_skill(user_skills_str):
+            user_skills = [
+                s.strip().lower() for s in user_skills_str.split(";") if s.strip()
+            ]
+            return any(skill in user_skills for skill in job_skills)
+
+        user_data = user_data[user_data["skills"].apply(has_matching_skill)]
+
+        # If no users have matching skills, return empty list early
+        if user_data.empty:
+            return []
+
         # Step 1: Skills Matching
         tfidf = TfidfVectorizer()
         user_skills_matrix = tfidf.fit_transform(user_data["skills"])
@@ -260,12 +274,9 @@ class JobAppMatching:
 
         # Sort users by match score in descending order
         sorted_users = filtered_users.sort_values(by="match_score", ascending=False)
-        # Get top 5 users
-        # top_users = user_data.iloc[np.argsort(scores)[-5:][::-1]]
 
         # Format recommendations
         recommendations = []
-        # for idx, user in top_users.iterrows():
         for idx, user in sorted_users.iterrows():
             recommendations.append(
                 {
@@ -343,8 +354,7 @@ class JobAppMatching:
 
         def has_any_required_categories(user_categories):
             user_categories = set(
-                cat.strip().lower()
-                for cat in user_categories.split(";")
+                cat.strip().lower() for cat in user_categories.split(";")
             )
             return bool(
                 required_categories_set & user_categories
