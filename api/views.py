@@ -2415,7 +2415,7 @@ def post_job_without_auth(request):
                     "user_name": profile.user.first_name,
                     "user_email": profile.user.email,
                     "User_bio": profile.bio,
-                    "image": profile.image.url,
+                    "image": profile.image.url if profile.image else None,
                     "match_score": user_data["match_score"],
                     "years_of_experience": profile.years_of_experience,
                     "salary_range": user_data["salary_range"],
