@@ -1500,11 +1500,6 @@ def job_create(request):
 def get_recommendation(request, job_id):
     user = request.user
 
-    if not user.company:
-        return Response(
-            "Only Companies can create Jobs", status=status.HTTP_404_NOT_FOUND
-        )
-
     # Use the recommendation system to find suitable applicants
     matcher = JobAppMatching()
 
@@ -2389,16 +2384,7 @@ def post_job_without_auth(request):
     # Load all users as potential candidates
     user_profiles = matcher.load_users_from_db()
 
-    if user_profiles.empty:
-        return Response(
-            {
-                "detail": "Job processed successfully!",
-                "recommended_applicants": [],
-            },
-            status=status.HTTP_200_OK,
-        )
-
-    if user_profiles["skills"].str.strip().eq("").all():
+    if user_profiles.empty or user_profiles["skills"].str.strip().eq("").all():
         return Response(
             {
                 "detail": "Job processed successfully!",
@@ -2411,30 +2397,42 @@ def post_job_without_auth(request):
     recommended_users = matcher.recommend_users(job_data, user_profiles)
 
     recommended_applicants_list = []
+
+    # Fetch all profiles in one go, including related data
+    user_ids = [u["user_id"] for u in recommended_users]
+    profiles = (
+        Profile.objects.filter(user_id__in=user_ids)
+        .select_related("user")  # optimize user join
+        .prefetch_related("skills")  # optimize M2M fetch
+    )
+
+    # Map for O(1) access
+    profile_map = {p.user_id: p for p in profiles}
+
     for user_data in recommended_users:
-        try:
-            user_id = user_data["user_id"]
-            profile = Profile.objects.get(user_id=user_id)
-
-            recommended_applicants_list.append(
-                {
-                    "user_id": profile.user.id,
-                    "user_name": profile.user.first_name,
-                    "user_email": profile.user.email,
-                    "User_bio": profile.bio,
-                    "image": profile.image.url if profile.image else None,
-                    "match_score": user_data["match_score"],
-                    "years_of_experience": profile.years_of_experience,
-                    "salary_range": user_data["salary_range"],
-                    "location": profile.location,
-                    "Employment_choice": profile.employment_type,
-                    "job_location_choice": profile.job_location,
-                    "skills": list(profile.skills.values_list("name", flat=True)),
-                }
-            )
-
-        except Profile.DoesNotExist:
+        user_id = user_data["user_id"]
+        profile = profile_map.get(user_id)
+        if not profile:
             continue
+
+        recommended_applicants_list.append(
+            {
+                "user_id": profile.user.id,
+                "user_name": profile.user.first_name,
+                "user_email": profile.user.email,
+                "User_bio": profile.bio,
+                "image": profile.image.url if profile.image else None,
+                "match_score": user_data["match_score"],
+                "years_of_experience": profile.years_of_experience,
+                "salary_range": user_data["salary_range"],
+                "currency": profile.currency,
+                "location": profile.location,
+                "employment_choice": profile.employment_type,
+                "job_location_choice": profile.job_location,
+                "skills": list(profile.skills.values_list("name", flat=True)),
+            }
+        )
+
     return Response(
         {
             "detail": "Job processed successfully!",
@@ -3792,7 +3790,7 @@ def job_create_with_categories(request):
         matcher.enrich_jobs_with_currency(job_df)
 
         user_profiles = matcher.load_users_from_db()
-        if user_profiles.empty:
+        if user_profiles.empty or user_profiles["categories"].str.strip().eq("").all():
             return Response(
                 {
                     "detail": "Job successfully posted!",
@@ -3806,29 +3804,40 @@ def job_create_with_categories(request):
         recommended_users = matcher.recommend_users_categories(job_data, user_profiles)
 
         recommended_applicants_list = []
-        for user_data in recommended_users:
-            try:
-                user_id = user_data["user_id"]
-                profile = Profile.objects.get(user_id=user_id)
+        user_ids = [u["user_id"] for u in recommended_users]
+        profiles = (
+            Profile.objects.filter(user_id__in=user_ids)
+            .select_related("user")  # optimize user join
+            .prefetch_related("skills")  # optimize M2M fetch
+        )
 
-                recommended_applicants_list.append(
-                    {
-                        "user_id": profile.user.id,
-                        "user_name": profile.user.first_name,
-                        "user_email": profile.user.email,
-                        "user_bio": profile.bio,
-                        "image": profile.image.url if profile.image else None,
-                        "years_of_experience": profile.years_of_experience,
-                        "location": profile.location,
-                        "employment_choice": profile.employment_type,
-                        "job_location_choice": profile.job_location,
-                        "categories": list(
-                            profile.categories.values_list("name", flat=True)
-                        ),
-                    }
-                )
-            except Profile.DoesNotExist:
+        # Map for O(1) access
+        profile_map = {p.user_id: p for p in profiles}
+
+        for user_data in recommended_users:
+            user_id = user_data["user_id"]
+            profile = profile_map.get(user_id)
+            if not profile:
                 continue
+            recommended_applicants_list.append(
+                {
+                    "user_id": profile.user.id,
+                    "user_name": profile.user.first_name,
+                    "user_email": profile.user.email,
+                    "user_bio": profile.bio,
+                    "image": profile.image.url if profile.image else None,
+                    "match_score": user_data["match_score"],
+                    "years_of_experience": profile.years_of_experience,
+                    "salary_range": user_data["salary_range"],
+                    "currency": profile.currency,
+                    "location": profile.location,
+                    "employment_choice": profile.employment_type,
+                    "job_location_choice": profile.job_location,
+                    "categories": list(
+                        profile.categories.values_list("name", flat=True)
+                    ),
+                }
+            )
 
         data["recommended_applicants"] = recommended_applicants_list
 
