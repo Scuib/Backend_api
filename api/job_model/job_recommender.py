@@ -1,3 +1,4 @@
+import re
 import pandas as pd
 from sklearn.metrics.pairwise import cosine_similarity
 import numpy as np
@@ -404,7 +405,9 @@ class JobAppMatching:
         Recommend users for a job profile based on categories, experience, location, and salary.
         """
         # Extract job profile details
-        job_categories = job_profile["categories"].split(";")
+        job_categories = [
+            c.strip().lower() for c in job_profile["categories"].split(";") if c.strip()
+        ]
         job_experience = job_profile["experience_level"].strip().lower()
         job_years_of_experience = job_profile["years_of_experience"]
         job_location = job_profile["location"].strip().lower()
@@ -412,65 +415,95 @@ class JobAppMatching:
         job_max_salary = int(job_profile.get("max_salary", 0))
         job_currency = job_profile["currency_type"]
 
-        # Step 1: Categories Matching (instead of Skills)
+        # --- Step 1: Category prefilter ---
+        pattern = "|".join(re.escape(cat) for cat in job_categories)
+        filtered = user_data[
+            user_data["categories"].str.lower().str.contains(pattern, na=False)
+        ]
+        if filtered.empty:
+            return []  
+
+        # --- Step 2: Category similarity ---
         tfidf = TfidfVectorizer()
-        user_categories_matrix = tfidf.fit_transform(user_data["categories"])
-        job_categories_vector = tfidf.transform([", ".join(job_categories)])
-        categories_similarity = cosine_similarity(
-            job_categories_vector, user_categories_matrix
-        ).flatten()
+        user_cat_matrix = tfidf.fit_transform(filtered["categories"])
+        job_cat_vector = tfidf.transform([", ".join(job_categories)])
+        cat_sim = cosine_similarity(job_cat_vector, user_cat_matrix).flatten() 
 
         # Step 2: Experience Level and Years of Experience Match
         experience_map = {"entry": 1, "mid": 2, "senior": 3, "lead": 4}
-        user_data["experience_numeric"] = (
-            user_data["experience_level"].map(experience_map).fillna(0).astype(int)
+        filtered["experience_numeric"] = (
+            filtered["experience_level"].map(experience_map).fillna(0).astype(int)
         )
         job_experience_numeric = experience_map.get(job_experience, 1)
 
-        experience_match = user_data["experience_numeric"] >= job_experience_numeric
+        experience_match = filtered["experience_numeric"] >= job_experience_numeric
         years_experience_match = (
-            user_data["years_of_experience"] >= job_years_of_experience
+            filtered["years_of_experience"] >= job_years_of_experience
         )
 
         # Step 3: Location and Preferred Job Location Match
-        location_match = user_data["location"].str.lower() == job_location
+        location_match = filtered["location"].str.lower() == job_location
 
         # Step 4: Salary Match
         salary_match = (
-            (user_data["min_salary"] <= job_max_salary)
-            & (user_data["max_salary"] >= job_min_salary)
-            & (user_data["currency_type"] == job_currency)
+            (filtered["min_salary"] <= job_max_salary)
+            & (filtered["max_salary"] >= job_min_salary)
+            & (filtered["currency_type"] == job_currency)
         )
 
         # Step 5: Scoring and Recommendations
         scores = (
-            (0.5 * categories_similarity)
-            + (0.2 * experience_match.astype(int))
+            (0.6 * cat_sim)
+            + (0.15 * experience_match.astype(int))
             + (0.1 * years_experience_match.astype(int))
-            + (0.15 * location_match.astype(int))
+            + (0.1 * location_match.astype(int))
             + (0.05 * salary_match.astype(int))
         )
 
-        user_data["match_score"] = scores
-        filtered_users = user_data[user_data["match_score"] >= 0.4]
+        # scores = (
+        #     0.6 * cat_sim
+        #     + 0.15 * experience_match
+        #     + 0.1 * years_experience_match
+        #     + 0.1 * location_match
+        #     + 0.05 * salary_match
+        # )
+
+        filtered = filtered.assign(match_score=scores)
+        top_users = filtered[filtered["match_score"] >= 0.4].nlargest(10, "match_score")
+        # user_data["match_score"] = scores
+        # filtered_users = user_data[user_data["match_score"] >= 0.4]
 
         # Sort users by match score in descending order
-        sorted_users = filtered_users.sort_values(by="match_score", ascending=False)
+        # sorted_users = filtered_users.sort_values(by="match_score", ascending=False)
 
-        # Format recommendations
-        recommendations = []
-        for idx, user in sorted_users.iterrows():
-            recommendations.append(
-                {
-                    "user_name": user["user_name"],
-                    "user_id": user["user_id"],
-                    "categories": user["categories"],  # swapped in place of skills
-                    "user_location": user["location"],
-                    "salary_range": f"{user['min_salary']} - {user['max_salary']} {user['currency_type']}",
-                    "years_of_experience": user["years_of_experience"],
-                    "experience_level": user["experience_level"],
-                    "match_score": scores[idx],
-                }
-            )
+        recommendations = [
+            {
+                "user_id": row["user_id"],
+                "user_name": row["user_name"],
+                "categories": row["categories"],
+                "user_location": row["location"],
+                "salary_range": f"{row['min_salary']} - {row['max_salary']} {row['currency_type']}",
+                "years_of_experience": row["years_of_experience"],
+                "experience_level": row["experience_level"],
+                "match_score": round(row["match_score"], 3),
+            }
+            for _, row in top_users.iterrows()
+        ]
+
+        # # Format recommendations
+        # recommendations = []
+        # for idx, user in sorted_users.iterrows():
+        #     recommendations.append(
+        #         {
+        #             "user_name": user["user_name"],
+        #             "user_id": user["user_id"],
+        #             "categories": user["categories"],  # swapped in place of skills
+        #             "user_location": user["location"],
+        #             "salary_range": f"{user['min_salary']} - {user['max_salary']} {user['currency_type']}",
+        #             "years_of_experience": user["years_of_experience"],
+        #             "experience_level": user["experience_level"],
+        #             "match_score": scores[idx],
+        #         }
+        #     )
 
         return recommendations
