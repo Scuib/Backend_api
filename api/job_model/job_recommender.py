@@ -455,12 +455,11 @@ class JobAppMatching:
         filtered_users = user_data[user_data["match_score"] >= 0.4]
 
         # Sort users by match score in descending order
-        # sorted_users = filtered_users.sort_values(by="match_score", ascending=False)
+        sorted_users = filtered_users.sort_values(by="match_score", ascending=False)
 
-        top_users = user_data.iloc[np.argsort(scores)[-5:][::-1]]
         # Format recommendations
         recommendations = []
-        for idx, user in top_users.iterrows():
+        for idx, user in sorted_users.iterrows():
             recommendations.append(
                 {
                     "user_name": user["user_name"],
