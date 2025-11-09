@@ -54,41 +54,59 @@ class JobAppMatching:
             print("Job not found.")
             return None
 
-    def load_users_from_db(self):
-        start = time.perf_counter()
+    def load_users_from_db(self, skills=None, categories=None, location=None):
+        """
+        Load user profiles with optional filters for skills, categories, or location.
+        Returns a pandas DataFrame of user data.
+        """
+
+        # Base queryset
         users = (
             User.objects.filter(company=False)
             .select_related("profile")
-            .prefetch_related("user_skills")  # matches related_name
-            .annotate(
-                skills_agg=StringAgg("user_skills__name", delimiter=";", distinct=True),
-                experience_level=Lower("profile__experience_level"),
-                location=Lower("profile__location"),
-                job_location=Lower("profile__job_location"),
-                years_of_experience=F("profile__years_of_experience"),
-                min_salary=F("profile__min_salary"),
-                max_salary=F("profile__max_salary"),
-                currency=F("profile__currency"),
-                categories_agg=StringAgg(
-                    "profile__categories__name", delimiter=";", distinct=True
-                ),
-            )
-            .values(
-                "id",
-                "first_name",
-                "last_name",
-                "skills_agg",
-                "experience_level",
-                "years_of_experience",
-                "location",
-                "job_location",
-                "min_salary",
-                "max_salary",
-                "currency",
-                "categories_agg",
-            )
+            .prefetch_related("user_skills", "profile__categories")
         )
 
+        # Apply filters dynamically
+        if skills:
+            users = users.filter(user_skills__name__in=skills)
+        if categories:
+            users = users.filter(profile__categories__name__in=categories)
+        if location:
+            users = users.filter(profile__location__iexact=location)
+
+        # Remove duplicates if multiple relations overlap
+        users = users.distinct()
+
+        # Annotate and prepare data
+        users = users.annotate(
+            skills_agg=StringAgg("user_skills__name", delimiter=";", distinct=True),
+            experience_level=Lower("profile__experience_level"),
+            location=Lower("profile__location"),
+            job_location=Lower("profile__job_location"),
+            years_of_experience=F("profile__years_of_experience"),
+            min_salary=F("profile__min_salary"),
+            max_salary=F("profile__max_salary"),
+            currency=F("profile__currency"),
+            categories_agg=StringAgg(
+                "profile__categories__name", delimiter=";", distinct=True
+            ),
+        ).values(
+            "id",
+            "first_name",
+            "last_name",
+            "skills_agg",
+            "experience_level",
+            "years_of_experience",
+            "location",
+            "job_location",
+            "min_salary",
+            "max_salary",
+            "currency",
+            "categories_agg",
+        )
+
+        # Convert to DataFrame
         user_data = [
             {
                 "user_id": user["id"],
@@ -105,6 +123,7 @@ class JobAppMatching:
             }
             for user in users
         ]
+
         return pd.DataFrame(user_data)
 
     def enrich_jobs_with_currency(self, jobs):
@@ -436,12 +455,11 @@ class JobAppMatching:
         filtered_users = user_data[user_data["match_score"] >= 0.4]
 
         # Sort users by match score in descending order
-        # sorted_users = filtered_users.sort_values(by="match_score", ascending=False)
+        sorted_users = filtered_users.sort_values(by="match_score", ascending=False)
 
-        top_users = user_data.iloc[np.argsort(scores)[-5:][::-1]]
         # Format recommendations
         recommendations = []
-        for idx, user in top_users.iterrows():
+        for idx, user in sorted_users.iterrows():
             recommendations.append(
                 {
                     "user_name": user["user_name"],
