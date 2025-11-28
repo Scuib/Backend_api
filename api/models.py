@@ -4,6 +4,7 @@ from django.db import models, transaction
 from django.contrib.auth.models import AbstractUser, PermissionsMixin
 from django.urls import translate_url
 from django.utils.translation import gettext_lazy as _
+from django.utils import timezone
 import uuid
 from decimal import Decimal
 from .managers import CustomUserManager
@@ -409,3 +410,16 @@ class JobTweet(models.Model):
 
     def __str__(self):
         return f"{self.user_id}: {self.text[:50]}..."
+
+
+class BoostSubscription(models.Model):
+    user = models.OneToOneField(User, on_delete=models.CASCADE)
+    plan = models.CharField(
+        max_length=20, choices=[("weekly", "Weekly"), ("monthly", "Monthly")]
+    )
+    start_date = models.DateTimeField(auto_now_add=True)
+    end_date = models.DateTimeField()
+    active = models.BooleanField(default=True)
+
+    def is_active(self):
+        return self.active and timezone.now() <= self.end_date

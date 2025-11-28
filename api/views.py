@@ -7,6 +7,7 @@ from rest_framework_simplejwt.views import TokenObtainPairView
 from rest_framework.permissions import IsAuthenticated, AllowAny, IsAdminUser
 from rest_framework.response import Response
 from rest_framework import status
+from datetime import timedelta
 from uuid import uuid4
 import cloudinary
 from django.core.mail import EmailMultiAlternatives
@@ -18,6 +19,7 @@ import time
 
 from .models import (
     BoostChatThread,
+    BoostSubscription,
     BoostUnlock,
     CompanyProfile,
     Profile,
@@ -3115,8 +3117,11 @@ def post_boost_chat_message(request, boost_id):
     # Recruiter or unlocked users can send
     is_recruiter = thread.recruiter == user
     is_unlocked = BoostUnlock.objects.filter(boost_id=boost_id, user=user).exists()
+    has_subscription = BoostSubscription.objects.filter(
+        user=user, active=True, end_date__gte=timezone.now()
+    ).exists()
 
-    if not (is_recruiter or is_unlocked):
+    if not (is_recruiter or is_unlocked or has_subscription):
         return Response({"detail": "You cannot post in this chat."}, status=403)
 
     message = Message.objects.create(
@@ -3166,12 +3171,15 @@ def get_boost_chat_messages(request, boost_id):
 
     is_recruiter = thread.recruiter == user
     is_unlocked = BoostUnlock.objects.filter(boost_id=boost_id, user=user).exists()
+    has_subscription = BoostSubscription.objects.filter(
+        user=user, active=True, end_date__gte=timezone.now()
+    ).exists()
 
     messages = thread.messages.order_by("created_at")
     total_count = messages.count()
 
     # Restrict view for users who haven't unlocked
-    if not (is_recruiter or is_unlocked):
+    if not (is_recruiter or is_unlocked or has_subscription):
         messages = messages[:2]  # Show only first 2 messages
 
     serializer = MessageSerializer(messages, many=True, context={"request": request})
@@ -3938,3 +3946,86 @@ def delete_boost_chat_message(request, message_id):
     message.delete()
 
     return Response({"detail": "Message deleted successfully"}, status=200)
+
+
+@swagger_auto_schema(
+    method="post",
+    operation_summary="Subscribe to Boost Messages",
+    operation_description="Authenticated user  subscribes to the boost plan they want.",
+    manual_parameters=[
+        openapi.Parameter(
+            name="Authorization",
+            in_=openapi.IN_HEADER,
+            description="Bearer {token}",
+            type=openapi.TYPE_STRING,
+            required=True,
+        ),
+    ],
+    request_body=openapi.Schema(
+        type=openapi.TYPE_OBJECT,
+        required=["plan"],
+        properties={
+            "plan": openapi.Schema(
+                type=openapi.TYPE_STRING,
+                description="Subscription plan: weekly or monthly",
+            )
+        },
+    ),
+    responses={200: "Subscribed successfully", 403: "Unauthorized"},
+)
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def subscribe_to_boost(request):
+    user = request.user
+    plan = request.data.get("plan")
+
+    PRICES = {
+        "weekly": Decimal("1500"),
+        "monthly": Decimal("6000"),
+    }
+
+    DURATIONS = {
+        "weekly": 7,
+        "monthly": 30,
+    }
+
+    if plan not in PRICES:
+        return Response({"detail": "Invalid plan"}, status=400)
+
+    wallet = Wallet.objects.get(user=user)
+    cost = PRICES[plan]
+    duration = DURATIONS[plan]
+
+    # Deduct from wallet
+    success = wallet.deduct(cost, description=f"Boost {plan} subscription")
+
+    if not success:
+        return Response({"detail": "Insufficient wallet balance"}, status=402)
+
+    # Activate / Extend subscription
+    now = timezone.now()
+
+    subscription, created = BoostSubscription.objects.get_or_create(
+        user=user,
+        defaults={
+            "plan": plan,
+            "start_date": now,
+            "end_date": now + timedelta(days=duration),
+            "active": True,
+        },
+    )
+
+    if not created and subscription.end_date > now:
+        subscription.end_date += timedelta(days=duration)
+    else:
+        subscription.start_date = now
+        subscription.end_date = now + timedelta(days=duration)
+        subscription.active = True
+
+    subscription.plan = plan
+    subscription.save()
+
+    return Response(
+        {"detail": "Subscription activated", "expires": subscription.end_date},
+        status=200,
+    )
