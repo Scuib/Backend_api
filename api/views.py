@@ -86,7 +86,7 @@ from .utils import cleanup_messages, cleanup_old_jobs
 
 # Activate the resend with the api key
 resend.api_key = settings.NEW_RESEND_API_KEY
-BOOST_MESSAGE_COST = 20  # Naira
+BOOST_MESSAGE_COST = 300  # Naira
 
 
 def home(request):
@@ -3849,3 +3849,92 @@ def job_create_with_categories(request):
     return Response(
         {"error": serialized_data.errors}, status=status.HTTP_400_BAD_REQUEST
     )
+
+
+@swagger_auto_schema(
+    method="put",
+    operation_summary="Edit a boost chat message",
+    operation_description="Allows the sender to edit their own boost chat message",
+    manual_parameters=[
+        openapi.Parameter(
+            name="Authorization",
+            in_=openapi.IN_HEADER,
+            description="Bearer {token}",
+            type=openapi.TYPE_STRING,
+            required=True,
+        ),
+    ],
+    request_body=openapi.Schema(
+        type=openapi.TYPE_OBJECT,
+        required=["content"],
+        properties={"content": openapi.Schema(type=openapi.TYPE_STRING)},
+    ),
+    responses={
+        200: "Message updated successfully",
+        403: "You can only edit your own messages",
+        404: "Message not found",
+    },
+)
+@api_view(["PUT"])
+@permission_classes([IsAuthenticated])
+def edit_boost_chat_message(request, message_id):
+    user = request.user
+    new_content = request.data.get("content")
+
+    if not new_content:
+        return Response({"detail": "New content is required"}, status=400)
+
+    message = get_object_or_404(Message, id=message_id)
+
+    # Owner check
+    if message.user != user:
+        return Response({"detail": "You can only edit your own messages"}, status=403)
+
+    message.content = new_content
+    message.save()
+
+    return Response(
+        {
+            "detail": "Message updated successfully",
+            "message": {
+                "id": message.id,
+                "content": message.content,
+                "updated_at": message.updated_at,
+            },
+        },
+        status=200,
+    )
+
+
+@swagger_auto_schema(
+    method="delete",
+    operation_summary="Delete a boost chat message",
+    operation_description="Allows the sender to delete their own message",
+    manual_parameters=[
+        openapi.Parameter(
+            name="Authorization",
+            in_=openapi.IN_HEADER,
+            description="Bearer {token}",
+            type=openapi.TYPE_STRING,
+            required=True,
+        ),
+    ],
+    responses={
+        200: "Message deleted",
+        403: "Permission denied",
+        404: "Message not found",
+    },
+)
+@api_view(["DELETE"])
+@permission_classes([IsAuthenticated])
+def delete_boost_chat_message(request, message_id):
+    user = request.user
+    message = get_object_or_404(Message, id=message_id)
+
+    # Only owner can delete
+    if message.user != user:
+        return Response({"detail": "You can only delete your own message"}, status=403)
+
+    message.delete()
+
+    return Response({"detail": "Message deleted successfully"}, status=200)

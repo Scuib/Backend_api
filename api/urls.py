@@ -30,7 +30,11 @@ urlpatterns = [
     path("onboarding/<int:user_id>/", views.onboarding, name="onboarding"),
     path("profile/delete/", views.profile_delete, name="delete-user"),
     path("job/create/", views.job_create, name="job-create"),
-    path("job/<int:job_id>/recommendation/", views.get_recommendation, name="get recommended users"),
+    path(
+        "job/<int:job_id>/recommendation/",
+        views.get_recommendation,
+        name="get recommended users",
+    ),
     path(
         "job/create-category/",
         views.job_create_with_categories,
@@ -90,6 +94,16 @@ urlpatterns = [
         "messages/chat/<str:boost_id>/send/",
         views.post_boost_chat_message,
         name="send-chat-messages",
+    ),
+    path(
+        "messages/chat/<str:boost_id>/edit/",
+        views.edit_boost_chat_message,
+        name="edit-chat-messages",
+    ),
+    path(
+        "messages/chat/<str:boost_id>/delete/",
+        views.delete_boost_chat_message,
+        name="delete-chat-messages",
     ),
     path("messages/sent/", views.sent_messages, name="sent-messages"),
     path(
