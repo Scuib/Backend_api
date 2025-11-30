@@ -110,5 +110,7 @@ urlpatterns = [
         "messages/delete/<int:message_id>/", views.delete_message, name="delete-message"
     ),
     path("wallet/transactions/", views.transaction_history, name="wallet-transactions"),
+    path("subscribe-to-boost/", views.subscribe_to_boost, name="subscribe-to-boost"),
+    path("subscription/me/", views.my_subscription, name="subscription-status"),
     path("fetch-twitter-jobs/", views.fetch_twitter_jobs, name="fetch-twitter-jobs"),
 ]

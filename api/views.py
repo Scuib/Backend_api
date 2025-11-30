@@ -3971,7 +3971,33 @@ def delete_boost_chat_message(request, message_id):
             )
         },
     ),
-    responses={200: "Subscribed successfully", 403: "Unauthorized"},
+    responses={
+        200: openapi.Response(
+            description="Subscription activated successfully",
+            examples={
+                "application/json": {
+                    "detail": "Subscription activated",
+                    "expires": "2025-03-30T12:45:00Z",
+                }
+            },
+        ),
+        400: openapi.Response(
+            description="Invalid plan",
+            examples={"application/json": {"detail": "Invalid plan"}},
+        ),
+        402: openapi.Response(
+            description="Insufficient wallet balance",
+            examples={"application/json": {"detail": "Insufficient wallet balance"}},
+        ),
+        401: openapi.Response(
+            description="Unauthorized",
+            examples={
+                "application/json": {
+                    "detail": "Authentication credentials were not provided"
+                }
+            },
+        ),
+    },
 )
 @api_view(["POST"])
 @permission_classes([IsAuthenticated])
@@ -4029,3 +4055,53 @@ def subscribe_to_boost(request):
         {"detail": "Subscription activated", "expires": subscription.end_date},
         status=200,
     )
+
+
+@swagger_auto_schema(
+    method="get",
+    operation_summary="Get Subscription status",
+    operation_description="Authenticated user gets subscription status",
+    manual_parameters=[
+        openapi.Parameter(
+            name="Authorization",
+            in_=openapi.IN_HEADER,
+            description="Bearer {token}",
+            type=openapi.TYPE_STRING,
+            required=True,
+        ),
+    ],
+    responses={
+        200: openapi.Response(
+            description="Subscription activated successfully",
+            examples={
+                "application/json": {
+                    "active": True,
+                    "plan": "monthly",
+                    "expires": "2025-12-30T14:22:10Z",
+                }
+            },
+        ),
+        401: openapi.Response(
+            description="Unauthorized",
+            examples={
+                "application/json": {
+                    "detail": "Authentication credentials were not provided"
+                }
+            },
+        ),
+    },
+)
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def my_subscription(request):
+    try:
+        sub = BoostSubscription.objects.get(user=request.user)
+        return Response(
+            {
+                "active": bool(sub.is_active()),
+                "plan": str(sub.plan),
+                "expires": sub.end_date,
+            }
+        )
+    except BoostSubscription.DoesNotExist:
+        return Response({"active": False})
