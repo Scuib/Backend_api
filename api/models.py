@@ -478,7 +478,6 @@ class JobPreference(models.Model):
     preferred_locations = models.JSONField(default=list)
 
     preferred_categories = models.ManyToManyField(UserCategories, blank=True)
-    preferred_skills = models.ManyToManyField(JobSkills, blank=True)
 
     preferred_experience = models.CharField(
         max_length=20, choices=Jobs.ExperienceLevel.choices, null=True, blank=True
