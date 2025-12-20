@@ -423,3 +423,69 @@ class BoostSubscription(models.Model):
 
     def is_active(self):
         return self.active and timezone.now() <= self.end_date
+
+
+class BoostJobs(models.Model):
+    class JobType(models.TextChoices):
+        FULL_TIME = "FULL_TIME", "Full-Time"
+        PART_TIME = "PART_TIME", "Part-Time"
+        CONTRACT = "CONTRACT", "Contract"
+        INTERNSHIP = "INTERNSHIP", "Internship"
+
+    class JobNature(models.TextChoices):
+        REMOTE = "REMOTE", "Remote"
+        ONSITE = "ONSITE", "Onsite"
+        HYBRID = "HYBRID", "Hybrid"
+
+    class ExperienceLevel(models.TextChoices):
+        ENTRY = "ENTRY", "Entry Level"
+        MID = "MID", "Mid Level"
+        SENIOR = "SENIOR", "Senior Level"
+
+    title = models.CharField(max_length=150)
+    owner = models.ForeignKey(
+        User, on_delete=models.CASCADE, related_name="posted_jobs"
+    )
+    description = models.TextField(blank=True, null=True)
+
+    job_type = models.CharField(max_length=20, choices=JobType.choices)
+
+    job_nature = models.CharField(max_length=20, choices=JobNature.choices)
+
+    location = models.CharField(max_length=255)
+
+    experience_level = models.CharField(max_length=20, choices=ExperienceLevel.choices)
+
+    min_salary = models.IntegerField()
+    max_salary = models.IntegerField()
+
+    application_link = models.URLField()
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return self.title
+
+
+class JobPreference(models.Model):
+    user = models.OneToOneField(
+        User, on_delete=models.CASCADE, related_name="job_preference"
+    )
+
+    preferred_job_types = models.JSONField(default=list)
+    preferred_job_nature = models.JSONField(default=list)
+    preferred_locations = models.JSONField(default=list)
+
+    preferred_categories = models.ManyToManyField(UserCategories, blank=True)
+    preferred_skills = models.ManyToManyField(JobSkills, blank=True)
+
+    preferred_experience = models.CharField(
+        max_length=20, choices=Jobs.ExperienceLevel.choices, null=True, blank=True
+    )
+
+    min_salary = models.IntegerField(default=0)
+    max_salary = models.IntegerField(default=0)
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)

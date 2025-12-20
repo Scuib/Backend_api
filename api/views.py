@@ -19,9 +19,11 @@ import time
 
 from .models import (
     BoostChatThread,
+    BoostJobs,
     BoostSubscription,
     BoostUnlock,
     CompanyProfile,
+    JobPreference,
     Profile,
     User,
     EmailVerication_Keys,
@@ -41,8 +43,10 @@ from .models import (
 )
 
 from .serializer import (
+    BoostJobSerializer,
     CompanySerializer,
     DisplayProfileSerializer,
+    JobPreferenceSerializer,
     MyTokenObtainPairSerializer,
     UserSerializer,
     ProfileSerializer,
@@ -4105,3 +4109,389 @@ def my_subscription(request):
         )
     except BoostSubscription.DoesNotExist:
         return Response({"active": False})
+
+
+@swagger_auto_schema(
+    method="post",
+    operation_summary="Post a Boost Job",
+    operation_description="This endpoint allows authenticated user to create a boost job listing.",
+    manual_parameters=[
+        openapi.Parameter(
+            name="Authorization",
+            in_=openapi.IN_HEADER,
+            description="Bearer {token}",
+            type=openapi.TYPE_STRING,
+            required=True,
+        ),
+    ],
+    request_body=openapi.Schema(
+        type=openapi.TYPE_OBJECT,
+        required=[
+            "title",
+            "description",
+            "job_type",
+            "job_nature",
+            "location",
+            "experience_level",
+            "min_salary",
+            "max_salary",
+            "application_link",
+        ],
+        properties={
+            "title": openapi.Schema(
+                type=openapi.TYPE_STRING,
+                description="Job title",
+            ),
+            "description": openapi.Schema(
+                type=openapi.TYPE_STRING,
+                description="Detailed job description",
+            ),
+            "application_link": openapi.Schema(
+                type=openapi.TYPE_STRING,
+                description="URL to apply for the job",
+            ),
+            "experience_level": openapi.Schema(
+                type=openapi.TYPE_STRING,
+                description="Experience level can be Entry, Mid, Senior, Lead",
+            ),
+            "location": openapi.Schema(
+                type=openapi.TYPE_STRING,
+                description="Job location",
+            ),
+            "job_nature": openapi.Schema(
+                type=openapi.TYPE_STRING,
+                description="Job nature - Onsite, Remote, Hybrid",
+            ),
+            "max_salary": openapi.Schema(
+                type=openapi.TYPE_NUMBER,
+                description="Maximum salary offered",
+            ),
+            "min_salary": openapi.Schema(
+                type=openapi.TYPE_NUMBER,
+                description="Minimum salary offered",
+            ),
+            "job_type": openapi.Schema(
+                type=openapi.TYPE_STRING,
+                description="JOb type: Full-time, part-time, internship, etc",
+            ),
+        },
+    ),
+    responses={
+        201: openapi.Response(
+            description="Job successfully created",
+        ),
+        400: openapi.Response(
+            description="Bad request",
+            examples={
+                "application/json": {
+                    "error": "Invalid job data",
+                }
+            },
+        ),
+    },
+)
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def post_boost_job(request):
+    serializer = BoostJobSerializer(data=request.data)
+    if serializer.is_valid():
+        serializer.save()
+        return Response(serializer.data, status=status.HTTP_201_CREATED)
+    return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+@swagger_auto_schema(
+    method="get",
+    operation_summary="Get All Boost Jobs",
+    operation_description="Get all boost Jobs",
+    responses={
+        200: openapi.Response(
+            description="Successful",
+        ),
+        404: openapi.Response(
+            description="Not Found",
+            examples={"application/json": {"detail": "Boost Job not found"}},
+        ),
+    },
+)
+@api_view(["GET"])
+@permission_classes([AllowAny])
+def all_boost_jobs(request):
+    jobs = BoostJobs.objects.all().order_by("-created_at")
+    serializer = BoostJobSerializer(jobs, many=True)
+    return Response(serializer.data, status=status.HTTP_200_OK)
+
+
+@swagger_auto_schema(
+    method="get",
+    operation_summary="Get Job boost",
+    operation_description="Get Boost Job ny id",
+    responses={
+        200: openapi.Response(
+            description="Successful",
+        ),
+        404: openapi.Response(
+            description="Not Found",
+            examples={"application/json": {"detail": "Boost Job not found"}},
+        ),
+    },
+)
+@api_view(["GET"])
+@permission_classes([AllowAny])
+def retrieve_boost_job(request, job_id):
+    try:
+        job = BoostJobs.objects.get(id=job_id)
+    except BoostJobs.DoesNotExist:
+        return Response({"detail": "Job not found"}, status=status.HTTP_404_NOT_FOUND)
+
+    serializer = BoostJobSerializer(job)
+    return Response(serializer.data, status=status.HTTP_200_OK)
+
+
+@swagger_auto_schema(
+    method="put",
+    operation_summary="Edit a Boost Job",
+    operation_description="This endpoint allows authenticated user to edit a boost job listing.",
+    manual_parameters=[
+        openapi.Parameter(
+            name="Authorization",
+            in_=openapi.IN_HEADER,
+            description="Bearer {token}",
+            type=openapi.TYPE_STRING,
+            required=True,
+        ),
+    ],
+    request_body=openapi.Schema(
+        type=openapi.TYPE_OBJECT,
+        properties={
+            "title": openapi.Schema(
+                type=openapi.TYPE_STRING,
+                description="Job title",
+            ),
+            "description": openapi.Schema(
+                type=openapi.TYPE_STRING,
+                description="Detailed job description",
+            ),
+            "application_link": openapi.Schema(
+                type=openapi.TYPE_STRING,
+                description="URL to apply for the job",
+            ),
+            "experience_level": openapi.Schema(
+                type=openapi.TYPE_STRING,
+                description="Experience level can be Entry, Mid, Senior, Lead",
+            ),
+            "location": openapi.Schema(
+                type=openapi.TYPE_STRING,
+                description="Job location",
+            ),
+            "job_nature": openapi.Schema(
+                type=openapi.TYPE_STRING,
+                description="Job nature - Onsite, Remote, Hybrid",
+            ),
+            "max_salary": openapi.Schema(
+                type=openapi.TYPE_NUMBER,
+                description="Maximum salary offered",
+            ),
+            "min_salary": openapi.Schema(
+                type=openapi.TYPE_NUMBER,
+                description="Minimum salary offered",
+            ),
+            "job_type": openapi.Schema(
+                type=openapi.TYPE_STRING,
+                description="JOb type: Full-time, part-time, internship, etc",
+            ),
+        },
+    ),
+    responses={
+        201: openapi.Response(
+            description="Job updated successfully created",
+        ),
+        400: openapi.Response(
+            description="Bad request",
+            examples={
+                "application/json": {
+                    "error": "Invalid job data",
+                }
+            },
+        ),
+    },
+)
+@api_view(["PUT"])
+@permission_classes([IsAuthenticated])
+def update_boost_job(request, job_id):
+    try:
+        job = BoostJobs.objects.get(id=job_id)
+    except BoostJobs.DoesNotExist:
+        return Response({"detail": "Job not found"}, status=404)
+
+    # Only owner or admin can edit
+    if job.owner != request.user and not request.user.is_staff:
+        return Response(
+            {"detail": "You are not allowed to edit this job"},
+            status=403,
+        )
+
+    serializer = JobSerializer(job, data=request.data, partial=True)
+
+    if serializer.is_valid():
+        serializer.save()
+        return Response(
+            {"message": "Job updated successfully", "data": serializer.data}
+        )
+
+    return Response(serializer.errors, status=400)
+
+
+@swagger_auto_schema(
+    method="delete",
+    operation_summary="Delete a Job boost",
+    operation_description="Delete Boost Job by id",
+    responses={
+        204: openapi.Response(
+            description="Successful",
+        ),
+        404: openapi.Response(
+            description="Not Found",
+            examples={"application/json": {"detail": "Boost Job not found"}},
+        ),
+    },
+)
+@api_view(["DELETE"])
+@permission_classes([IsAuthenticated])
+def delete_boost_job(request, job_id):
+    try:
+        job = BoostJobs.objects.get(id=job_id)
+    except BoostJobs.DoesNotExist:
+        return Response({"detail": "Job not found"}, status=404)
+
+    if job.owner != request.user and not request.user.is_staff:
+        return Response(
+            {"detail": "You are not allowed to delete this job"},
+            status=403,
+        )
+
+    job.delete()
+    return Response({"message": "Job deleted successfully"})
+
+
+@swagger_auto_schema(
+    method="post",
+    operation_summary="Set or Update Job Preferences",
+    operation_description="This endpoint allows an authenticated user to create or update their job preferences for job matching.",
+    manual_parameters=[
+        openapi.Parameter(
+            name="Authorization",
+            in_=openapi.IN_HEADER,
+            description="Bearer {token}",
+            type=openapi.TYPE_STRING,
+            required=True,
+        ),
+    ],
+    request_body=openapi.Schema(
+        type=openapi.TYPE_OBJECT,
+        properties={
+            "preferred_job_types": openapi.Schema(
+                type=openapi.TYPE_ARRAY,
+                items=openapi.Items(type=openapi.TYPE_STRING),
+                description="List of preferred job types such as Full-time, Part-time, Internship, Contract",
+            ),
+            "preferred_job_nature": openapi.Schema(
+                type=openapi.TYPE_ARRAY,
+                items=openapi.Items(type=openapi.TYPE_STRING),
+                description="Preferred job mode such as Remote, Onsite, Hybrid",
+            ),
+            "preferred_locations": openapi.Schema(
+                type=openapi.TYPE_ARRAY,
+                items=openapi.Items(type=openapi.TYPE_STRING),
+                description="Preferred job locations. Can include multiple cities or countries",
+            ),
+            "preferred_categories": openapi.Schema(
+                type=openapi.TYPE_ARRAY,
+                items=openapi.Items(type=openapi.TYPE_INTEGER),
+                description="List of category IDs the user is interested in",
+            ),
+            "preferred_skills": openapi.Schema(
+                type=openapi.TYPE_ARRAY,
+                items=openapi.Items(type=openapi.TYPE_INTEGER),
+                description="List of skill IDs that match desired roles",
+            ),
+            "preferred_experience": openapi.Schema(
+                type=openapi.TYPE_STRING,
+                description="Experience level. e.g Entry, Mid, Senior",
+            ),
+            "min_salary": openapi.Schema(
+                type=openapi.TYPE_NUMBER,
+                description="Minimum expected salary",
+            ),
+            "max_salary": openapi.Schema(
+                type=openapi.TYPE_NUMBER,
+                description="Maximum expected salary",
+            ),
+        },
+    ),
+    responses={
+        200: openapi.Response(
+            description="Preferences saved successfully",
+            examples={
+                "application/json": {
+                    "message": "Preferences updated successfully",
+                    "data": {
+                        "preferred_job_types": ["Full-time", "Contract"],
+                        "preferred_job_nature": ["Remote", "Hybrid"],
+                        "preferred_locations": ["Lagos", "Abuja", "London"],
+                        "preferred_experience": "Mid",
+                        "min_salary": 200000,
+                        "max_salary": 800000,
+                        "preferred_categories": [1, 5],
+                        "preferred_skills": [3, 7],
+                    },
+                }
+            },
+        ),
+        400: openapi.Response(
+            description="Bad request",
+            examples={
+                "application/json": {
+                    "error": "Invalid preference data",
+                }
+            },
+        ),
+    },
+)
+@api_view(["POST", "PUT"])
+@permission_classes([IsAuthenticated])
+def job_preference_view(request):
+    user = request.user
+
+    try:
+        pref = JobPreference.objects.get(user=user)
+    except JobPreference.DoesNotExist:
+        pref = None
+
+    if request.method == "GET":
+        if not pref:
+            return Response({"detail": "No preference set yet"}, status=404)
+
+        serializer = JobPreferenceSerializer(pref)
+        return Response(serializer.data)
+
+    # PUT / PATCH → Create or Update
+    if pref:
+        serializer = JobPreferenceSerializer(
+            pref,
+            data=request.data,
+            partial=True if request.method == "PATCH" else False,
+        )
+    else:
+        serializer = JobPreferenceSerializer(data=request.data)
+
+    if serializer.is_valid():
+        obj = serializer.save(user=user) if not pref else serializer.save()
+        return Response(
+            {
+                "message": "Preferences saved successfully",
+                "data": JobPreferenceSerializer(obj).data,
+            }
+        )
+
+    return Response(serializer.errors, status=400)

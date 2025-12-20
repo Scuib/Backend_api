@@ -6,6 +6,8 @@ from google.oauth2 import id_token
 from google.auth.transport import requests
 
 from .models import (
+    BoostJobs,
+    JobPreference,
     JobSkills,
     User,
     Profile,
@@ -324,3 +326,72 @@ class JobTweetSerializer(serializers.ModelSerializer):
     class Meta:
         model = JobTweet
         fields = "__all__"
+
+
+class BoostJobSerializer(serializers.ModelSerializer):
+    owner = serializers.ReadOnlyField(source="owner.id")
+
+    class Meta:
+        model = BoostJobs
+        fields = [
+            "id",
+            "owner",
+            "title",
+            "description",
+            "job_type",
+            "job_nature",
+            "location",
+            "experience_level",
+            "min_salary",
+            "max_salary",
+            "application_link",
+            "created_at",
+            "updated_at",
+        ]
+
+    def validate(self, attrs):
+        if attrs["min_salary"] > attrs["max_salary"]:
+            raise serializers.ValidationError(
+                "Minimum salary cannot be greater than maximum salary."
+            )
+        return attrs
+
+
+class JobPreferenceSerializer(serializers.ModelSerializer):
+    preferred_categories = serializers.PrimaryKeyRelatedField(
+        queryset=UserCategories.objects.all(), many=True, required=False
+    )
+
+    preferred_skills = serializers.PrimaryKeyRelatedField(
+        queryset=JobSkills.objects.all(), many=True, required=False
+    )
+
+    class Meta:
+        model = JobPreference
+        fields = [
+            "preferred_job_types",
+            "preferred_job_nature",
+            "preferred_locations",
+            "preferred_categories",
+            "preferred_skills",
+            "preferred_experience",
+            "min_salary",
+            "max_salary",
+        ]
+
+    def update(self, instance, validated_data):
+        categories = validated_data.pop("preferred_categories", None)
+        skills = validated_data.pop("preferred_skills", None)
+
+        for attr, value in validated_data.items():
+            setattr(instance, attr, value)
+
+        instance.save()
+
+        if categories is not None:
+            instance.preferred_categories.set(categories)
+
+        if skills is not None:
+            instance.preferred_skills.set(skills)
+
+        return instance

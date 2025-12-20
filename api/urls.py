@@ -113,4 +113,16 @@ urlpatterns = [
     path("subscribe-to-boost/", views.subscribe_to_boost, name="subscribe-to-boost"),
     path("subscription/me/", views.my_subscription, name="subscription-status"),
     path("fetch-twitter-jobs/", views.fetch_twitter_jobs, name="fetch-twitter-jobs"),
+    path("boost/jobs/post/", views.post_boost_job, name="post-job"),
+    path("boost/jobs/", views.all_boost_jobs, name="list-boost-jobs"),
+    path("boost/jobs/<int:job_id>/", views.retrieve_boost_job, name="retrieve-job"),
+    path(
+        "boost/jobs/<int:job_id>/update/", views.update_boost_job, name="edit-boost-job"
+    ),
+    path(
+        "boost/jobs/<int:job_id>/delete/",
+        views.delete_boost_job,
+        name="delete-boost-job",
+    ),
+    path("preferences/job/", views.job_preference_view, name="job-preference"),
 ]
