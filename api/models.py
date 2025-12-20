@@ -479,9 +479,7 @@ class JobPreference(models.Model):
 
     preferred_categories = models.ManyToManyField(UserCategories, blank=True)
 
-    preferred_experience = models.CharField(
-        max_length=20, choices=Jobs.ExperienceLevel.choices, null=True, blank=True
-    )
+    preferred_experience = models.JSONField(default=list)
 
     min_salary = models.IntegerField(default=0)
     max_salary = models.IntegerField(default=0)

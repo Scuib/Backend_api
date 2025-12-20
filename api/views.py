@@ -4495,3 +4495,70 @@ def job_preference_view(request):
         )
 
     return Response(serializer.errors, status=400)
+
+
+@swagger_auto_schema(
+    method="get",
+    operation_summary="Get Recommended Boost Jobs",
+    operation_description="Returns jobs recommended for the authenticated user based on their saved preferences.",
+    manual_parameters=[
+        openapi.Parameter(
+            name="Authorization",
+            in_=openapi.IN_HEADER,
+            description="Bearer {token}",
+            type=openapi.TYPE_STRING,
+            required=True,
+        ),
+    ],
+    responses={
+        200: openapi.Response(description="Recommended jobs retrieved successfully"),
+        404: openapi.Response(description="Preferences not set"),
+    },
+)
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def recommended_boost_jobs(request):
+    user = request.user
+
+    if not hasattr(user, "job_preference"):
+        jobs = BoostJobs.objects.all().order_by("-created_at")
+
+        data = [
+            {
+                "id": job.id,
+                "title": job.title,
+                "location": job.location,
+                "job_type": job.job_type,
+                "job_nature": job.job_nature,
+                "experience_level": job.experience_level,
+                "min_salary": job.min_salary,
+                "max_salary": job.max_salary,
+                "application_link": job.application_link,
+                "score": None,
+            }
+            for job in jobs
+        ]
+
+        return Response({"results": data})
+
+    matcher = JobAppMatching()
+
+    recommendations = matcher.recommend_boost_jobs_for_user_preferences(user)
+
+    data = [
+        {
+            "id": job.id,
+            "title": job.title,
+            "location": job.location,
+            "job_type": job.job_type,
+            "job_nature": job.job_nature,
+            "experience_level": job.experience_level,
+            "min_salary": job.min_salary,
+            "max_salary": job.max_salary,
+            "application_link": job.application_link,
+            "score": score,
+        }
+        for job, score in recommendations
+    ]
+
+    return Response({"results": data})

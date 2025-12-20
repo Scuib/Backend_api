@@ -3,7 +3,7 @@ import pandas as pd
 from sklearn.metrics.pairwise import cosine_similarity
 import numpy as np
 from sklearn.feature_extraction.text import TfidfVectorizer
-from ..models import Jobs, User, UserSkills, Profile
+from ..models import BoostJobs, JobPreference, Jobs, User, UserSkills, Profile
 import time
 
 from django.db.models import F, Value
@@ -476,3 +476,61 @@ class JobAppMatching:
         ]
 
         return recommendations
+
+    def recommend_boost_jobs_for_user_preferences(user, limit=20):
+        try:
+            pref = user.job_preference
+        except JobPreference.DoesNotExist:
+            return []
+
+        # Extract preferences
+        pref_job_types = set(pref.preferred_job_types or [])
+        pref_job_nature = set(pref.preferred_job_nature or [])
+        pref_locations = set([loc.lower() for loc in pref.preferred_locations or []])
+        pref_experience = set(pref.preferred_experience or [])
+        min_salary = pref.min_salary or 0
+        max_salary = pref.max_salary or 0
+
+        boost_jobs = BoostJobs.objects.all()
+
+        recommendations = []
+
+        for job in boost_jobs:
+            score = 0
+
+            # ---------- JOB TYPE ----------
+            if pref_job_types:
+                if job.job_type in pref_job_types:
+                    score += 25
+
+            # ---------- JOB NATURE ----------
+            if pref_job_nature:
+                if job.job_nature in pref_job_nature:
+                    score += 20
+
+            # ---------- LOCATION ----------
+            if pref_locations:
+                job_location = (job.location or "").lower()
+                if job_location in pref_locations:
+                    score += 25
+
+            # ---------- EXPERIENCE ----------
+            if pref_experience:
+                if job.experience_level == pref_experience:
+                    score += 20
+
+            # ---------- SALARY ----------
+            if job.min_salary and job.max_salary and min_salary and max_salary:
+                if (
+                    job.min_salary >= min_salary
+                    and job.max_salary <= max_salary
+                ):
+                    score += 10
+
+            if score > 0:
+                recommendations.append((job, score))
+
+        # sort by best score
+        recommendations.sort(key=lambda x: x["score"], reverse=True)
+
+        return recommendations[:limit]
