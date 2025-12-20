@@ -30,7 +30,11 @@ urlpatterns = [
     path("onboarding/<int:user_id>/", views.onboarding, name="onboarding"),
     path("profile/delete/", views.profile_delete, name="delete-user"),
     path("job/create/", views.job_create, name="job-create"),
-    path("job/<int:job_id>/recommendation/", views.get_recommendation, name="get recommended users"),
+    path(
+        "job/<int:job_id>/recommendation/",
+        views.get_recommendation,
+        name="get recommended users",
+    ),
     path(
         "job/create-category/",
         views.job_create_with_categories,
@@ -91,10 +95,39 @@ urlpatterns = [
         views.post_boost_chat_message,
         name="send-chat-messages",
     ),
+    path(
+        "messages/chat/<str:boost_id>/edit/",
+        views.edit_boost_chat_message,
+        name="edit-chat-messages",
+    ),
+    path(
+        "messages/chat/<str:boost_id>/delete/",
+        views.delete_boost_chat_message,
+        name="delete-chat-messages",
+    ),
     path("messages/sent/", views.sent_messages, name="sent-messages"),
     path(
         "messages/delete/<int:message_id>/", views.delete_message, name="delete-message"
     ),
     path("wallet/transactions/", views.transaction_history, name="wallet-transactions"),
+    path("subscribe-to-boost/", views.subscribe_to_boost, name="subscribe-to-boost"),
+    path("subscription/me/", views.my_subscription, name="subscription-status"),
     path("fetch-twitter-jobs/", views.fetch_twitter_jobs, name="fetch-twitter-jobs"),
+    path("boost/jobs/post/", views.post_boost_job, name="post-job"),
+    path("boost/jobs/", views.all_boost_jobs, name="list-boost-jobs"),
+    path("boost/jobs/<int:job_id>/", views.retrieve_boost_job, name="retrieve-job"),
+    path(
+        "boost/jobs/<int:job_id>/update/", views.update_boost_job, name="edit-boost-job"
+    ),
+    path(
+        "boost/jobs/<int:job_id>/delete/",
+        views.delete_boost_job,
+        name="delete-boost-job",
+    ),
+    path("preferences/job/", views.job_preference_view, name="job-preference"),
+    path(
+        "boost/recommended-jobs/",
+        views.recommended_boost_jobs,
+        name="recommended_boost_jobs",
+    ),
 ]
