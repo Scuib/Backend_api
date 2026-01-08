@@ -477,13 +477,7 @@ class JobAppMatching:
 
         return recommendations
 
-    def recommend_boost_jobs_for_user_preferences(self, user, limit=20):
-        try:
-            pref = user.job_preference
-        except JobPreference.DoesNotExist:
-            return []
-
-        # Extract preferences
+    def recommend_boost_jobs_for_user_preferences(self, pref, limit=20):
         pref_job_types = set(pref.preferred_job_types or [])
         pref_job_nature = set(pref.preferred_job_nature or [])
         pref_locations = set([loc.lower() for loc in pref.preferred_locations or []])

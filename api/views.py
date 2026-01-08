@@ -4543,7 +4543,7 @@ def recommended_boost_jobs(request):
 
     matcher = JobAppMatching()
 
-    recommendations = matcher.recommend_boost_jobs_for_user_preferences(user)
+    recommendations = matcher.recommend_boost_jobs_for_user_preferences(preference)
 
     data = [
         {
