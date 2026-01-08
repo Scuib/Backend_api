@@ -4407,8 +4407,8 @@ def delete_boost_job(request, job_id):
             ),
             "preferred_categories": openapi.Schema(
                 type=openapi.TYPE_ARRAY,
-                items=openapi.Items(type=openapi.TYPE_INTEGER),
-                description="List of category IDs the user is interested in",
+                items=openapi.Items(type=openapi.TYPE_STRING),
+                description="List of categories the user is interested in",
             ),
             "preferred_experience": openapi.Schema(
                 type=openapi.TYPE_STRING,
@@ -4437,7 +4437,7 @@ def delete_boost_job(request, job_id):
                         "preferred_experience": "Mid",
                         "min_salary": 200000,
                         "max_salary": 800000,
-                        "preferred_categories": [1, 5],
+                        "preferred_categories": ["Backend Developer"],
                     },
                 }
             },

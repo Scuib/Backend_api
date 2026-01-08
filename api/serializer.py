@@ -361,13 +361,11 @@ class BoostJobSerializer(serializers.ModelSerializer):
 
 
 class JobPreferenceSerializer(serializers.ModelSerializer):
-    preferred_categories = serializers.PrimaryKeyRelatedField(
-        queryset=UserCategories.objects.all(), many=True, required=False
+    preferred_categories = serializers.ListField(
+        child=serializers.CharField(), required=False, write_only=True
     )
 
-    preferred_skills = serializers.PrimaryKeyRelatedField(
-        queryset=JobSkills.objects.all(), many=True, required=False
-    )
+    preferred_categories_display = serializers.SerializerMethodField(read_only=True)
 
     class Meta:
         model = JobPreference
@@ -376,25 +374,35 @@ class JobPreferenceSerializer(serializers.ModelSerializer):
             "preferred_job_nature",
             "preferred_locations",
             "preferred_categories",
-            "preferred_skills",
+            "preferred_categories_display",
             "preferred_experience",
             "min_salary",
             "max_salary",
         ]
 
+    def get_preferred_categories_display(self, obj):
+        return list(obj.preferred_categories.values_list("name", flat=True))
+
     def update(self, instance, validated_data):
-        categories = validated_data.pop("preferred_categories", None)
-        skills = validated_data.pop("preferred_skills", None)
+        category_names = validated_data.pop("preferred_categories", None)
 
         for attr, value in validated_data.items():
             setattr(instance, attr, value)
 
         instance.save()
 
-        if categories is not None:
-            instance.preferred_categories.set(categories)
+        if category_names is not None:
+            categories = UserCategories.objects.filter(name__in=category_names)
 
-        if skills is not None:
-            instance.preferred_skills.set(skills)
+            if categories.count() != len(category_names):
+                existing = set(categories.values_list("name", flat=True))
+                missing = set(category_names) - existing
+                raise serializers.ValidationError(
+                    {
+                        "preferred_categories": f"Invalid categories: {', '.join(missing)}"
+                    }
+                )
+
+            instance.preferred_categories.set(categories)
 
         return instance
