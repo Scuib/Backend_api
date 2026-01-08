@@ -4514,7 +4514,13 @@ def job_preference_view(request):
 def recommended_boost_jobs(request):
     user = request.user
 
-    if not hasattr(user, "job_preference"):
+    try:
+        preference = user.job_preference
+    except JobPreference.DoesNotExist:
+        preference = None
+
+    # If no preferences → return all boost jobs
+    if not preference:
         jobs = BoostJobs.objects.all().order_by("-created_at")
 
         data = [

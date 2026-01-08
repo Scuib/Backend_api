@@ -419,13 +419,13 @@ class JobAppMatching:
             user_data["categories"].str.lower().str.contains(pattern, na=False)
         ]
         if filtered.empty:
-            return []  
+            return []
 
         # --- Step 2: Category similarity ---
         tfidf = TfidfVectorizer()
         user_cat_matrix = tfidf.fit_transform(filtered["categories"])
         job_cat_vector = tfidf.transform([", ".join(job_categories)])
-        cat_sim = cosine_similarity(job_cat_vector, user_cat_matrix).flatten() 
+        cat_sim = cosine_similarity(job_cat_vector, user_cat_matrix).flatten()
 
         # Step 2: Experience Level and Years of Experience Match
         experience_map = {"entry": 1, "mid": 2, "senior": 3, "lead": 4}
@@ -477,7 +477,7 @@ class JobAppMatching:
 
         return recommendations
 
-    def recommend_boost_jobs_for_user_preferences(user, limit=20):
+    def recommend_boost_jobs_for_user_preferences(self, user, limit=20):
         try:
             pref = user.job_preference
         except JobPreference.DoesNotExist:
@@ -521,10 +521,7 @@ class JobAppMatching:
 
             # ---------- SALARY ----------
             if job.min_salary and job.max_salary and min_salary and max_salary:
-                if (
-                    job.min_salary >= min_salary
-                    and job.max_salary <= max_salary
-                ):
+                if job.min_salary >= min_salary and job.max_salary <= max_salary:
                     score += 10
 
             if score > 0:
