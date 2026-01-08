@@ -383,6 +383,27 @@ class JobPreferenceSerializer(serializers.ModelSerializer):
     def get_preferred_categories_display(self, obj):
         return list(obj.preferred_categories.values_list("name", flat=True))
 
+    def create(self, validated_data):
+        category_names = validated_data.pop("preferred_categories", [])
+
+        instance = JobPreference.objects.create(**validated_data)
+
+        if category_names:
+            categories = UserCategories.objects.filter(name__in=category_names)
+
+            if categories.count() != len(category_names):
+                existing = set(categories.values_list("name", flat=True))
+                missing = set(category_names) - existing
+                raise serializers.ValidationError(
+                    {
+                        "preferred_categories": f"Invalid categories: {', '.join(missing)}"
+                    }
+                )
+
+            instance.preferred_categories.set(categories)
+
+        return instance
+
     def update(self, instance, validated_data):
         category_names = validated_data.pop("preferred_categories", None)
 
