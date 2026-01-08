@@ -4410,11 +4410,6 @@ def delete_boost_job(request, job_id):
                 items=openapi.Items(type=openapi.TYPE_INTEGER),
                 description="List of category IDs the user is interested in",
             ),
-            "preferred_skills": openapi.Schema(
-                type=openapi.TYPE_ARRAY,
-                items=openapi.Items(type=openapi.TYPE_INTEGER),
-                description="List of skill IDs that match desired roles",
-            ),
             "preferred_experience": openapi.Schema(
                 type=openapi.TYPE_STRING,
                 description="Experience level. e.g Entry, Mid, Senior",
@@ -4443,7 +4438,6 @@ def delete_boost_job(request, job_id):
                         "min_salary": 200000,
                         "max_salary": 800000,
                         "preferred_categories": [1, 5],
-                        "preferred_skills": [3, 7],
                     },
                 }
             },

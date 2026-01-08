@@ -356,6 +356,9 @@ class BoostJobSerializer(serializers.ModelSerializer):
             )
         return attrs
 
+    def validate_job_type(self, value):
+        return value.upper()
+
 
 class JobPreferenceSerializer(serializers.ModelSerializer):
     preferred_categories = serializers.PrimaryKeyRelatedField(
