@@ -288,6 +288,13 @@ class Message(models.Model):
         null=True,
         blank=True,
     )
+    parent = models.ForeignKey(
+        "self",
+        null=True,
+        blank=True,
+        related_name="replies",
+        on_delete=models.CASCADE,
+    )
     boost_id = models.CharField(max_length=50, null=True, blank=True)
     title = models.CharField(max_length=255)
     content = models.TextField()

@@ -279,6 +279,7 @@ class GoogleAuthSerializer(serializers.Serializer):
 class MessageSerializer(serializers.ModelSerializer):
     content = serializers.SerializerMethodField()
     sender = UserSerializer()
+    replies = serializers.SerializerMethodField()
 
     class Meta:
         model = Message
@@ -291,6 +292,7 @@ class MessageSerializer(serializers.ModelSerializer):
             "thread",
             "unlocked",
             "created_at",
+            "replies",
         ]
 
     def get_content(self, obj):
@@ -301,6 +303,10 @@ class MessageSerializer(serializers.ModelSerializer):
             return obj.content
         teaser = obj.content[:50]  # First 50 characters of the message
         return f"Preview: {teaser}... Pay ₦100 to view the full message."
+
+    def get_replies(self, obj):
+        replies = obj.replies.order_by("created_at")
+        return MessageSerializer(replies, many=True, context=self.context).data
 
 
 class SentMessageSerializer(serializers.ModelSerializer):

@@ -3094,10 +3094,12 @@ def message_boost(request):
     ],
     request_body=openapi.Schema(
         type=openapi.TYPE_OBJECT,
-        required=["title", "content", "recipients"],
         properties={
             "content": openapi.Schema(
                 type=openapi.TYPE_STRING, description="Content of the message"
+            ),
+            "parent_id": openapi.Schema(
+                type=openapi.TYPE_NUMBER, description="ID of parent message"
             ),
         },
     ),
@@ -3113,6 +3115,8 @@ def post_boost_chat_message(request, boost_id):
     """Send a chat message under a boost thread."""
     user = request.user
     content = request.data.get("content")
+    parent_id = request.data.get("parent_id")
+
     if not content:
         return Response({"detail": "Message content required"}, status=400)
 
@@ -3128,10 +3132,19 @@ def post_boost_chat_message(request, boost_id):
     if not (is_recruiter or is_unlocked or has_subscription):
         return Response({"detail": "You cannot post in this chat."}, status=403)
 
+    parent_message = None
+    if parent_id:
+        parent_message = get_object_or_404(
+            Message,
+            id=parent_id,
+            thread=thread,
+        )
+
     message = Message.objects.create(
         user=user,
         sender=user,
         thread=thread,
+        parent=parent_message,
         title=f"Chat - Boost {boost_id}",
         content=content,
         unlocked=is_unlocked,
@@ -3139,14 +3152,12 @@ def post_boost_chat_message(request, boost_id):
 
     thread.participants.add(user)
 
+    serializer = MessageSerializer(message, context={"request": request})
+
     return Response(
         {
             "detail": "Message sent successfully",
-            "message": {
-                "sender": user.email,
-                "content": content,
-                "created_at": message.created_at,
-            },
+            "message": serializer.data,
         },
         status=201,
     )
@@ -3179,8 +3190,7 @@ def get_boost_chat_messages(request, boost_id):
         user=user, active=True, end_date__gte=timezone.now()
     ).exists()
 
-    messages = thread.messages.order_by("created_at")
-    total_count = messages.count()
+    messages = thread.messages.filter(parent__isnull=True).order_by("created_at")
 
     # Restrict view for users who haven't unlocked
     if not (is_recruiter or is_unlocked or has_subscription):
@@ -3191,7 +3201,6 @@ def get_boost_chat_messages(request, boost_id):
     return Response(
         {
             "messages": serializer.data,
-            "total_messages": total_count,
             "is_unlocked": is_unlocked,
         }
     )
@@ -3458,7 +3467,12 @@ def unlock_message(request, message_id):
 @permission_classes([IsAuthenticated])
 def list_messages(request):
     cleanup_messages()
-    messages = Message.objects.filter(user=request.user).order_by("-created_at")
+    messages = (
+        Message.objects.filter(parent__isnull=True, thread__participants=request.user)
+        .select_related("sender", "thread")
+        .prefetch_related("replies")
+        .order_by("-created_at")
+    )
     serializer = MessageSerializer(messages, many=True, context={"request": request})
     return Response(serializer.data)
 
