@@ -85,23 +85,23 @@ urlpatterns = [
     ),
     path("messages/", views.list_messages, name="list-messages"),
     path(
-        "messages/chat/<str:boost_id>/",
+        "messages/chat/<int:thread_id>/",
         views.get_boost_chat_messages,
         name="chat-messages",
     ),
     path("messages/send/", views.message_boost, name="send-messages"),
     path(
-        "messages/chat/<str:boost_id>/send/",
+        "messages/chat/<int:thread_id>/send/",
         views.post_boost_chat_message,
         name="send-chat-messages",
     ),
     path(
-        "messages/chat/<str:boost_id>/edit/",
+        "messages/chat/<int:thread_id>/edit/",
         views.edit_boost_chat_message,
         name="edit-chat-messages",
     ),
     path(
-        "messages/chat/<str:boost_id>/delete/",
+        "messages/chat/<int:thread_id>/delete/",
         views.delete_boost_chat_message,
         name="delete-chat-messages",
     ),

@@ -3059,7 +3059,6 @@ def message_boost(request):
                 title=title,
                 sender=sender,
                 content=content,
-                boost_id=boost_id,
                 thread=thread,
             )
             # Add recipient to chat participants
@@ -3111,7 +3110,7 @@ def message_boost(request):
 )
 @api_view(["POST"])
 @permission_classes([IsAuthenticated])
-def post_boost_chat_message(request, boost_id):
+def post_boost_chat_message(request, thread_id):
     """Send a chat message under a boost thread."""
     user = request.user
     content = request.data.get("content")
@@ -3120,7 +3119,8 @@ def post_boost_chat_message(request, boost_id):
     if not content:
         return Response({"detail": "Message content required"}, status=400)
 
-    thread = get_object_or_404(BoostChatThread, boost_id=boost_id)
+    thread = get_object_or_404(BoostChatThread, id=thread_id)
+    boost_id = thread.boost_id
 
     # Recruiter or unlocked users can send
     is_recruiter = thread.recruiter == user
@@ -3179,10 +3179,11 @@ def post_boost_chat_message(request, boost_id):
 )
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
-def get_boost_chat_messages(request, boost_id):
+def get_boost_chat_messages(request, thread_id):
     """Get all chat messages for a boost thread."""
     user = request.user
-    thread = get_object_or_404(BoostChatThread, boost_id=boost_id)
+    thread = get_object_or_404(BoostChatThread, id=thread_id)
+    boost_id = thread.boost_id
 
     is_recruiter = thread.recruiter == user
     is_unlocked = BoostUnlock.objects.filter(boost_id=boost_id, user=user).exists()
@@ -3190,7 +3191,11 @@ def get_boost_chat_messages(request, boost_id):
         user=user, active=True, end_date__gte=timezone.now()
     ).exists()
 
-    messages = thread.messages.filter(parent__isnull=True).order_by("created_at")
+    messages = (
+        thread.messages.filter(parent__isnull=True)
+        .order_by("created_at")
+        .prefetch_related("replies", "replies__sender")
+    )
 
     # Restrict view for users who haven't unlocked
     if not (is_recruiter or is_unlocked or has_subscription):
@@ -3200,6 +3205,8 @@ def get_boost_chat_messages(request, boost_id):
 
     return Response(
         {
+            "thread_id": thread.id,
+            "boost_id": boost_id,
             "messages": serializer.data,
             "is_unlocked": is_unlocked,
         }
@@ -3402,7 +3409,7 @@ def wallet_balance(request):
 def unlock_message(request, message_id):
     try:
         message = Message.objects.get(id=message_id, user=request.user)
-        boost_id = message.boost_id
+        boost_id = message.thread.boost_id
 
         if not boost_id:
             return Response(

@@ -288,7 +288,6 @@ class MessageSerializer(serializers.ModelSerializer):
             "sender",
             "title",
             "content",
-            "boost_id",
             "thread",
             "unlocked",
             "created_at",

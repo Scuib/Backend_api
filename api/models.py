@@ -295,7 +295,6 @@ class Message(models.Model):
         related_name="replies",
         on_delete=models.CASCADE,
     )
-    boost_id = models.CharField(max_length=50, null=True, blank=True)
     title = models.CharField(max_length=255)
     content = models.TextField()
     is_read = models.BooleanField(default=False)
