@@ -96,12 +96,12 @@ urlpatterns = [
         name="send-chat-messages",
     ),
     path(
-        "messages/chat/<int:thread_id>/edit/",
+        "messages/chat/edit/",
         views.edit_boost_chat_message,
         name="edit-chat-messages",
     ),
     path(
-        "messages/chat/<int:thread_id>/delete/",
+        "messages/chat/delete/",
         views.delete_boost_chat_message,
         name="delete-chat-messages",
     ),

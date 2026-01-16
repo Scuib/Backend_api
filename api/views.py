@@ -3948,7 +3948,7 @@ def edit_boost_chat_message(request, message_id):
             name="Authorization",
             in_=openapi.IN_HEADER,
             description="Bearer {token}",
-            type=openapi.TYPE_STRING,
+            type=openapi.TYPE_NUMBER,
             required=True,
         ),
     ],
