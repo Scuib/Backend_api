@@ -4216,7 +4216,7 @@ def my_subscription(request):
 def post_boost_job(request):
     serializer = BoostJobSerializer(data=request.data)
     if serializer.is_valid():
-        serializer.save()
+        serializer.save(owner=request.user)
         return Response(serializer.data, status=status.HTTP_201_CREATED)
     return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
