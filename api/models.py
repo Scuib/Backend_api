@@ -288,7 +288,13 @@ class Message(models.Model):
         null=True,
         blank=True,
     )
-    boost_id = models.CharField(max_length=50, null=True, blank=True)
+    parent = models.ForeignKey(
+        "self",
+        null=True,
+        blank=True,
+        related_name="replies",
+        on_delete=models.CASCADE,
+    )
     title = models.CharField(max_length=255)
     content = models.TextField()
     is_read = models.BooleanField(default=False)
@@ -455,6 +461,12 @@ class BoostJobs(models.Model):
     location = models.CharField(max_length=255)
 
     experience_level = models.CharField(max_length=20, choices=ExperienceLevel.choices)
+    job_categories = models.ManyToManyField(
+        "UserCategories", related_name="boost_jobs", blank=True
+    )
+    job_skills = models.ManyToManyField(
+        JobSkills, related_name="boost_jobs", blank=True
+    )
 
     min_salary = models.IntegerField()
     max_salary = models.IntegerField()
@@ -478,6 +490,10 @@ class JobPreference(models.Model):
     preferred_locations = models.JSONField(default=list)
 
     preferred_categories = models.ManyToManyField(UserCategories, blank=True)
+    preferred_skills = models.ManyToManyField(
+        JobSkills, blank=True
+    )
+
 
     preferred_experience = models.JSONField(default=list)
 

@@ -3059,7 +3059,6 @@ def message_boost(request):
                 title=title,
                 sender=sender,
                 content=content,
-                boost_id=boost_id,
                 thread=thread,
             )
             # Add recipient to chat participants
@@ -3094,10 +3093,12 @@ def message_boost(request):
     ],
     request_body=openapi.Schema(
         type=openapi.TYPE_OBJECT,
-        required=["title", "content", "recipients"],
         properties={
             "content": openapi.Schema(
                 type=openapi.TYPE_STRING, description="Content of the message"
+            ),
+            "parent_id": openapi.Schema(
+                type=openapi.TYPE_NUMBER, description="ID of parent message"
             ),
         },
     ),
@@ -3109,14 +3110,17 @@ def message_boost(request):
 )
 @api_view(["POST"])
 @permission_classes([IsAuthenticated])
-def post_boost_chat_message(request, boost_id):
+def post_boost_chat_message(request, thread_id):
     """Send a chat message under a boost thread."""
     user = request.user
     content = request.data.get("content")
+    parent_id = request.data.get("parent_id")
+
     if not content:
         return Response({"detail": "Message content required"}, status=400)
 
-    thread = get_object_or_404(BoostChatThread, boost_id=boost_id)
+    thread = get_object_or_404(BoostChatThread, id=thread_id)
+    boost_id = thread.boost_id
 
     # Recruiter or unlocked users can send
     is_recruiter = thread.recruiter == user
@@ -3128,10 +3132,19 @@ def post_boost_chat_message(request, boost_id):
     if not (is_recruiter or is_unlocked or has_subscription):
         return Response({"detail": "You cannot post in this chat."}, status=403)
 
+    parent_message = None
+    if parent_id:
+        parent_message = get_object_or_404(
+            Message,
+            id=parent_id,
+            thread=thread,
+        )
+
     message = Message.objects.create(
         user=user,
         sender=user,
         thread=thread,
+        parent=parent_message,
         title=f"Chat - Boost {boost_id}",
         content=content,
         unlocked=is_unlocked,
@@ -3139,14 +3152,12 @@ def post_boost_chat_message(request, boost_id):
 
     thread.participants.add(user)
 
+    serializer = MessageSerializer(message, context={"request": request})
+
     return Response(
         {
             "detail": "Message sent successfully",
-            "message": {
-                "sender": user.email,
-                "content": content,
-                "created_at": message.created_at,
-            },
+            "message": serializer.data,
         },
         status=201,
     )
@@ -3168,10 +3179,11 @@ def post_boost_chat_message(request, boost_id):
 )
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
-def get_boost_chat_messages(request, boost_id):
+def get_boost_chat_messages(request, thread_id):
     """Get all chat messages for a boost thread."""
     user = request.user
-    thread = get_object_or_404(BoostChatThread, boost_id=boost_id)
+    thread = get_object_or_404(BoostChatThread, id=thread_id)
+    boost_id = thread.boost_id
 
     is_recruiter = thread.recruiter == user
     is_unlocked = BoostUnlock.objects.filter(boost_id=boost_id, user=user).exists()
@@ -3179,8 +3191,11 @@ def get_boost_chat_messages(request, boost_id):
         user=user, active=True, end_date__gte=timezone.now()
     ).exists()
 
-    messages = thread.messages.order_by("created_at")
-    total_count = messages.count()
+    messages = (
+        thread.messages.filter(parent__isnull=True)
+        .order_by("created_at")
+        .prefetch_related("replies", "replies__sender")
+    )
 
     # Restrict view for users who haven't unlocked
     if not (is_recruiter or is_unlocked or has_subscription):
@@ -3190,8 +3205,9 @@ def get_boost_chat_messages(request, boost_id):
 
     return Response(
         {
+            "thread_id": thread.id,
+            "boost_id": boost_id,
             "messages": serializer.data,
-            "total_messages": total_count,
             "is_unlocked": is_unlocked,
         }
     )
@@ -3393,7 +3409,7 @@ def wallet_balance(request):
 def unlock_message(request, message_id):
     try:
         message = Message.objects.get(id=message_id, user=request.user)
-        boost_id = message.boost_id
+        boost_id = message.thread.boost_id
 
         if not boost_id:
             return Response(
@@ -3458,7 +3474,12 @@ def unlock_message(request, message_id):
 @permission_classes([IsAuthenticated])
 def list_messages(request):
     cleanup_messages()
-    messages = Message.objects.filter(user=request.user).order_by("-created_at")
+    messages = (
+        Message.objects.filter(parent__isnull=True, thread__participants=request.user)
+        .select_related("sender", "thread")
+        .prefetch_related("replies")
+        .order_by("-created_at")
+    )
     serializer = MessageSerializer(messages, many=True, context={"request": request})
     return Response(serializer.data)
 
@@ -3927,7 +3948,7 @@ def edit_boost_chat_message(request, message_id):
             name="Authorization",
             in_=openapi.IN_HEADER,
             description="Bearer {token}",
-            type=openapi.TYPE_STRING,
+            type=openapi.TYPE_NUMBER,
             required=True,
         ),
     ],
@@ -4133,6 +4154,8 @@ def my_subscription(request):
             "job_nature",
             "location",
             "experience_level",
+            "job_categories",
+            "job_skills",
             "min_salary",
             "max_salary",
             "application_link",
@@ -4161,6 +4184,16 @@ def my_subscription(request):
             "job_nature": openapi.Schema(
                 type=openapi.TYPE_STRING,
                 description="Job nature - Onsite, Remote, Hybrid",
+            ),
+            "job_skills": openapi.Schema(
+                type=openapi.TYPE_ARRAY,
+                items=openapi.Items(type=openapi.TYPE_STRING),
+                description="List of skills required for the job",
+            ),
+            "job_categories": openapi.Schema(
+                type=openapi.TYPE_ARRAY,
+                items=openapi.Items(type=openapi.TYPE_STRING),
+                description="List of categories required for the job",
             ),
             "max_salary": openapi.Schema(
                 type=openapi.TYPE_NUMBER,
@@ -4195,7 +4228,7 @@ def my_subscription(request):
 def post_boost_job(request):
     serializer = BoostJobSerializer(data=request.data)
     if serializer.is_valid():
-        serializer.save()
+        serializer.save(owner=request.user)
         return Response(serializer.data, status=status.HTTP_201_CREATED)
     return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
@@ -4407,13 +4440,8 @@ def delete_boost_job(request, job_id):
             ),
             "preferred_categories": openapi.Schema(
                 type=openapi.TYPE_ARRAY,
-                items=openapi.Items(type=openapi.TYPE_INTEGER),
-                description="List of category IDs the user is interested in",
-            ),
-            "preferred_skills": openapi.Schema(
-                type=openapi.TYPE_ARRAY,
-                items=openapi.Items(type=openapi.TYPE_INTEGER),
-                description="List of skill IDs that match desired roles",
+                items=openapi.Items(type=openapi.TYPE_STRING),
+                description="List of categories the user is interested in",
             ),
             "preferred_experience": openapi.Schema(
                 type=openapi.TYPE_STRING,
@@ -4442,8 +4470,7 @@ def delete_boost_job(request, job_id):
                         "preferred_experience": "Mid",
                         "min_salary": 200000,
                         "max_salary": 800000,
-                        "preferred_categories": [1, 5],
-                        "preferred_skills": [3, 7],
+                        "preferred_categories": ["Backend Developer"],
                     },
                 }
             },
@@ -4520,7 +4547,13 @@ def job_preference_view(request):
 def recommended_boost_jobs(request):
     user = request.user
 
-    if not hasattr(user, "job_preference"):
+    try:
+        preference = user.job_preference
+    except JobPreference.DoesNotExist:
+        preference = None
+
+    # If no preferences → return all boost jobs
+    if not preference:
         jobs = BoostJobs.objects.all().order_by("-created_at")
 
         data = [
@@ -4531,6 +4564,8 @@ def recommended_boost_jobs(request):
                 "job_type": job.job_type,
                 "job_nature": job.job_nature,
                 "experience_level": job.experience_level,
+                "skills": list(job.job_skills.values_list("name", flat=True)),
+                "categories": list(job.job_categories.values_list("name", flat=True)),
                 "min_salary": job.min_salary,
                 "max_salary": job.max_salary,
                 "application_link": job.application_link,
@@ -4543,7 +4578,7 @@ def recommended_boost_jobs(request):
 
     matcher = JobAppMatching()
 
-    recommendations = matcher.recommend_boost_jobs_for_user_preferences(user)
+    recommendations = matcher.recommend_boost_jobs_for_user_preferences(preference)
 
     data = [
         {
@@ -4553,6 +4588,8 @@ def recommended_boost_jobs(request):
             "job_type": job.job_type,
             "job_nature": job.job_nature,
             "experience_level": job.experience_level,
+            "skills": list(job.job_skills.values_list("name", flat=True)),
+            "categories": list(job.job_categories.values_list("name", flat=True)),
             "min_salary": job.min_salary,
             "max_salary": job.max_salary,
             "application_link": job.application_link,
