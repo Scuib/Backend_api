@@ -439,8 +439,8 @@ class JobPreferenceSerializer(serializers.ModelSerializer):
         child=serializers.CharField(), required=False, write_only=True
     )
 
-    preferred_categories_display = serializers.SerializerMethodField(read_only=True)
-    preferred_skills_display = serializers.SerializerMethodField(read_only=True)
+    categories = serializers.SerializerMethodField(read_only=True)
+    skills = serializers.SerializerMethodField(read_only=True)
 
     class Meta:
         model = JobPreference
@@ -450,8 +450,8 @@ class JobPreferenceSerializer(serializers.ModelSerializer):
             "preferred_locations",
             "preferred_categories",
             "preferred_skills",
-            "preferred_categories_display",
-            "preferred_skills_display",
+            "categories",
+            "skills",
             "preferred_experience",
             "min_salary",
             "max_salary",
@@ -497,8 +497,8 @@ class JobPreferenceSerializer(serializers.ModelSerializer):
 
         return instance
 
-    def get_preferred_categories_display(self, obj):
+    def get_categories(self, obj):
         return list(obj.preferred_categories.values_list("name", flat=True))
 
-    def get_prefered_skills_display(self, obj):
+    def get_skills(self, obj):
         return list(obj.preferred_skills.values_list("name", flat=True))
