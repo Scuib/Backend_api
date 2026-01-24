@@ -335,6 +335,12 @@ class JobTweetSerializer(serializers.ModelSerializer):
 
 class BoostJobSerializer(serializers.ModelSerializer):
     owner = serializers.ReadOnlyField(source="owner.id")
+    job_skills = serializers.ListField(
+        child=serializers.CharField(), write_only=True, required=False
+    )
+    job_categories = serializers.ListField(
+        child=serializers.CharField(), write_only=True, required=False
+    )
 
     class Meta:
         model = BoostJobs
@@ -347,6 +353,8 @@ class BoostJobSerializer(serializers.ModelSerializer):
             "job_nature",
             "location",
             "experience_level",
+            "job_categories",
+            "job_skills",
             "min_salary",
             "max_salary",
             "application_link",
@@ -364,13 +372,75 @@ class BoostJobSerializer(serializers.ModelSerializer):
     def validate_job_type(self, value):
         return value.upper()
 
+    def create(self, validated_data):
+        skill_names = validated_data.pop("job_skills", [])
+        category_names = validated_data.pop("job_categories", [])
+
+        job = BoostJobs.objects.create(**validated_data)
+
+        # Attach skills
+        for name in skill_names:
+            normalized = name.strip().lower()
+            skill, _ = JobSkills.objects.get_or_create(name=normalized)
+            job.job_skills.add(skill)
+
+        # Attach categories
+        for name in category_names:
+            normalized = name.strip().lower()
+            category, _ = UserCategories.objects.get_or_create(name=normalized)
+            job.job_categories.add(category)
+
+        return job
+
+    def update(self, instance, validated_data):
+        skill_names = validated_data.pop("job_skills", None)
+        category_names = validated_data.pop("job_categories", None)
+
+        # Update scalar fields
+        for attr, value in validated_data.items():
+            setattr(instance, attr, value)
+
+        instance.save()
+
+        # Update skills (replace, not append)
+        if skill_names is not None:
+            instance.job_skills.clear()
+
+            for name in skill_names:
+                normalized = name.strip().lower()
+
+                skill, _ = JobSkills.objects.get_or_create(name=normalized)
+                instance.job_skills.add(skill)
+
+        # Update categories (replace, not append)
+        if category_names is not None:
+            instance.job_categories.clear()
+
+            for name in category_names:
+                normalized = name.strip().lower()
+
+                category, _ = UserCategories.objects.get_or_create(name=normalized)
+                instance.job_categories.add(category)
+
+        return instance
+
+    def get_skills(self, obj):
+        return list(obj.job_skills.values_list("name", flat=True))
+
+    def get_categories(self, obj):
+        return list(obj.job_categories.values_list("name", flat=True))
+
 
 class JobPreferenceSerializer(serializers.ModelSerializer):
     preferred_categories = serializers.ListField(
         child=serializers.CharField(), required=False, write_only=True
     )
+    preferred_skills = serializers.ListField(
+        child=serializers.CharField(), required=False, write_only=True
+    )
 
     preferred_categories_display = serializers.SerializerMethodField(read_only=True)
+    preferred_skills_display = serializers.SerializerMethodField(read_only=True)
 
     class Meta:
         model = JobPreference
@@ -379,56 +449,56 @@ class JobPreferenceSerializer(serializers.ModelSerializer):
             "preferred_job_nature",
             "preferred_locations",
             "preferred_categories",
+            "preferred_skills",
             "preferred_categories_display",
+            "preferred_skills_display",
             "preferred_experience",
             "min_salary",
             "max_salary",
         ]
 
-    def get_preferred_categories_display(self, obj):
-        return list(obj.preferred_categories.values_list("name", flat=True))
+    def _set_categories_and_skills(self, instance, categories, skills):
+        if categories is not None:
+            instance.preferred_categories.clear()
+            for name in categories:
+                normalized = name.strip().lower()
+                category, _ = UserCategories.objects.get_or_create(name=normalized)
+                instance.preferred_categories.add(category)
+
+        if skills is not None:
+            instance.preferred_skills.clear()
+            for name in skills:
+                normalized = name.strip().lower()
+                skill, _ = JobSkills.objects.get_or_create(name=normalized)
+                instance.preferred_skills.add(skill)
 
     def create(self, validated_data):
-        category_names = validated_data.pop("preferred_categories", [])
+        categories = validated_data.pop("preferred_categories", [])
+        skills = validated_data.pop("preferred_skills", [])
 
-        instance = JobPreference.objects.create(**validated_data)
+        preference = JobPreference.objects.create(
+            user=self.context["request"].user, **validated_data
+        )
 
-        if category_names:
-            categories = UserCategories.objects.filter(name__in=category_names)
+        self._set_categories_and_skills(preference, categories, skills)
 
-            if categories.count() != len(category_names):
-                existing = set(categories.values_list("name", flat=True))
-                missing = set(category_names) - existing
-                raise serializers.ValidationError(
-                    {
-                        "preferred_categories": f"Invalid categories: {', '.join(missing)}"
-                    }
-                )
-
-            instance.preferred_categories.set(categories)
-
-        return instance
+        return preference
 
     def update(self, instance, validated_data):
-        category_names = validated_data.pop("preferred_categories", None)
+        categories = validated_data.pop("preferred_categories", None)
+        skills = validated_data.pop("preferred_skills", None)
 
         for attr, value in validated_data.items():
             setattr(instance, attr, value)
 
         instance.save()
 
-        if category_names is not None:
-            categories = UserCategories.objects.filter(name__in=category_names)
-
-            if categories.count() != len(category_names):
-                existing = set(categories.values_list("name", flat=True))
-                missing = set(category_names) - existing
-                raise serializers.ValidationError(
-                    {
-                        "preferred_categories": f"Invalid categories: {', '.join(missing)}"
-                    }
-                )
-
-            instance.preferred_categories.set(categories)
+        self._set_categories_and_skills(instance, categories, skills)
 
         return instance
+
+    def get_preferred_categories_display(self, obj):
+        return list(obj.preferred_categories.values_list("name", flat=True))
+
+    def get_prefered_skills_display(self, obj):
+        return list(obj.preferred_skills.values_list("name", flat=True))

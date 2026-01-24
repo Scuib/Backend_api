@@ -482,10 +482,14 @@ class JobAppMatching:
         pref_job_nature = set(pref.preferred_job_nature or [])
         pref_locations = set([loc.lower() for loc in pref.preferred_locations or []])
         pref_experience = set(pref.preferred_experience or [])
+        pref_skills = set(pref.preferred_skills.values_list("name", flat=True))
+        pref_categories = set(pref.preferred_categories.values_list("name", flat=True))
         min_salary = pref.min_salary or 0
         max_salary = pref.max_salary or 0
 
-        boost_jobs = BoostJobs.objects.all()
+        boost_jobs = BoostJobs.objects.prefetch_related("job_skills", "job_categories")
+
+        MAX_SCORE = 150
 
         recommendations = []
 
@@ -510,7 +514,7 @@ class JobAppMatching:
 
             # ---------- EXPERIENCE ----------
             if pref_experience:
-                if job.experience_level == pref_experience:
+                if job.experience_level in pref_experience:
                     score += 20
 
             # ---------- SALARY ----------
@@ -518,10 +522,25 @@ class JobAppMatching:
                 if job.min_salary >= min_salary and job.max_salary <= max_salary:
                     score += 10
 
+            # ---------- SKILLS ----------
+            job_skills = set(job.job_skills.values_list("name", flat=True))
+            if pref_skills and job_skills:
+                matched_skills = pref_skills.intersection(job_skills)
+                if matched_skills:
+                    score += min(len(matched_skills) * 5, 30)
+
+            # ---------- CATEGORIES ----------
+            job_categories = set(job.job_categories.values_list("name", flat=True))
+            if pref_categories and job_categories:
+                matched_categories = pref_categories.intersection(job_categories)
+                if matched_categories:
+                    score += min(len(matched_categories) * 10, 20)
+
             if score > 0:
-                recommendations.append((job, score))
+                normalized_score = (score / MAX_SCORE) * 100
+                recommendations.append((job, normalized_score))
 
         # sort by best score
-        recommendations.sort(key=lambda x: x["score"], reverse=True)
+        recommendations.sort(key=lambda x: x[1], reverse=True)
 
         return recommendations[:limit]

@@ -4154,6 +4154,8 @@ def my_subscription(request):
             "job_nature",
             "location",
             "experience_level",
+            "job_categories",
+            "job_skills",
             "min_salary",
             "max_salary",
             "application_link",
@@ -4182,6 +4184,16 @@ def my_subscription(request):
             "job_nature": openapi.Schema(
                 type=openapi.TYPE_STRING,
                 description="Job nature - Onsite, Remote, Hybrid",
+            ),
+            "job_skills": openapi.Schema(
+                type=openapi.TYPE_ARRAY,
+                items=openapi.Items(type=openapi.TYPE_STRING),
+                description="List of skills required for the job",
+            ),
+            "job_categories": openapi.Schema(
+                type=openapi.TYPE_ARRAY,
+                items=openapi.Items(type=openapi.TYPE_STRING),
+                description="List of categories required for the job",
             ),
             "max_salary": openapi.Schema(
                 type=openapi.TYPE_NUMBER,
