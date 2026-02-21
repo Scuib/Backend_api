@@ -7,6 +7,7 @@ from google.auth.transport import requests
 
 from .models import (
     BoostJobs,
+    BoostUnlock,
     JobPreference,
     JobSkills,
     User,
@@ -335,12 +336,11 @@ class JobTweetSerializer(serializers.ModelSerializer):
 
 class BoostJobSerializer(serializers.ModelSerializer):
     owner = serializers.ReadOnlyField(source="owner.id")
-    job_skills = serializers.ListField(
-        child=serializers.CharField(), write_only=True, required=False
-    )
-    job_categories = serializers.ListField(
-        child=serializers.CharField(), write_only=True, required=False
-    )
+    skills = serializers.SerializerMethodField(read_only=True)
+    categories = serializers.SerializerMethodField(read_only=True)
+    unlocked = serializers.SerializerMethodField(read_only=True)
+    application_link = serializers.SerializerMethodField(read_only=True)
+    score = serializers.FloatField(read_only=True)
 
     class Meta:
         model = BoostJobs
@@ -353,11 +353,13 @@ class BoostJobSerializer(serializers.ModelSerializer):
             "job_nature",
             "location",
             "experience_level",
-            "job_categories",
-            "job_skills",
+            "skills",
+            "categories",
             "min_salary",
             "max_salary",
             "application_link",
+            "unlocked",
+            "score",
             "created_at",
             "updated_at",
         ]
@@ -429,6 +431,25 @@ class BoostJobSerializer(serializers.ModelSerializer):
 
     def get_categories(self, obj):
         return list(obj.job_categories.values_list("name", flat=True))
+
+    def get_unlocked(self, obj):
+        request = self.context.get("request")
+        if not request or not request.user.is_authenticated:
+            return False
+
+        return BoostUnlock.objects.filter(
+            boost_id=str(obj.id), user=request.user
+        ).exists()
+
+    def get_application_link(self, obj):
+        request = self.context.get("request")
+        if not request or not request.user.is_authenticated:
+            return None
+
+        if BoostUnlock.objects.filter(boost_id=str(obj.id), user=request.user).exists():
+            return obj.application_link
+
+        return "Preview only. Pay to unlock application link."
 
 
 class JobPreferenceSerializer(serializers.ModelSerializer):

@@ -538,7 +538,9 @@ class JobAppMatching:
 
             if score > 0:
                 normalized_score = (score / MAX_SCORE) * 100
-                recommendations.append((job, normalized_score))
+
+                if normalized_score >= 10:
+                    recommendations.append((job, normalized_score))
 
         # sort by best score
         recommendations.sort(key=lambda x: x[1], reverse=True)
