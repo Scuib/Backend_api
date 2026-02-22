@@ -479,6 +479,12 @@ class BoostJobs(models.Model):
     def __str__(self):
         return self.title
 
+    def is_unlocked_by(self, user):
+        if not user or not user.is_authenticated:
+            return False
+
+        return BoostUnlock.objects.filter(boost_id=str(self.id), user=user).exists()
+
 
 class JobPreference(models.Model):
     user = models.OneToOneField(

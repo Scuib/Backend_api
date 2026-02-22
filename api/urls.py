@@ -130,4 +130,9 @@ urlpatterns = [
         views.recommended_boost_jobs,
         name="recommended_boost_jobs",
     ),
+    path(
+        "boost-jobs/<int:boost_id>/unlock/",
+        views.unlock_boost_job,
+        name="unlock-boost-job",
+    ),
 ]

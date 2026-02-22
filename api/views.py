@@ -12,6 +12,7 @@ from uuid import uuid4
 import cloudinary
 from django.core.mail import EmailMultiAlternatives
 from django.core.files.uploadedfile import UploadedFile
+from django.db import transaction
 import pandas as pd
 import json
 from django.views.decorators.csrf import csrf_exempt
@@ -93,6 +94,8 @@ from .utils import cleanup_messages, cleanup_old_jobs
 # Activate the resend with the api key
 resend.api_key = settings.NEW_RESEND_API_KEY
 BOOST_MESSAGE_COST = 300  # Naira
+
+UNLOCK_PRICE = 20
 
 
 def home(request):
@@ -4205,7 +4208,7 @@ def my_subscription(request):
             ),
             "job_type": openapi.Schema(
                 type=openapi.TYPE_STRING,
-                description="JOb type: Full-time, part-time, internship, etc",
+                description="Job type: Full-time, part-time, internship, etc",
             ),
         },
     ),
@@ -4555,47 +4558,76 @@ def recommended_boost_jobs(request):
     # If no preferences → return all boost jobs
     if not preference:
         jobs = BoostJobs.objects.all().order_by("-created_at")
-
-        data = [
-            {
-                "id": job.id,
-                "title": job.title,
-                "location": job.location,
-                "job_type": job.job_type,
-                "job_nature": job.job_nature,
-                "experience_level": job.experience_level,
-                "skills": list(job.job_skills.values_list("name", flat=True)),
-                "categories": list(job.job_categories.values_list("name", flat=True)),
-                "min_salary": job.min_salary,
-                "max_salary": job.max_salary,
-                "application_link": job.application_link,
-                "score": None,
-            }
-            for job in jobs
-        ]
-
-        return Response({"results": data})
+        serializer = BoostJobSerializer(jobs, many=True, context={"request": request})
+        return Response({"results": serializer.data})
 
     matcher = JobAppMatching()
 
     recommendations = matcher.recommend_boost_jobs_for_user_preferences(preference)
 
-    data = [
-        {
-            "id": job.id,
-            "title": job.title,
-            "location": job.location,
-            "job_type": job.job_type,
-            "job_nature": job.job_nature,
-            "experience_level": job.experience_level,
-            "skills": list(job.job_skills.values_list("name", flat=True)),
-            "categories": list(job.job_categories.values_list("name", flat=True)),
-            "min_salary": job.min_salary,
-            "max_salary": job.max_salary,
-            "application_link": job.application_link,
-            "score": score,
-        }
-        for job, score in recommendations
-    ]
+    jobs = []
+    for job, score in recommendations:
+        job.score = score  # attach dynamically
+        jobs.append(job)
 
-    return Response({"results": data})
+    serializer = BoostJobSerializer(jobs, many=True, context={"request": request})
+
+    return Response({"results": serializer.data})
+
+
+@swagger_auto_schema(
+    method="post",
+    operation_summary="Unlock Boost Job",
+    operation_description=f"Unlock the job application link by making payment",
+    manual_parameters=[
+        openapi.Parameter(
+            "boost_id",
+            openapi.IN_PATH,
+            description="Boost job id",
+            type=openapi.TYPE_INTEGER,
+        ),
+        openapi.Parameter(
+            name="Authorization",
+            in_=openapi.IN_HEADER,
+            description="Bearer {token}",
+            type=openapi.TYPE_STRING,
+            required=True,
+        ),
+    ],
+    responses={
+        200: openapi.Response("Message content unlocked."),
+        402: "Insufficient funds",
+    },
+)
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def unlock_boost_job(request, boost_id):
+    user = request.user
+
+    # prevent double unlock
+    if BoostUnlock.objects.filter(boost_id=str(boost_id), user=user).exists():
+        return Response(
+            {"detail": "Boost job already unlocked."}, status=status.HTTP_200_OK
+        )
+
+    try:
+        job = BoostJobs.objects.get(id=boost_id)
+    except BoostJobs.DoesNotExist:
+        return Response(
+            {"detail": "Boost job not found."}, status=status.HTTP_404_NOT_FOUND
+        )
+
+    wallet = Wallet.objects.get(user=user)
+    if not wallet.deduct(UNLOCK_PRICE, f"Unlock boost job: {job.title}"):
+        return Response({"detail": "Insufficient wallet balance."}, status=402)
+
+    BoostUnlock.objects.create(boost_id=str(job.id), user=user)
+
+    return Response(
+        {
+            "detail": "Boost job unlocked successfully.",
+            "boost_id": boost_id,
+            "application_link": job.application_link,
+        },
+        status=status.HTTP_200_OK,
+    )
