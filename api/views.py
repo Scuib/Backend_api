@@ -3044,6 +3044,12 @@ def message_boost(request):
         # Create a unique boost ID
         boost_id = str(uuid.uuid4())[:8]  # Short unique ID
 
+        total_cost = BOOST_MESSAGE_COST * len(recipients_id)
+        # Check if wallet has sufficient balance
+        wallet = Wallet.objects.get(user=sender)
+        if not wallet.deduct(total_cost, f"Sent {len(recipients_id)} boost messages"):
+            return Response({"detail": "Insufficient wallet balance."}, status=402)
+
         # Create chat thread
         thread = BoostChatThread.objects.create(boost_id=boost_id, recruiter=sender)
 
@@ -3995,7 +4001,7 @@ def delete_boost_chat_message(request, message_id):
         properties={
             "plan": openapi.Schema(
                 type=openapi.TYPE_STRING,
-                description="Subscription plan: weekly or monthly",
+                description="Subscription plan: daily, weekly or monthly",
             )
         },
     ),
@@ -4034,11 +4040,13 @@ def subscribe_to_boost(request):
     plan = request.data.get("plan")
 
     PRICES = {
-        "weekly": Decimal("1500"),
-        "monthly": Decimal("6000"),
+        "daily": Decimal("200"),
+        "weekly": Decimal("100"),
+        "monthly": Decimal("4000"),
     }
 
     DURATIONS = {
+        "daily": 1,
         "weekly": 7,
         "monthly": 30,
     }
