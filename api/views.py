@@ -4617,27 +4617,11 @@ def unlock_boost_job(request, boost_id):
             {"detail": "Boost job not found."}, status=status.HTTP_404_NOT_FOUND
         )
 
+    wallet = Wallet.objects.get(user=user)
+    if not wallet.deduct(UNLOCK_PRICE, f"Unlock boost job: {job.title}"):
+        return Response({"detail": "Insufficient wallet balance."}, status=402)
 
-    with transaction.atomic():
-        wallet = Wallet.objects.select_for_update().get(user=user)
-
-        if wallet.balance < UNLOCK_PRICE:
-            return Response(
-                {"detail": "Insufficient wallet balance."},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-        
-        wallet.balance -= UNLOCK_PRICE
-        wallet.save()
-
-        WalletTransaction.objects.create(
-            user=user,
-            amount=UNLOCK_PRICE,
-            transaction_type="debit",
-            description=f"Unlock boost job: {job.title}",
-        )
-
-        BoostUnlock.objects.create(boost_id=str(job.id), user=user)
+    BoostUnlock.objects.create(boost_id=str(job.id), user=user)
 
     return Response(
         {
