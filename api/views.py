@@ -4391,6 +4391,15 @@ def update_boost_job(request, job_id):
     method="delete",
     operation_summary="Delete a Job boost",
     operation_description="Delete Boost Job by id",
+    manual_parameters=[
+        openapi.Parameter(
+            name="Authorization",
+            in_=openapi.IN_HEADER,
+            description="Bearer {token}",
+            type=openapi.TYPE_STRING,
+            required=True,
+        ),
+    ],
     responses={
         204: openapi.Response(
             description="Successful",
