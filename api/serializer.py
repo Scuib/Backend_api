@@ -444,12 +444,25 @@ class BoostJobSerializer(serializers.ModelSerializer):
     def get_application_link(self, obj):
         request = self.context.get("request")
         if not request or not request.user.is_authenticated:
-            return None
+            return "Preview only. Pay ₦500 to unlock application details."
 
         if BoostUnlock.objects.filter(boost_id=str(obj.id), user=request.user).exists():
             return obj.application_link
 
         return "Preview only. Pay to unlock application link."
+
+    def get_unlocked(self, obj):
+        request = self.context.get("request")
+        if not request or not request.user.is_authenticated:
+            return False
+
+        unlocked_ids = self.context.get("unlocked_boost_ids")
+        if unlocked_ids is not None:
+            return str(obj.id) in unlocked_ids
+
+        return BoostUnlock.objects.filter(
+            boost_id=str(obj.id), user=request.user
+        ).exists()
 
 
 class JobPreferenceSerializer(serializers.ModelSerializer):

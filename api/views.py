@@ -89,7 +89,7 @@ from api.job_model.job_recommender import JobAppMatching
 from drf_yasg.utils import swagger_auto_schema
 from drf_yasg import openapi
 import snscrape.modules.twitter as sntwitter
-from .utils import cleanup_messages, cleanup_old_jobs
+from .utils import cleanup_messages, cleanup_old_jobs, cleanup_old_boostjobs
 
 # Activate the resend with the api key
 resend.api_key = settings.NEW_RESEND_API_KEY
@@ -4261,6 +4261,7 @@ def post_boost_job(request):
 @api_view(["GET"])
 @permission_classes([AllowAny])
 def all_boost_jobs(request):
+    cleanup_old_boostjobs()
     jobs = BoostJobs.objects.all().order_by("-created_at")
     serializer = BoostJobSerializer(jobs, many=True)
     return Response(serializer.data, status=status.HTTP_200_OK)
@@ -4556,17 +4557,30 @@ def job_preference_view(request):
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
 def recommended_boost_jobs(request):
+    cleanup_old_boostjobs()
     user = request.user
 
-    try:
-        preference = user.job_preference
-    except JobPreference.DoesNotExist:
-        preference = None
+    preference = getattr(user, "job_preference", None)
 
     # If no preferences → return all boost jobs
     if not preference:
-        jobs = BoostJobs.objects.all().order_by("-created_at")
-        serializer = BoostJobSerializer(jobs, many=True, context={"request": request})
+        jobs = (
+            BoostJobs.objects.select_related("owner")
+            .prefetch_related("job_skills", "job_categories")
+            .order_by("-created_at")[:50]
+        )
+        unlocked_boost_ids = set(
+            BoostUnlock.objects.filter(user=user).values_list("boost_id", flat=True)
+        )
+
+        serializer = BoostJobSerializer(
+            jobs,
+            many=True,
+            context={
+                "request": request,
+                "unlocked_boost_ids": unlocked_boost_ids,
+            },
+        )
         return Response({"results": serializer.data})
 
     matcher = JobAppMatching()
@@ -4578,7 +4592,20 @@ def recommended_boost_jobs(request):
         job.score = score  # attach dynamically
         jobs.append(job)
 
-    serializer = BoostJobSerializer(jobs, many=True, context={"request": request})
+    unlocked_boost_ids = set(
+        BoostUnlock.objects.filter(user=user).values_list("boost_id", flat=True)
+    )
+
+    serializer = BoostJobSerializer(
+        jobs,
+        many=True,
+        context={
+            "request": request,
+            "unlocked_boost_ids": set(
+                BoostUnlock.objects.filter(user=user).values_list("boost_id", flat=True)
+            ),
+        },
+    )
 
     return Response({"results": serializer.data})
 

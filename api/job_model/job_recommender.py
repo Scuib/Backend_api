@@ -5,6 +5,7 @@ import numpy as np
 from sklearn.feature_extraction.text import TfidfVectorizer
 from ..models import BoostJobs, JobPreference, Jobs, User, UserSkills, Profile
 import time
+import heapq
 
 from django.db.models import F, Value
 from django.db.models.functions import Lower
@@ -487,62 +488,51 @@ class JobAppMatching:
         min_salary = pref.min_salary or 0
         max_salary = pref.max_salary or 0
 
-        boost_jobs = BoostJobs.objects.prefetch_related("job_skills", "job_categories")
+        qs = BoostJobs.objects.all()
+
+        if pref_job_types:
+            qs = qs.filter(job_type__in=pref_job_types)
+
+        if pref_job_nature:
+            qs = qs.filter(job_nature__in=pref_job_nature)
+
+        if pref_experience:
+            qs = qs.filter(experience_level__in=pref_experience)
+
+        if pref_locations:
+            qs = qs.filter(location__in=pref_locations)
+
+        qs = qs.prefetch_related("job_skills", "job_categories")
 
         MAX_SCORE = 150
+        scored = []
 
-        recommendations = []
-
-        for job in boost_jobs:
+        for job in qs:
             score = 0
 
-            # ---------- JOB TYPE ----------
-            if pref_job_types:
-                if job.job_type in pref_job_types:
-                    score += 25
+            score += 25 if job.job_type in pref_job_types else 0
+            score += 20 if job.job_nature in pref_job_nature else 0
+            score += 25 if (job.location or "").lower() in pref_locations else 0
+            score += 20 if job.experience_level in pref_experience else 0
 
-            # ---------- JOB NATURE ----------
-            if pref_job_nature:
-                if job.job_nature in pref_job_nature:
-                    score += 20
-
-            # ---------- LOCATION ----------
-            if pref_locations:
-                job_location = (job.location or "").lower()
-                if job_location in pref_locations:
-                    score += 25
-
-            # ---------- EXPERIENCE ----------
-            if pref_experience:
-                if job.experience_level in pref_experience:
-                    score += 20
-
-            # ---------- SALARY ----------
             if job.min_salary and job.max_salary and min_salary and max_salary:
                 if job.min_salary >= min_salary and job.max_salary <= max_salary:
                     score += 10
 
-            # ---------- SKILLS ----------
-            job_skills = set(job.job_skills.values_list("name", flat=True))
-            if pref_skills and job_skills:
-                matched_skills = pref_skills.intersection(job_skills)
-                if matched_skills:
-                    score += min(len(matched_skills) * 5, 30)
+            job_skills = {s.name for s in job.job_skills.all()}
+            matched_skills = job_skills & pref_skills
+            score += min(len(matched_skills) * 5, 30)
 
-            # ---------- CATEGORIES ----------
-            job_categories = set(job.job_categories.values_list("name", flat=True))
-            if pref_categories and job_categories:
-                matched_categories = pref_categories.intersection(job_categories)
-                if matched_categories:
-                    score += min(len(matched_categories) * 10, 20)
+            job_categories = {c.name for c in job.job_categories.all()}
+            matched_categories = job_categories & pref_categories
+            score += min(len(matched_categories) * 10, 20)
 
-            if score > 0:
-                normalized_score = (score / MAX_SCORE) * 100
+            if score:
+                normalized = (score / MAX_SCORE) * 100
+                if normalized >= 10:
+                    scored.append((normalized, job))
 
-                if normalized_score >= 10:
-                    recommendations.append((job, normalized_score))
+        # 🔥 NO FULL SORT
+        top = heapq.nlargest(limit, scored, key=lambda x: x[0])
 
-        # sort by best score
-        recommendations.sort(key=lambda x: x[1], reverse=True)
-
-        return recommendations[:limit]
+        return [(job, score) for score, job in top]
