@@ -21,11 +21,13 @@ def cleanup_old_jobs():
     """
     last_cleanup = cache.get("last_job_cleanup")
     if not last_cleanup or (now() - last_cleanup).days >= 1:
-        threshold = now() - timedelta(days=3)
+        threshold = now() - timedelta(days=14)
         deleted_count, _ = Jobs.objects.filter(created_at__lt=threshold).delete()
         cache.set("last_job_cleanup", now(), timeout=86400)  # 1 day cache
         return deleted_count
     return 0
+
+
 def cleanup_old_boostjobs():
     """
     Delete job posts older than 3 days.
@@ -33,7 +35,7 @@ def cleanup_old_boostjobs():
     """
     last_cleanup = cache.get("last_job_cleanup")
     if not last_cleanup or (now() - last_cleanup).days >= 1:
-        threshold = now() - timedelta(days=3)
+        threshold = now() - timedelta(days=14)
         deleted_count, _ = BoostJobs.objects.filter(created_at__lt=threshold).delete()
         cache.set("last_job_cleanup", now(), timeout=86400)  # 1 day cache
         return deleted_count
