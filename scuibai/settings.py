@@ -115,6 +115,19 @@ AUTH_PASSWORD_VALIDATORS = [
     },
 ]
 
+SWAGGER_SETTINGS = {
+    "USE_SESSION_AUTH": False,
+    "SECURITY_DEFINITIONS": {
+        "Bearer": {
+            "type": "apiKey",
+            "name": "Authorization",
+            "in": "header",
+            "description": "JWT Authorization header. Example: 'Bearer <your_token>'",
+        }
+    },
+    "SECURITY_REQUIREMENTS": [{"Bearer": []}],
+}
+
 
 LANGUAGE_CODE = "en-us"
 
@@ -227,8 +240,3 @@ NEW_GOOGLE_CLIENT_ID = os.getenv("NEW_CLIENT_ID")
 NEW_GOOGLE_CLIENT_SECRET = os.getenv("NEW_CLIENT_SECRET")
 SOCIAL_SECRET_KEY = os.getenv("SOCIAL_SECRET_KEY")
 
-
-SWAGGER_SETTINGS = {
-    "USE_SESSION_AUTH": False,
-    "SECURITY_DEFINITIONS": None,
-}

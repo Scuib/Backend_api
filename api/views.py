@@ -4263,7 +4263,14 @@ def post_boost_job(request):
 def all_boost_jobs(request):
     cleanup_old_boostjobs()
     jobs = BoostJobs.objects.all().order_by("-created_at")
-    serializer = BoostJobSerializer(jobs, many=True, context={"request": request})
+    unlocked_boost_ids = set()
+    if request.user.is_authenticated:
+        unlocked_boost_ids = set(
+            BoostUnlock.objects.filter(user=request.user)
+            .values_list("boost_id", flat=True)
+        )
+        
+    serializer = BoostJobSerializer(jobs, many=True, context={"request": request, "unlocked_boost_ids": unlocked_boost_ids})
     return Response(serializer.data, status=status.HTTP_200_OK)
 
 
