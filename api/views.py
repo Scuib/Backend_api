@@ -4263,7 +4263,7 @@ def post_boost_job(request):
 def all_boost_jobs(request):
     cleanup_old_boostjobs()
     jobs = BoostJobs.objects.all().order_by("-created_at")
-    serializer = BoostJobSerializer(jobs, many=True)
+    serializer = BoostJobSerializer(jobs, many=True, context={"request": request})
     return Response(serializer.data, status=status.HTTP_200_OK)
 
 
