@@ -4513,7 +4513,7 @@ def delete_boost_job(request, job_id):
         ),
     },
 )
-@api_view(["POST", "PUT"])
+@api_view(["POST", "PUT", "PATCH"])
 @permission_classes([IsAuthenticated])
 def job_preference_view(request):
     user = request.user
@@ -4523,25 +4523,18 @@ def job_preference_view(request):
     except JobPreference.DoesNotExist:
         pref = None
 
-    if request.method == "GET":
-        if not pref:
-            return Response({"detail": "No preference set yet"}, status=404)
-
-        serializer = JobPreferenceSerializer(pref)
-        return Response(serializer.data)
-
-    # PUT / PATCH → Create or Update
     if pref:
         serializer = JobPreferenceSerializer(
             pref,
             data=request.data,
             partial=True if request.method == "PATCH" else False,
+            context={"request": request},
         )
     else:
         serializer = JobPreferenceSerializer(data=request.data, context={"request": request})
 
     if serializer.is_valid():
-        obj = serializer.save(user=user) if not pref else serializer.save()
+        obj = serializer.save()
         return Response(
             {
                 "message": "Preferences saved successfully",
@@ -4550,6 +4543,57 @@ def job_preference_view(request):
         )
 
     return Response(serializer.errors, status=400)
+
+@swagger_auto_schema(
+    method="get",
+    operation_summary="Get Job Preferences set by the user",
+    operation_description="This endpoint allows an authenticated user to get their job preferences.",
+    manual_parameters=[
+        openapi.Parameter(
+            name="Authorization",
+            in_=openapi.IN_HEADER,
+            description="Bearer {token}",
+            type=openapi.TYPE_STRING,
+            required=True,
+        ),
+    ],
+   
+    responses={
+        200: openapi.Response(
+            description="Preferences retrieved successfully",
+            examples={
+                "application/json": {
+                    "data": {
+                        "preferred_job_types": ["Full-time", "Contract"],
+                        "preferred_job_nature": ["Remote", "Hybrid"],
+                        "preferred_locations": ["Lagos", "Abuja", "London"],
+                        "preferred_experience": "Mid",
+                        "min_salary": 200000,
+                        "max_salary": 800000,
+                        "preferred_categories": ["Backend Developer"],
+                    },
+                }
+            },
+        ),
+        404: openapi.Response(
+            description="Not found",
+            examples={
+                "application/json": {
+                    "error": "preference data nto found",
+                }
+            },
+        ),
+    },
+)
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def get_preference(request):
+    try:
+        pref = JobPreference.objects.get(user=request.user)
+        serializer = JobPreferenceSerializer(pref)
+        return Response(serializer.data)
+    except JobPreference.DoesNotExist:
+        return Response({"detail": "No preference set yet"}, status=404)
 
 
 @swagger_auto_schema(
