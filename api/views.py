@@ -4538,7 +4538,7 @@ def job_preference_view(request):
             partial=True if request.method == "PATCH" else False,
         )
     else:
-        serializer = JobPreferenceSerializer(data=request.data)
+        serializer = JobPreferenceSerializer(data=request.data, context={"request": request})
 
     if serializer.is_valid():
         obj = serializer.save(user=user) if not pref else serializer.save()
