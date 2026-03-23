@@ -89,7 +89,7 @@ from api.job_model.job_recommender import JobAppMatching
 from drf_yasg.utils import swagger_auto_schema
 from drf_yasg import openapi
 import snscrape.modules.twitter as sntwitter
-from .utils import cleanup_messages, cleanup_old_jobs
+from .utils import cleanup_messages, cleanup_old_jobs, cleanup_old_boostjobs
 
 # Activate the resend with the api key
 resend.api_key = settings.NEW_RESEND_API_KEY
@@ -3044,6 +3044,12 @@ def message_boost(request):
         # Create a unique boost ID
         boost_id = str(uuid.uuid4())[:8]  # Short unique ID
 
+        total_cost = BOOST_MESSAGE_COST * len(recipients_id)
+        # Check if wallet has sufficient balance
+        wallet = Wallet.objects.get(user=sender)
+        if not wallet.deduct(total_cost, f"Sent {len(recipients_id)} boost messages"):
+            return Response({"detail": "Insufficient wallet balance."}, status=402)
+
         # Create chat thread
         thread = BoostChatThread.objects.create(boost_id=boost_id, recruiter=sender)
 
@@ -3995,7 +4001,7 @@ def delete_boost_chat_message(request, message_id):
         properties={
             "plan": openapi.Schema(
                 type=openapi.TYPE_STRING,
-                description="Subscription plan: weekly or monthly",
+                description="Subscription plan: daily, weekly or monthly",
             )
         },
     ),
@@ -4034,11 +4040,13 @@ def subscribe_to_boost(request):
     plan = request.data.get("plan")
 
     PRICES = {
-        "weekly": Decimal("1500"),
-        "monthly": Decimal("6000"),
+        "daily": Decimal("200"),
+        "weekly": Decimal("100"),
+        "monthly": Decimal("4000"),
     }
 
     DURATIONS = {
+        "daily": 1,
         "weekly": 7,
         "monthly": 30,
     }
@@ -4253,8 +4261,16 @@ def post_boost_job(request):
 @api_view(["GET"])
 @permission_classes([AllowAny])
 def all_boost_jobs(request):
+    cleanup_old_boostjobs()
     jobs = BoostJobs.objects.all().order_by("-created_at")
-    serializer = BoostJobSerializer(jobs, many=True)
+    unlocked_boost_ids = set()
+    if request.user.is_authenticated:
+        unlocked_boost_ids = set(
+            BoostUnlock.objects.filter(user=request.user)
+            .values_list("boost_id", flat=True)
+        )
+        
+    serializer = BoostJobSerializer(jobs, many=True, context={"request": request, "unlocked_boost_ids": unlocked_boost_ids})
     return Response(serializer.data, status=status.HTTP_200_OK)
 
 
@@ -4382,6 +4398,15 @@ def update_boost_job(request, job_id):
     method="delete",
     operation_summary="Delete a Job boost",
     operation_description="Delete Boost Job by id",
+    manual_parameters=[
+        openapi.Parameter(
+            name="Authorization",
+            in_=openapi.IN_HEADER,
+            description="Bearer {token}",
+            type=openapi.TYPE_STRING,
+            required=True,
+        ),
+    ],
     responses={
         204: openapi.Response(
             description="Successful",
@@ -4488,7 +4513,7 @@ def delete_boost_job(request, job_id):
         ),
     },
 )
-@api_view(["POST", "PUT"])
+@api_view(["POST", "PUT", "PATCH"])
 @permission_classes([IsAuthenticated])
 def job_preference_view(request):
     user = request.user
@@ -4498,25 +4523,18 @@ def job_preference_view(request):
     except JobPreference.DoesNotExist:
         pref = None
 
-    if request.method == "GET":
-        if not pref:
-            return Response({"detail": "No preference set yet"}, status=404)
-
-        serializer = JobPreferenceSerializer(pref)
-        return Response(serializer.data)
-
-    # PUT / PATCH → Create or Update
     if pref:
         serializer = JobPreferenceSerializer(
             pref,
             data=request.data,
             partial=True if request.method == "PATCH" else False,
+            context={"request": request},
         )
     else:
-        serializer = JobPreferenceSerializer(data=request.data)
+        serializer = JobPreferenceSerializer(data=request.data, context={"request": request})
 
     if serializer.is_valid():
-        obj = serializer.save(user=user) if not pref else serializer.save()
+        obj = serializer.save()
         return Response(
             {
                 "message": "Preferences saved successfully",
@@ -4525,6 +4543,57 @@ def job_preference_view(request):
         )
 
     return Response(serializer.errors, status=400)
+
+@swagger_auto_schema(
+    method="get",
+    operation_summary="Get Job Preferences set by the user",
+    operation_description="This endpoint allows an authenticated user to get their job preferences.",
+    manual_parameters=[
+        openapi.Parameter(
+            name="Authorization",
+            in_=openapi.IN_HEADER,
+            description="Bearer {token}",
+            type=openapi.TYPE_STRING,
+            required=True,
+        ),
+    ],
+   
+    responses={
+        200: openapi.Response(
+            description="Preferences retrieved successfully",
+            examples={
+                "application/json": {
+                    "data": {
+                        "preferred_job_types": ["Full-time", "Contract"],
+                        "preferred_job_nature": ["Remote", "Hybrid"],
+                        "preferred_locations": ["Lagos", "Abuja", "London"],
+                        "preferred_experience": "Mid",
+                        "min_salary": 200000,
+                        "max_salary": 800000,
+                        "preferred_categories": ["Backend Developer"],
+                    },
+                }
+            },
+        ),
+        404: openapi.Response(
+            description="Not found",
+            examples={
+                "application/json": {
+                    "error": "preference data nto found",
+                }
+            },
+        ),
+    },
+)
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def get_preference(request):
+    try:
+        pref = JobPreference.objects.get(user=request.user)
+        serializer = JobPreferenceSerializer(pref)
+        return Response(serializer.data)
+    except JobPreference.DoesNotExist:
+        return Response({"detail": "No preference set yet"}, status=404)
 
 
 @swagger_auto_schema(
@@ -4548,17 +4617,30 @@ def job_preference_view(request):
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
 def recommended_boost_jobs(request):
+    cleanup_old_boostjobs()
     user = request.user
 
-    try:
-        preference = user.job_preference
-    except JobPreference.DoesNotExist:
-        preference = None
+    preference = getattr(user, "job_preference", None)
 
     # If no preferences → return all boost jobs
     if not preference:
-        jobs = BoostJobs.objects.all().order_by("-created_at")
-        serializer = BoostJobSerializer(jobs, many=True, context={"request": request})
+        jobs = (
+            BoostJobs.objects.select_related("owner")
+            .prefetch_related("job_skills", "job_categories")
+            .order_by("-created_at")[:50]
+        )
+        unlocked_boost_ids = set(
+            BoostUnlock.objects.filter(user=user).values_list("boost_id", flat=True)
+        )
+
+        serializer = BoostJobSerializer(
+            jobs,
+            many=True,
+            context={
+                "request": request,
+                "unlocked_boost_ids": unlocked_boost_ids,
+            },
+        )
         return Response({"results": serializer.data})
 
     matcher = JobAppMatching()
@@ -4570,7 +4652,20 @@ def recommended_boost_jobs(request):
         job.score = score  # attach dynamically
         jobs.append(job)
 
-    serializer = BoostJobSerializer(jobs, many=True, context={"request": request})
+    unlocked_boost_ids = set(
+        BoostUnlock.objects.filter(user=user).values_list("boost_id", flat=True)
+    )
+
+    serializer = BoostJobSerializer(
+        jobs,
+        many=True,
+        context={
+            "request": request,
+            "unlocked_boost_ids": set(
+                BoostUnlock.objects.filter(user=user).values_list("boost_id", flat=True)
+            ),
+        },
+    )
 
     return Response({"results": serializer.data})
 

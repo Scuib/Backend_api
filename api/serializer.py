@@ -339,7 +339,6 @@ class BoostJobSerializer(serializers.ModelSerializer):
     skills = serializers.SerializerMethodField(read_only=True)
     categories = serializers.SerializerMethodField(read_only=True)
     unlocked = serializers.SerializerMethodField(read_only=True)
-    application_link = serializers.SerializerMethodField(read_only=True)
     score = serializers.FloatField(read_only=True)
 
     class Meta:
@@ -437,14 +436,13 @@ class BoostJobSerializer(serializers.ModelSerializer):
         if not request or not request.user.is_authenticated:
             return False
 
-        return BoostUnlock.objects.filter(
-            boost_id=str(obj.id), user=request.user
-        ).exists()
+        unlocked_ids = self.context.get("unlocked_boost_ids", set())
+        return str(obj.id) in unlocked_ids
 
     def get_application_link(self, obj):
         request = self.context.get("request")
         if not request or not request.user.is_authenticated:
-            return None
+            return "Preview only. Pay ₦500 to unlock application details."
 
         if BoostUnlock.objects.filter(boost_id=str(obj.id), user=request.user).exists():
             return obj.application_link

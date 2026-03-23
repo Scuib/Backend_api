@@ -125,6 +125,7 @@ urlpatterns = [
         name="delete-boost-job",
     ),
     path("preferences/job/", views.job_preference_view, name="job-preference"),
+    path("preferences/", views.get_preference, name="get-preference"),
     path(
         "boost/recommended-jobs/",
         views.recommended_boost_jobs,
