@@ -88,7 +88,8 @@ from api.job_model.job_recommender import JobAppMatching
 
 from drf_yasg.utils import swagger_auto_schema
 from drf_yasg import openapi
-import snscrape.modules.twitter as sntwitter
+
+# import snscrape.modules.twitter as sntwitter  # Incompatible with Python 3.13
 from .utils import cleanup_messages, cleanup_old_jobs, cleanup_old_boostjobs
 
 # Activate the resend with the api key
@@ -223,7 +224,10 @@ def resend_verify_email(request):
 
         key, exp = VerifyEmail_key(user.id)
 
-        return Response({"detail": {"name": user.first_name, "key": key, "expires": exp}}, status=status.HTTP_201_CREATED)  # type: ignore
+        return Response(
+            {"detail": {"name": user.first_name, "key": key, "expires": exp}},
+            status=status.HTTP_201_CREATED,
+        )  # type: ignore
     except:
         return Response("Email does not exist", status=status.HTTP_400_BAD_REQUEST)
 
@@ -3593,6 +3597,8 @@ def transaction_history(request):
 @permission_classes([AllowAny])
 def fetch_twitter_jobs(limit=50):
     """Fetch jobs from twitter via scraping"""
+    import snscrape.modules.twitter as sntwitter
+
     query = "#hiring OR #remotejobs OR #techjobs lang:en"
     tweets = sntwitter.TwitterSearchScraper(query).get_items()
 
@@ -4266,11 +4272,16 @@ def all_boost_jobs(request):
     unlocked_boost_ids = set()
     if request.user.is_authenticated:
         unlocked_boost_ids = set(
-            BoostUnlock.objects.filter(user=request.user)
-            .values_list("boost_id", flat=True)
+            BoostUnlock.objects.filter(user=request.user).values_list(
+                "boost_id", flat=True
+            )
         )
-        
-    serializer = BoostJobSerializer(jobs, many=True, context={"request": request, "unlocked_boost_ids": unlocked_boost_ids})
+
+    serializer = BoostJobSerializer(
+        jobs,
+        many=True,
+        context={"request": request, "unlocked_boost_ids": unlocked_boost_ids},
+    )
     return Response(serializer.data, status=status.HTTP_200_OK)
 
 
@@ -4531,7 +4542,9 @@ def job_preference_view(request):
             context={"request": request},
         )
     else:
-        serializer = JobPreferenceSerializer(data=request.data, context={"request": request})
+        serializer = JobPreferenceSerializer(
+            data=request.data, context={"request": request}
+        )
 
     if serializer.is_valid():
         obj = serializer.save()
@@ -4543,6 +4556,7 @@ def job_preference_view(request):
         )
 
     return Response(serializer.errors, status=400)
+
 
 @swagger_auto_schema(
     method="get",
@@ -4557,7 +4571,6 @@ def job_preference_view(request):
             required=True,
         ),
     ],
-   
     responses={
         200: openapi.Response(
             description="Preferences retrieved successfully",
