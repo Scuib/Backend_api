@@ -98,7 +98,16 @@ WSGI_APPLICATION = "scuibai.wsgi.application"
 # }
 
 # MAIN DATABASE
-DATABASES = {"default": dj_database_url.parse(os.getenv("DATABASE_URL"))}
+DATABASES = {
+    "default": {
+        "ENGINE": "django.db.backends.postgresql",
+        "NAME": os.getenv("POSTGRES_DB", "scuibai"),
+        "USER": os.getenv("POSTGRES_USER", "scuibai"),
+        "PASSWORD": os.getenv("POSTGRES_PASSWORD", "scuibai_password"),
+        "HOST": os.getenv("POSTGRES_HOST", "db"),
+        "PORT": os.getenv("POSTGRES_PORT", "5432"),
+    }
+}
 
 AUTH_PASSWORD_VALIDATORS = [
     {
@@ -239,4 +248,3 @@ NEW_RESEND_API_KEY = os.getenv("NEW_RESEND_API_KEY")
 NEW_GOOGLE_CLIENT_ID = os.getenv("NEW_CLIENT_ID")
 NEW_GOOGLE_CLIENT_SECRET = os.getenv("NEW_CLIENT_SECRET")
 SOCIAL_SECRET_KEY = os.getenv("SOCIAL_SECRET_KEY")
-

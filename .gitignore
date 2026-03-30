@@ -1,7 +1,10 @@
 .env
 **/__pycache__/
 db.sqlite3
+temp_auto_push.bat
 env/
 **/migrations/
 *.pyc
 newenv/
+.gitignore
+branch_structure.json
