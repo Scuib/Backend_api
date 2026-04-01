@@ -2,7 +2,7 @@ services:
   - type: web
     name: scuibai
     env: python
-    buildCommand: pip install -r requirements.txt
+    buildCommand: pip install -r requirements.txt && python manage.py makemigrations api && python manage.py migrate
     startCommand: gunicorn scuibai.wsgi:application
     envVars:
       - key: SECRET_KEY
@@ -10,11 +10,7 @@ services:
       - key: DEBUG
         value: "False"
       - key: DATABASE_URL
-        fromDatabase:
-          name: scuibai-db
-          property: connectionString
-      - key: DISABLE_COLLECTSTATIC
-        value: "1"
+        sync: false
       - key: CLOUD_NAME
         sync: false
       - key: API_KEY
@@ -38,10 +34,4 @@ services:
       - key: PAYSTACK_SECRET_KEY
         sync: false
       - key: ALLOWED_HOSTS
-        value: "scuibai.onrender.com"
-
-databases:
-  - name: scuibai-db
-    plan: free
-    databaseName: scuibai
-    user: scuibai
+        value: "*"
