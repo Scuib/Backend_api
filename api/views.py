@@ -99,8 +99,18 @@ BOOST_MESSAGE_COST = 300  # Naira
 UNLOCK_PRICE = 20
 
 
+@api_view(["GET"])
+@permission_classes([AllowAny])
 def home(request):
-    return render(request, "home.html")
+    return Response(
+        {
+            "message": "Welcome to the Scuibai Backend API",
+            "version": "v1",
+            "docs": "/swagger/",
+            "redoc": "/redoc/",
+        },
+        status=status.HTTP_200_OK,
+    )
 
 
 def generate_reference():

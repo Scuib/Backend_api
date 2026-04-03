@@ -4,7 +4,7 @@ from rest_framework_simplejwt.views import TokenRefreshView
 
 
 urlpatterns = [
-    # path('', views.home, name='home'),
+    path("", views.home, name="home"),
     path("auth/register/", views.register, name="register"),
     path(
         "auth/resend-verify-email/",
