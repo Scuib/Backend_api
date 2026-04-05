@@ -30,6 +30,8 @@ INSTALLED_APPS = [
     "django.contrib.sessions",
     "django.contrib.messages",
     "django.contrib.staticfiles",
+    # local app (custom user model - must be first)
+    "api",
     # corsheader
     "corsheaders",
     # rest-framework
@@ -45,8 +47,6 @@ INSTALLED_APPS = [
     # allauth social accounts
     "allauth.socialaccount",
     "allauth.socialaccount.providers.google",
-    # local app
-    "api",
     # cloudinary
     "cloudinary",
     "cloudinary_storage",
