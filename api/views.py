@@ -164,14 +164,28 @@ def register(request):
         try:
             r = resend.Emails.send(params)
         except Exception as e:
-            print(f"Error: {e}")
-            user.delete()
-            return Response(
-                {
-                    "message": "Registration Failed: Failed to send OTP. Please try again"
-                },
-                status=status.HTTP_501_NOT_IMPLEMENTED,
-            )
+            print(f"Resend Error: {e}")
+            # Fallback to Django email backend for local testing
+            try:
+                from django.core.mail import EmailMultiAlternatives
+
+                email = EmailMultiAlternatives(
+                    subject="VERIFY YOUR EMAIL",
+                    body=html,
+                    from_email="Scuibai <noreply@scuib.com>",
+                    to=[user.email],
+                )
+                email.content_subtype = "html"
+                email.send()
+            except Exception as django_email_error:
+                print(f"Django Email Error: {django_email_error}")
+                user.delete()
+                return Response(
+                    {
+                        "message": "Registration Failed: Failed to send OTP. Please try again"
+                    },
+                    status=status.HTTP_501_NOT_IMPLEMENTED,
+                )
         return Response(
             {
                 "message": "User Registered Successfully, Check email for otp code",
