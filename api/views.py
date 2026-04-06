@@ -164,9 +164,14 @@ def register(request):
         try:
             r = resend.Emails.send(params)
         except Exception as e:
-            print(f"Resend Error: {e}")
-            # Don't fail registration if email sending fails
-            # OTP is still returned in the response for manual verification
+            print(f"Error: {e}")
+            user.delete()
+            return Response(
+                {
+                    "message": "Registration Failed: Failed to send OTP. Please try again"
+                },
+                status=status.HTTP_501_NOT_IMPLEMENTED,
+            )
 
         return Response(
             {
