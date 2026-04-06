@@ -105,7 +105,7 @@ DATABASES = {
             "DATABASE_URL",
             f"postgresql://{os.getenv('POSTGRES_USER', 'scuibai')}:{os.getenv('POSTGRES_PASSWORD', 'scuibai_password')}@{os.getenv('POSTGRES_HOST', 'db')}:{os.getenv('POSTGRES_PORT', '5432')}/{os.getenv('POSTGRES_DB', 'scuibai')}",
         ),
-        conn_max_age=600,
+        conn_max_age=0,
         ssl_require=True,
     )
 }
