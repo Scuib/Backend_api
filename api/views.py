@@ -179,13 +179,10 @@ def register(request):
                 email.send()
             except Exception as django_email_error:
                 print(f"Django Email Error: {django_email_error}")
-                user.delete()
-                return Response(
-                    {
-                        "message": "Registration Failed: Failed to send OTP. Please try again"
-                    },
-                    status=status.HTTP_501_NOT_IMPLEMENTED,
-                )
+                # Don't fail registration if email sending fails
+                # User can still verify manually with the OTP returned
+                pass
+
         return Response(
             {
                 "message": "User Registered Successfully, Check email for otp code",
