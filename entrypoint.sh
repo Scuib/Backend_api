@@ -1,7 +1,10 @@
 #!/bin/bash
 set -e
 
-echo "Running migrations..."
+echo "Running api migrations first (custom user model)..."
+python manage.py migrate api --noinput
+
+echo "Running remaining migrations..."
 python manage.py migrate --noinput
 
 echo "Starting Gunicorn..."
