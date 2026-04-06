@@ -165,23 +165,8 @@ def register(request):
             r = resend.Emails.send(params)
         except Exception as e:
             print(f"Resend Error: {e}")
-            # Fallback to Django email backend for local testing
-            try:
-                from django.core.mail import EmailMultiAlternatives
-
-                email = EmailMultiAlternatives(
-                    subject="VERIFY YOUR EMAIL",
-                    body=html,
-                    from_email="Scuibai <noreply@scuib.com>",
-                    to=[user.email],
-                )
-                email.content_subtype = "html"
-                email.send()
-            except Exception as django_email_error:
-                print(f"Django Email Error: {django_email_error}")
-                # Don't fail registration if email sending fails
-                # User can still verify manually with the OTP returned
-                pass
+            # Don't fail registration if email sending fails
+            # OTP is still returned in the response for manual verification
 
         return Response(
             {
