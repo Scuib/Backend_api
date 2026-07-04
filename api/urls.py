@@ -1,5 +1,10 @@
 from django.urls import path
 from . import views
+from .job_handoff_views import (
+    ingest_job_and_match,
+    list_ingested_jobs,
+    get_ingested_job_matches,
+)
 from rest_framework_simplejwt.views import TokenRefreshView
 
 
@@ -135,5 +140,21 @@ urlpatterns = [
         "boost-jobs/<int:boost_id>/unlock/",
         views.unlock_boost_job,
         name="unlock-boost-job",
+    ),
+    # ─── Job ingestion handoff (from ScuibJobsAi pipeline) ────────────────
+    path(
+        "jobs/ingest/",
+        ingest_job_and_match,
+        name="ingest-job-and-match",
+    ),
+    path(
+        "jobs/ingested/",
+        list_ingested_jobs,
+        name="list-ingested-jobs",
+    ),
+    path(
+        "jobs/ingested/<int:job_id>/matches/",
+        get_ingested_job_matches,
+        name="ingested-job-matches",
     ),
 ]

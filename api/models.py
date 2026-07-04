@@ -508,3 +508,46 @@ class JobPreference(models.Model):
 
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
+
+
+class IngestedJob(models.Model):
+    source_job_id = models.CharField(max_length=255, unique=True)
+    title = models.CharField(max_length=255)
+    company = models.CharField(max_length=255, null=True, blank=True)
+    location = models.CharField(max_length=255, null=True, blank=True)
+    remote = models.BooleanField(default=False)
+    salary_min = models.IntegerField(null=True, blank=True)
+    salary_max = models.IntegerField(null=True, blank=True)
+    salary_currency = models.CharField(max_length=10, default="USD")
+    required_skills = models.JSONField(default=list)
+    preferred_skills = models.JSONField(default=list)
+    years_experience = models.IntegerField(null=True, blank=True)
+    employment_type = models.CharField(max_length=50, null=True, blank=True)
+    description = models.TextField(null=True, blank=True)
+    source = models.CharField(max_length=50)
+    raw_payload = models.JSONField(default=dict)
+    status = models.CharField(max_length=20, default="pending")
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+
+
+class MatchResult(models.Model):
+    ingested_job = models.ForeignKey(
+        IngestedJob, on_delete=models.CASCADE, related_name="matches"
+    )
+    user_id = models.IntegerField()
+    user_name = models.CharField(max_length=255)
+    user_email = models.EmailField(null=True, blank=True)
+    match_score = models.FloatField()
+    skills = models.TextField(blank=True)
+    location = models.CharField(max_length=255, null=True, blank=True)
+    years_of_experience = models.IntegerField(null=True, blank=True)
+    experience_level = models.CharField(max_length=50, null=True, blank=True)
+    salary_range = models.CharField(max_length=255, null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-match_score"]
