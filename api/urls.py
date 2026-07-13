@@ -5,6 +5,7 @@ from .job_handoff_views import (
     list_ingested_jobs,
     get_ingested_job_matches,
     recommend_jobs_for_user,
+    my_matched_jobs,
 )
 from rest_framework_simplejwt.views import TokenRefreshView
 
@@ -162,5 +163,10 @@ urlpatterns = [
         "jobs/recommend/",
         recommend_jobs_for_user,
         name="recommend-jobs-for-user",
+    ),
+    path(
+        "jobs/my-matches/",
+        my_matched_jobs,
+        name="my-matched-jobs",
     ),
 ]

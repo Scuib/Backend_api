@@ -266,3 +266,36 @@ def recommend_jobs_for_user(request):
     recommendations = matcher.recommend_jobs(user_profile, job_df)
 
     return Response({"recommended_jobs": recommendations})
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def my_matched_jobs(request):
+    """Returns all ingested jobs that were matched to the authenticated user."""
+    user = request.user
+    matches = MatchResult.objects.filter(user_id=user.id).select_related("ingested_job")
+
+    results = []
+    for m in matches:
+        job = m.ingested_job
+        results.append({
+            "match_id": m.id,
+            "match_score": m.match_score,
+            "job": {
+                "id": job.id,
+                "title": job.title,
+                "company": job.company,
+                "location": job.location,
+                "remote": job.remote,
+                "salary_min": job.salary_min,
+                "salary_max": job.salary_max,
+                "salary_currency": job.salary_currency,
+                "required_skills": job.required_skills,
+                "preferred_skills": job.preferred_skills,
+                "years_experience": job.years_experience,
+                "employment_type": job.employment_type,
+            },
+            "matched_at": m.created_at.isoformat() if hasattr(m, "created_at") else None,
+        })
+
+    return Response({"matches": results})
