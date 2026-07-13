@@ -253,8 +253,8 @@ def recommend_jobs_for_user(request):
         "skills": skills_list,
         "experience": (profile.experience_level or "entry").lower(),
         "location": (profile.location or "").lower(),
-        "min_salary": profile.min_salary or 0,
-        "max_salary": profile.max_salary or 0,
+        "min_salary": [profile.min_salary or 0],
+        "max_salary": [profile.max_salary or 0],
     }
 
     jobs_qs = IngestedJob.objects.filter(status="matched")
