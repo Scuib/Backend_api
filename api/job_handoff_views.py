@@ -1,11 +1,11 @@
 import logging
 import pandas as pd
 from rest_framework.decorators import api_view, permission_classes
-from rest_framework.permissions import AllowAny
+from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework import status
 
-from .models import IngestedJob, MatchResult
+from .models import IngestedJob, MatchResult, Profile
 from .job_model.job_recommender import JobAppMatching
 
 logger = logging.getLogger(__name__)
@@ -35,6 +35,22 @@ def _infer_experience_level(years):
     elif years >= 2:
         return "mid"
     return "entry"
+
+
+def _ingested_jobs_to_dataframe(jobs):
+    rows = []
+    for j in jobs:
+        skills = ";".join((j.required_skills or []) + (j.preferred_skills or []))
+        rows.append({
+            "title": j.title,
+            "owner": j.company or "",
+            "location": (j.location or "").lower(),
+            "experience_level": _infer_experience_level(j.years_experience),
+            "skills": skills,
+            "min_salary": j.salary_min or 0,
+            "max_salary": j.salary_max or 0,
+        })
+    return pd.DataFrame(rows) if rows else pd.DataFrame()
 
 
 @api_view(["POST"])
@@ -166,6 +182,16 @@ def list_ingested_jobs(request):
                     "title": j.title,
                     "company": j.company,
                     "location": j.location,
+                    "remote": j.remote,
+                    "salary_min": j.salary_min,
+                    "salary_max": j.salary_max,
+                    "salary_currency": j.salary_currency,
+                    "required_skills": j.required_skills,
+                    "preferred_skills": j.preferred_skills,
+                    "years_experience": j.years_experience,
+                    "employment_type": j.employment_type,
+                    "description": j.description,
+                    "source": j.source,
                     "status": j.status,
                     "match_count": j.matches.count(),
                     "created_at": j.created_at.isoformat(),
@@ -206,3 +232,37 @@ def get_ingested_job_matches(request, job_id):
             ],
         }
     )
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def recommend_jobs_for_user(request):
+    """
+    Recommends ingested jobs to the authenticated user.
+    Uses recommend_jobs() — matches user's profile against all ingested jobs.
+    """
+    user = request.user
+    skills_list = list(user.user_skills.values_list("name", flat=True))
+
+    try:
+        profile = user.profile
+    except Profile.DoesNotExist:
+        return Response({"error": "Profile not found"}, status=status.HTTP_404_NOT_FOUND)
+
+    user_profile = {
+        "skills": skills_list,
+        "experience": (profile.experience_level or "entry").lower(),
+        "location": (profile.location or "").lower(),
+        "min_salary": profile.min_salary or 0,
+        "max_salary": profile.max_salary or 0,
+    }
+
+    jobs_qs = IngestedJob.objects.filter(status="matched")
+    job_df = _ingested_jobs_to_dataframe(jobs_qs)
+    if job_df.empty:
+        return Response({"recommended_jobs": []})
+
+    matcher = JobAppMatching()
+    recommendations = matcher.recommend_jobs(user_profile, job_df)
+
+    return Response({"recommended_jobs": recommendations})

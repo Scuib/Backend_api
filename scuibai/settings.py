@@ -99,16 +99,25 @@ WSGI_APPLICATION = "scuibai.wsgi.application"
 # }
 
 # MAIN DATABASE
-DATABASES = {
-    "default": dj_database_url.config(
-        default=os.getenv(
-            "DATABASE_URL",
-            f"postgresql://{os.getenv('POSTGRES_USER', 'scuibai')}:{os.getenv('POSTGRES_PASSWORD', 'scuibai_password')}@{os.getenv('POSTGRES_HOST', 'db')}:{os.getenv('POSTGRES_PORT', '5432')}/{os.getenv('POSTGRES_DB', 'scuibai')}",
-        ),
-        conn_max_age=0,
-        ssl_require=True,
-    )
-}
+db_url = os.getenv("DATABASE_URL", "")
+if os.getenv("USE_SQLITE") == "True" or db_url.startswith("sqlite:"):
+    DATABASES = {
+        "default": {
+            "ENGINE": "django.db.backends.sqlite3",
+            "NAME": db_url.replace("sqlite:///", "") if db_url else BASE_DIR / "db.sqlite3",
+        }
+    }
+else:
+    DATABASES = {
+        "default": dj_database_url.config(
+            default=os.getenv(
+                "DATABASE_URL",
+                f"postgresql://{os.getenv('POSTGRES_USER', 'scuibai')}:{os.getenv('POSTGRES_PASSWORD', 'scuibai_password')}@{os.getenv('POSTGRES_HOST', 'db')}:{os.getenv('POSTGRES_PORT', '5432')}/{os.getenv('POSTGRES_DB', 'scuibai')}",
+            ),
+            conn_max_age=0,
+            ssl_require=True,
+        )
+    }
 
 AUTH_PASSWORD_VALIDATORS = [
     {
