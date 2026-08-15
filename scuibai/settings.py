@@ -221,6 +221,7 @@ CORS_ALLOWED_ORIGINS = [
     "https://www.scuib.com",
     "http://localhost",
     "http://localhost:3000",
+    "https://waits.vercel.app",
 ]
 CORS_ALLOW_CREDENTIALS = True
 
