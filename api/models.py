@@ -203,7 +203,7 @@ class Jobs(models.Model):
     owner = models.ForeignKey(User, on_delete=models.CASCADE, related_name="jobs")
     title = models.CharField(max_length=50)
     description = models.TextField()
-    location = models.CharField(max_length=255)
+    location = models.CharField(max_length=1000)
     categories = models.ManyToManyField(
         "UserCategories", related_name="jobs", blank=True
     )
@@ -511,10 +511,10 @@ class JobPreference(models.Model):
 
 
 class IngestedJob(models.Model):
-    source_job_id = models.CharField(max_length=255, unique=True)
-    title = models.CharField(max_length=255)
-    company = models.CharField(max_length=255, null=True, blank=True)
-    location = models.CharField(max_length=255, null=True, blank=True)
+    source_job_id = models.CharField(max_length=1000, unique=True)
+    title = models.CharField(max_length=500)
+    company = models.CharField(max_length=500, null=True, blank=True)
+    location = models.CharField(max_length=1000, null=True, blank=True)
     remote = models.BooleanField(default=False)
     salary_min = models.IntegerField(null=True, blank=True)
     salary_max = models.IntegerField(null=True, blank=True)
