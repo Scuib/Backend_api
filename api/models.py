@@ -426,9 +426,27 @@ class BoostSubscription(models.Model):
     start_date = models.DateTimeField(auto_now_add=True)
     end_date = models.DateTimeField()
     active = models.BooleanField(default=True)
+    auto_renew = models.BooleanField(default=True)
 
     def is_active(self):
         return self.active and timezone.now() <= self.end_date
+
+
+class UserCard(models.Model):
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="cards")
+    authorization_code = models.CharField(max_length=100)
+    card_type = models.CharField(max_length=50, blank=True, null=True)
+    last4 = models.CharField(max_length=4, blank=True, null=True)
+    exp_month = models.CharField(max_length=2, blank=True, null=True)
+    exp_year = models.CharField(max_length=4, blank=True, null=True)
+    brand = models.CharField(max_length=50, blank=True, null=True)
+    bank = models.CharField(max_length=100, blank=True, null=True)
+    signature = models.CharField(max_length=100, blank=True, null=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    is_active = models.BooleanField(default=True)
+
+    def __str__(self):
+        return f"{self.user.email} - {self.brand} **** {self.last4}"
 
 
 class BoostJobs(models.Model):

@@ -41,6 +41,7 @@ from .models import (
     Wallet,
     WalletTransaction,
     JobTweet,
+    UserCard,
 )
 
 from .serializer import (
@@ -3366,6 +3367,26 @@ def verify_payment(request, reference):
         if txn.status == "success":
             return Response({"message": "Transaction already verified."})
 
+        # Save reusable authorization (e.g. card)
+        auth = result["data"].get("authorization", {})
+        if auth and auth.get("reusable"):
+            signature = auth.get("signature")
+            # Deactivate other cards if we only want one active card, or just save/update this card
+            UserCard.objects.update_or_create(
+                user=request.user,
+                signature=signature,
+                defaults={
+                    "authorization_code": auth.get("authorization_code"),
+                    "card_type": auth.get("card_type"),
+                    "last4": auth.get("last4"),
+                    "exp_month": auth.get("exp_month"),
+                    "exp_year": auth.get("exp_year"),
+                    "brand": auth.get("brand"),
+                    "bank": auth.get("bank"),
+                    "is_active": True,
+                }
+            )
+
         wallet.balance += amount_paid
         wallet.save()
 
@@ -4154,10 +4175,70 @@ def my_subscription(request):
                 "active": bool(sub.is_active()),
                 "plan": str(sub.plan),
                 "expires": sub.end_date,
+                "auto_renew": sub.auto_renew,
             }
         )
     except BoostSubscription.DoesNotExist:
-        return Response({"active": False})
+        return Response({"active": False, "auto_renew": False})
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def list_saved_cards(request):
+    """
+    List user's active saved cards.
+    """
+    cards = UserCard.objects.filter(user=request.user, is_active=True).order_by("-created_at")
+    data = [
+        {
+            "id": card.id,
+            "card_type": card.card_type,
+            "last4": card.last4,
+            "exp_month": card.exp_month,
+            "exp_year": card.exp_year,
+            "brand": card.brand,
+            "bank": card.bank,
+            "created_at": card.created_at,
+        }
+        for card in cards
+    ]
+    return Response(data)
+
+
+@api_view(["DELETE"])
+@permission_classes([IsAuthenticated])
+def delete_saved_card(request, card_id):
+    """
+    Delete / Deactivate a saved card.
+    """
+    card = get_object_or_404(UserCard, id=card_id, user=request.user, is_active=True)
+    card.is_active = False
+    card.save()
+    return Response({"detail": "Card deleted successfully"}, status=200)
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def toggle_auto_renew(request):
+    """
+    Toggle auto renewal for user's boost subscription.
+    """
+    try:
+        sub = BoostSubscription.objects.get(user=request.user)
+    except BoostSubscription.DoesNotExist:
+        return Response({"detail": "No active boost subscription found"}, status=404)
+
+    auto_renew = request.data.get("auto_renew")
+    if auto_renew is not None:
+        sub.auto_renew = bool(auto_renew)
+    else:
+        sub.auto_renew = not sub.auto_renew
+    sub.save()
+
+    return Response({
+        "detail": f"Auto renewal is now {'enabled' if sub.auto_renew else 'disabled'}",
+        "auto_renew": sub.auto_renew
+    })
 
 
 @swagger_auto_schema(
