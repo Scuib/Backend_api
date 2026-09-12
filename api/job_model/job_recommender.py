@@ -3,7 +3,7 @@ import pandas as pd
 from sklearn.metrics.pairwise import cosine_similarity
 import numpy as np
 from sklearn.feature_extraction.text import TfidfVectorizer
-from ..models import BoostJobs, JobPreference, Jobs, User, UserSkills, Profile
+from ..models import BoostJobs, JobPreference, Jobs, User, UserSkills, Profile, IngestedJob
 import time
 import heapq
 
@@ -536,3 +536,438 @@ class JobAppMatching:
         top = heapq.nlargest(limit, scored, key=lambda x: x[0])
 
         return [(job, score) for score, job in top]
+
+    def load_ingested_jobs_from_db(self):
+        jobs = (
+            IngestedJob.objects
+            .filter(status="matched")
+            .values(
+                "id",
+                "source_job_id",
+                "title",
+                "company",
+                "location",
+                "remote",
+                "salary_min",
+                "salary_max",
+                "salary_currency",
+                "required_skills",
+                "preferred_skills",
+                "years_experience",
+                "employment_type",
+                "source",
+            )
+        )
+
+        job_data = []
+
+        for job in jobs:
+            required = job["required_skills"] or []
+            preferred = job["preferred_skills"] or []
+
+            skills = list(dict.fromkeys(
+                str(skill).strip().lower()
+                for skill in (*required, *preferred)
+                if skill
+            ))
+
+            job_data.append({
+                "job_id": job["id"],
+                "source_job_id": job["source_job_id"],
+                "title": job["title"] or "",
+                "company": job["company"] or "",
+                "location": str(job["location"] or "").lower().strip(),
+                "remote": bool(job["remote"]),
+                "skills": ";".join(skills),
+                "years_of_experience": job["years_experience"],
+                "employment_type": (
+                    str(job["employment_type"] or "").lower().strip()
+                ),
+                "min_salary": job["salary_min"],
+                "max_salary": job["salary_max"],
+                "currency_type": job["salary_currency"] or "",
+                "source": job["source"] or "",
+                "description": "",
+            })
+
+        return pd.DataFrame(job_data)
+    
+    def recommend_ingested_jobs(self, preferences, job_data, limit=20):
+        if job_data.empty:
+            return []
+
+        # ---------------------------------------------------------
+        # USER PREFERENCES
+        # ---------------------------------------------------------
+
+        preferred_job_types = {
+            str(x).lower().strip()
+            for x in (preferences.preferred_job_types or [])
+            if x
+        }
+
+        preferred_nature = {
+            str(x).lower().strip()
+            for x in (preferences.preferred_job_nature or [])
+            if x
+        }
+
+        preferred_locations = {
+            str(x).lower().strip()
+            for x in (preferences.preferred_locations or [])
+            if x
+        }
+
+        preferred_experience = {
+            str(x).lower().strip()
+            for x in (preferences.preferred_experience or [])
+            if x
+        }
+
+        preferred_skills = {
+            skill.name.lower().strip()
+            for skill in preferences.preferred_skills.all()
+            if skill.name
+        }
+
+        user_min_salary = preferences.min_salary or 0
+        user_max_salary = preferences.max_salary or 0
+
+        # ---------------------------------------------------------
+        # COPY + NORMALIZE
+        # ---------------------------------------------------------
+
+        job_data = job_data.copy()
+
+        job_data["skills"] = (
+            job_data["skills"]
+            .fillna("")
+            .astype(str)
+            .str.lower()
+            .str.strip()
+        )
+
+        job_data["title"] = (
+            job_data["title"]
+            .fillna("")
+            .astype(str)
+            .str.lower()
+            .str.strip()
+        )
+
+        job_data["description"] = (
+            job_data["description"]
+            .fillna("")
+            .astype(str)
+            .str.lower()
+        )
+
+        job_data["location"] = (
+            job_data["location"]
+            .fillna("")
+            .astype(str)
+            .str.lower()
+            .str.strip()
+        )
+
+        job_data["employment_type"] = (
+            job_data["employment_type"]
+            .fillna("")
+            .astype(str)
+            .str.lower()
+            .str.strip()
+        )
+
+        job_data["min_salary"] = pd.to_numeric(
+            job_data["min_salary"],
+            errors="coerce"
+        )
+
+        job_data["max_salary"] = pd.to_numeric(
+            job_data["max_salary"],
+            errors="coerce"
+        )
+
+        # ---------------------------------------------------------
+        # 1. HARD SKILL FILTER
+        # ---------------------------------------------------------
+        #
+        # If the user selected skills, a job MUST contain at least
+        # one of those skills.
+        #
+        # Example:
+        # preferred_skills = {"python"}
+        #
+        # React-only jobs will be removed completely.
+        # ---------------------------------------------------------
+
+        if preferred_skills:
+
+            def has_preferred_skill(row):
+                text = f"{row['skills']} {row['title']} {row['description']}"
+
+                return any(
+                    skill in text
+                    for skill in preferred_skills
+                )
+
+            skill_mask = job_data.apply(
+                has_preferred_skill,
+                axis=1
+            )
+
+            job_data = job_data[skill_mask].copy()
+
+            if job_data.empty:
+                return []
+
+        # ---------------------------------------------------------
+        # 2. SKILL SCORE
+        # ---------------------------------------------------------
+
+        if preferred_skills:
+
+            def calculate_skill_score(row):
+                text = f"{row['skills']} {row['title']} {row['description']}"
+
+                matched = sum(
+                    1
+                    for skill in preferred_skills
+                    if skill in text
+                )
+
+                return matched / len(preferred_skills)
+
+            job_data["skill_score"] = job_data.apply(
+                calculate_skill_score,
+                axis=1
+            )
+
+        else:
+            job_data["skill_score"] = 0.0
+
+        # ---------------------------------------------------------
+        # 3. JOB TYPE
+        # ---------------------------------------------------------
+
+        if preferred_job_types:
+
+            job_type_pattern = "|".join(
+                re.escape(x)
+                for x in preferred_job_types
+            )
+
+            job_data["job_type_score"] = (
+                job_data["employment_type"]
+                .str.contains(
+                    job_type_pattern,
+                    regex=True,
+                    na=False
+                )
+                .astype(float)
+            )
+
+        else:
+            job_data["job_type_score"] = 0.0
+
+        # ---------------------------------------------------------
+        # 4. JOB NATURE
+        # ---------------------------------------------------------
+
+        if preferred_nature:
+
+            remote_requested = any(
+                x in {"remote", "fully remote"}
+                for x in preferred_nature
+            )
+
+            hybrid_requested = "hybrid" in preferred_nature
+
+            onsite_requested = any(
+                x in {"onsite", "on-site", "on site"}
+                for x in preferred_nature
+            )
+
+            nature_score = np.zeros(len(job_data))
+
+            if remote_requested:
+                nature_score = (
+                    job_data["remote"]
+                    | job_data["location"].str.contains(
+                        "remote",
+                        na=False
+                    )
+                ).astype(float).to_numpy()
+
+            elif hybrid_requested:
+                nature_score = (
+                    job_data["location"]
+                    .str.contains("hybrid", na=False)
+                ).astype(float).to_numpy()
+
+            elif onsite_requested:
+                nature_score = (
+                    ~job_data["remote"].astype(bool)
+                ).astype(float).to_numpy()
+
+            job_data["nature_score"] = nature_score
+
+        else:
+            job_data["nature_score"] = 0.0
+
+        # ---------------------------------------------------------
+        # 5. LOCATION
+        # ---------------------------------------------------------
+
+        if preferred_locations:
+
+            location_score = np.zeros(len(job_data))
+
+            for location in preferred_locations:
+                location_score = np.maximum(
+                    location_score,
+                    job_data["location"]
+                    .str.contains(
+                        re.escape(location),
+                        na=False
+                    )
+                    .astype(float)
+                    .to_numpy()
+                )
+
+            job_data["location_score"] = location_score
+
+        else:
+            job_data["location_score"] = 0.0
+
+        # ---------------------------------------------------------
+        # 6. EXPERIENCE
+        # ---------------------------------------------------------
+
+        if preferred_experience:
+
+            years = (
+                pd.to_numeric(
+                    job_data["years_of_experience"],
+                    errors="coerce"
+                )
+                .fillna(-1)
+            )
+
+            experience_score = np.zeros(len(job_data))
+
+            if "entry" in preferred_experience:
+                experience_score = np.maximum(
+                    experience_score,
+                    ((years >= 0) & (years <= 1)).astype(float)
+                )
+
+            if "mid" in preferred_experience:
+                experience_score = np.maximum(
+                    experience_score,
+                    ((years >= 2) & (years <= 4)).astype(float)
+                )
+
+            if "senior" in preferred_experience:
+                experience_score = np.maximum(
+                    experience_score,
+                    ((years >= 5) & (years <= 7)).astype(float)
+                )
+
+            if "lead" in preferred_experience:
+                experience_score = np.maximum(
+                    experience_score,
+                    (years >= 8).astype(float)
+                )
+
+            job_data["experience_score"] = experience_score
+
+        else:
+            job_data["experience_score"] = 0.0
+
+        # ---------------------------------------------------------
+        # 7. SALARY
+        # ---------------------------------------------------------
+
+        if user_min_salary or user_max_salary:
+
+            job_min = job_data["min_salary"].fillna(0)
+            job_max = job_data["max_salary"].fillna(job_min)
+
+            salary_score = (
+                (job_min <= user_max_salary)
+                & (job_max >= user_min_salary)
+                & (
+                    job_data["min_salary"].notna()
+                    | job_data["max_salary"].notna()
+                )
+            ).astype(float)
+
+            job_data["salary_score"] = salary_score
+
+        else:
+            job_data["salary_score"] = 0.0
+
+        # ---------------------------------------------------------
+        # FINAL SCORE
+        # ---------------------------------------------------------
+
+        job_data["match_score"] = (
+            (job_data["skill_score"] * 0.40)
+            + (job_data["job_type_score"] * 0.15)
+            + (job_data["nature_score"] * 0.15)
+            + (job_data["location_score"] * 0.10)
+            + (job_data["experience_score"] * 0.10)
+            + (job_data["salary_score"] * 0.10)
+        )
+
+        # ---------------------------------------------------------
+        # SORT
+        # ---------------------------------------------------------
+
+        matched = (
+            job_data
+            .nlargest(limit, "match_score")
+        )
+
+        # ---------------------------------------------------------
+        # RESPONSE
+        # ---------------------------------------------------------
+
+        recommendations = []
+
+        for _, job in matched.iterrows():
+
+            recommendations.append({
+                "job_id": int(job["job_id"]),
+                "source_job_id": job["source_job_id"],
+                "title": job["title"],
+                "company": job["company"],
+                "location": job["location"],
+                "remote": bool(job["remote"]),
+                "employment_type": job["employment_type"],
+                "salary_min": (
+                    int(job["min_salary"])
+                    if pd.notna(job["min_salary"])
+                    else None
+                ),
+                "salary_max": (
+                    int(job["max_salary"])
+                    if pd.notna(job["max_salary"])
+                    else None
+                ),
+                "salary_currency": job["currency_type"],
+                "years_of_experience": (
+                    int(job["years_of_experience"])
+                    if pd.notna(job["years_of_experience"])
+                    else None
+                ),
+                "description": job["description"],
+                "source": job["source"],
+                "match_score": round(
+                    float(job["match_score"]),
+                    3
+                ),
+            })
+
+        return recommendations

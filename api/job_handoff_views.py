@@ -5,7 +5,7 @@ from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework import status
 
-from .models import IngestedJob, MatchResult, Profile
+from .models import IngestedJob, MatchResult, Profile, JobPreference
 from .job_model.job_recommender import JobAppMatching
 
 logger = logging.getLogger(__name__)
@@ -273,7 +273,7 @@ def recommend_jobs_for_user(request):
 def my_matched_jobs(request):
     """Returns all ingested jobs that were matched to the authenticated user."""
     user = request.user
-    matches = MatchResult.objects.filter(user_id=user.id).select_related("ingested_job")
+    matches = MatchResult.objects.filter(user_id=user.id).select_related("ingested_job").order_by("-created_at")[:20]
 
     results = []
     for m in matches:
@@ -299,3 +299,27 @@ def my_matched_jobs(request):
         })
 
     return Response({"matches": results})
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def match_ingested_jobs(request):
+    jobs_limit = request.query_params.get("limit", 50)
+    user = request.user
+
+    preferences = JobPreference.objects.get(user=user)
+
+    matcher = JobAppMatching()
+
+    job_data = matcher.load_ingested_jobs_from_db()
+
+    recommendations = matcher.recommend_ingested_jobs(
+        preferences=preferences,
+        job_data=job_data,
+        limit=jobs_limit,
+    )
+
+    return Response({
+        "success": True,
+        "count": len(recommendations),
+        "results": recommendations,
+    })
