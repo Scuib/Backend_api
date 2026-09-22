@@ -4,6 +4,7 @@ from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework import status
+from django.db.models import Count
 
 from .models import IngestedJob, MatchResult, Profile, JobPreference
 from .job_model.job_recommender import JobAppMatching
@@ -161,20 +162,58 @@ def ingest_job_and_match(request):
     )
 
 
+DEFAULT_PAGE_SIZE = 50
+MAX_PAGE_SIZE = 200
+
+
+def _positive_int(value, default):
+    try:
+        parsed = int(value)
+    except (TypeError, ValueError):
+        return default
+    return parsed if parsed > 0 else default
+
+
 @api_view(["GET"])
 @permission_classes([AllowAny])
 def list_ingested_jobs(request):
+    """Lists ingested jobs, paginated.
+
+    Query params:
+        status     - optional status filter
+        page       - 1-based page number (default 1)
+        page_size  - items per page (default 50, max 200); `limit` kept as alias
+    """
     status_filter = request.query_params.get("status")
-    limit = int(request.query_params.get("limit", 50))
+    page = _positive_int(request.query_params.get("page"), 1)
+    page_size = _positive_int(
+        request.query_params.get("page_size")
+        or request.query_params.get("limit"),
+        DEFAULT_PAGE_SIZE,
+    )
+    page_size = min(page_size, MAX_PAGE_SIZE)
 
     qs = IngestedJob.objects.all()
     if status_filter:
         qs = qs.filter(status=status_filter)
 
-    jobs = qs[:limit]
+    # Stable ordering so pages don't overlap when created_at ties.
+    qs = qs.order_by("-created_at", "-id")
+
+    total = qs.count()
+    total_pages = -(-total // page_size) if total else 0  # ceil division
+
+    start = (page - 1) * page_size
+    jobs = list(qs.annotate(match_count=Count("matches"))[start : start + page_size])
+
     return Response(
         {
-            "count": len(jobs),
+            "count": total,
+            "page": page,
+            "page_size": page_size,
+            "total_pages": total_pages,
+            "next": page + 1 if page < total_pages else None,
+            "previous": page - 1 if page > 1 and total_pages else None,
             "results": [
                 {
                     "id": j.id,
@@ -193,7 +232,7 @@ def list_ingested_jobs(request):
                     "description": j.description,
                     "source": j.source,
                     "status": j.status,
-                    "match_count": j.matches.count(),
+                    "match_count": j.match_count,
                     "created_at": j.created_at.isoformat(),
                 }
                 for j in jobs
