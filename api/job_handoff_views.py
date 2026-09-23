@@ -1,10 +1,13 @@
 import logging
+from datetime import timedelta
+
 import pandas as pd
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework import status
 from django.db.models import Count
+from django.utils import timezone
 
 from .models import IngestedJob, MatchResult, Profile, JobPreference
 from .job_model.job_recommender import JobAppMatching
@@ -270,6 +273,40 @@ def get_ingested_job_matches(request, job_id):
                 for m in matches
             ],
         }
+    )
+
+
+INGESTED_JOB_RETENTION_DAYS = 7
+
+
+@api_view(["DELETE"])
+@permission_classes([AllowAny])
+def delete_old_ingested_jobs(request):
+    """Deletes ingested jobs ingested more than 7 days ago.
+
+    Their match results are removed automatically via cascade.
+    """
+    threshold = timezone.now() - timedelta(days=INGESTED_JOB_RETENTION_DAYS)
+
+    qs = IngestedJob.objects.filter(created_at__lt=threshold)
+    deleted_jobs = qs.count()
+    qs.delete()
+
+    logger.info(
+        "Deleted %s ingested jobs older than %s days (created before %s)",
+        deleted_jobs,
+        INGESTED_JOB_RETENTION_DAYS,
+        threshold.isoformat(),
+    )
+
+    return Response(
+        {
+            "detail": "Old ingested jobs deleted",
+            "retention_days": INGESTED_JOB_RETENTION_DAYS,
+            "deleted_jobs": deleted_jobs,
+            "cutoff": threshold.isoformat(),
+        },
+        status=status.HTTP_200_OK,
     )
 
 

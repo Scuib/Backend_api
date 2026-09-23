@@ -4,6 +4,7 @@ from .job_handoff_views import (
     ingest_job_and_match,
     list_ingested_jobs,
     get_ingested_job_matches,
+    delete_old_ingested_jobs,
     recommend_jobs_for_user,
     my_matched_jobs,
     match_ingested_jobs,
@@ -162,6 +163,11 @@ urlpatterns = [
         "jobs/ingested/<int:job_id>/matches/",
         get_ingested_job_matches,
         name="ingested-job-matches",
+    ),
+    path(
+        "jobs/ingested/cleanup/",
+        delete_old_ingested_jobs,
+        name="delete-old-ingested-jobs",
     ),
     path(
         "jobs/recommend/",
