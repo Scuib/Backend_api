@@ -3282,7 +3282,7 @@ def fund_wallet(request):
         "email": request.user.email,
         "amount": int(float(amount) * 100),  # Paystack requires kobo
         "reference": reference,
-        "callback_url": "https://scuib.com/payment/verify",  # Optional
+        "callback_url": "https://scuib.buzz/payment/verify",  # Optional
     }
 
     response = requests.post(
