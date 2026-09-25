@@ -219,6 +219,7 @@ REST_AUTH = {
 CORS_ALLOWED_ORIGINS = [
     "http://localhost:5173",
     "https://www.scuib.com",
+    "https://www.scuib.buzz",
     "http://localhost",
     "http://localhost:3000",
     "https://waits.vercel.app",
