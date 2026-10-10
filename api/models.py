@@ -544,6 +544,8 @@ class IngestedJob(models.Model):
     description = models.TextField(null=True, blank=True)
     source = models.CharField(max_length=50)
     raw_payload = models.JSONField(default=dict)
+    application_link = models.URLField(null=True, blank=True)
+    posted_date = models.DateTimeField(null=True, blank=True)
     status = models.CharField(max_length=20, default="pending")
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)

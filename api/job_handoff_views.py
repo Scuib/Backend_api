@@ -1,5 +1,5 @@
 import logging
-from datetime import timedelta
+from datetime import datetime, time, timedelta, timezone as dt_timezone
 
 import pandas as pd
 from rest_framework.decorators import api_view, permission_classes
@@ -8,6 +8,7 @@ from rest_framework.response import Response
 from rest_framework import status
 from django.db.models import Count
 from django.utils import timezone
+from django.utils.dateparse import parse_date, parse_datetime
 
 from .models import IngestedJob, MatchResult, Profile, JobPreference
 from .job_model.job_recommender import JobAppMatching
@@ -39,6 +40,32 @@ def _infer_experience_level(years):
     elif years >= 2:
         return "mid"
     return "entry"
+
+
+def _parse_posted_date(value):
+    """Coerce the handoff payload's ``posted_date`` into an aware datetime.
+
+    ScuibJobsAi sends ``posted_date`` as ``YYYY-MM-DD`` (occasionally a full
+    ISO datetime). The model field is a DateTimeField with USE_TZ=True, so a
+    naive value would be coerced by Django as *local* time and emit a
+    RuntimeWarning per job — we anchor it to UTC explicitly instead.
+    Returns None when the value is missing or unparseable.
+    """
+    if value in (None, ""):
+        return None
+    text = str(value).strip()
+    if not text:
+        return None
+    parsed = parse_datetime(text)
+    if parsed is None:
+        parsed_date = parse_date(text)
+        if parsed_date is None:
+            logger.warning("Unparseable posted_date in handoff payload: %r", value)
+            return None
+        parsed = datetime.combine(parsed_date, time.min)
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=dt_timezone.utc)
+    return parsed
 
 
 def _ingested_jobs_to_dataframe(jobs):
@@ -95,6 +122,8 @@ def ingest_job_and_match(request):
         employment_type=payload.get("employment_type"),
         description=payload.get("description"),
         source=payload.get("source", "scuib_jobs_ai"),
+        application_link=payload.get("application_link"),
+        posted_date=_parse_posted_date(payload.get("posted_date")),
         raw_payload=payload,
     )
 
