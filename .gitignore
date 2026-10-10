@@ -5,6 +5,7 @@ env/
 *.pyc
 newenv/
 .venv/
+.vscode/
 .DS_Store
 branch_structure.json
 temp_auto_push.bat
