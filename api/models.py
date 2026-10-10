@@ -419,14 +419,31 @@ class JobTweet(models.Model):
 
 
 class BoostSubscription(models.Model):
+    # The free trial is modelled as a real subscription row so that every
+    # existing entitlement check (active=True, end_date__gte=now) picks it up
+    # without needing changes at each call site.
+    TRIAL_PLAN = "trial"
+    TRIAL_DAYS = 14
+
     user = models.OneToOneField(User, on_delete=models.CASCADE)
     plan = models.CharField(
-        max_length=20, choices=[("weekly", "Weekly"), ("monthly", "Monthly")]
+        max_length=20,
+        choices=[
+            ("weekly", "Weekly"),
+            ("monthly", "Monthly"),
+            (TRIAL_PLAN, "Free Trial"),
+        ],
     )
     start_date = models.DateTimeField(auto_now_add=True)
     end_date = models.DateTimeField()
     active = models.BooleanField(default=True)
     auto_renew = models.BooleanField(default=True)
+    # When the "your trial has started" email went out; null = not yet sent.
+    trial_notified_at = models.DateTimeField(null=True, blank=True)
+
+    @property
+    def is_trial(self):
+        return self.plan == self.TRIAL_PLAN
 
     def is_active(self):
         return self.active and timezone.now() <= self.end_date

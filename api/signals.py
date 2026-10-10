@@ -16,6 +16,7 @@ import resend
 
 
 from .custom_signal import job_created
+from .free_trial import start_free_trial
 
 
 @receiver(post_save, sender=User)
@@ -109,3 +110,17 @@ def send_message_email(sender, instance, created, **kwargs):
 def create_user_wallet(sender, instance, created, **kwargs):
     if created:
         Wallet.objects.create(user=instance)
+
+
+@receiver(post_save, sender=User)
+def create_user_free_trial(sender, instance, created, **kwargs):
+    """Every new user starts on the 14-day free trial.
+
+    The trial-start email is deliberately *not* sent from here: this signal
+    fires on every user-creation path (register, admin, tests, fixtures) and
+    sending from it would put live network calls inside ``create_user``. The
+    register view and the ``sync_free_trials`` command own the notification
+    instead.
+    """
+    if created:
+        start_free_trial(instance)

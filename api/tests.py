@@ -6,10 +6,25 @@ from unittest.mock import patch
 from decimal import Decimal
 from datetime import timedelta
 from api.models import BoostSubscription, UserCard, Wallet, WalletTransaction, IngestedJob
+from api.free_trial import start_free_trial
 from django.core.management import call_command
 from rest_framework_simplejwt.tokens import AccessToken
 
 User = get_user_model()
+
+
+def _set_subscription(user, **fields):
+    """Adjust the subscription a user already has.
+
+    Every user is now given a trial row on creation (post_save signal), and
+    BoostSubscription is a OneToOneField — so tests mutate that row rather
+    than creating a second one.
+    """
+    subscription = BoostSubscription.objects.get(user=user)
+    for key, value in fields.items():
+        setattr(subscription, key, value)
+    subscription.save()
+    return subscription
 
 
 class SubscriptionTests(TestCase):
@@ -97,9 +112,9 @@ class SubscriptionTests(TestCase):
         self.assertFalse(card.is_active)
 
     def test_toggle_auto_renew(self):
-        # Create a subscription
-        subscription = BoostSubscription.objects.create(
-            user=self.user,
+        # Switch the trial the user was given at signup over to a paid plan
+        subscription = _set_subscription(
+            self.user,
             plan="monthly",
             end_date=timezone.now() + timedelta(days=30),
             active=True,
@@ -121,9 +136,9 @@ class SubscriptionTests(TestCase):
     @patch("requests.post")
     @patch("resend.Emails.send")
     def test_renew_subscription_command(self, mock_send_email, mock_post):
-        # Setup expired but auto-renew subscription
-        subscription = BoostSubscription.objects.create(
-            user=self.user,
+        # Expired but auto-renew subscription (converted from the signup trial)
+        subscription = _set_subscription(
+            self.user,
             plan="monthly",
             end_date=timezone.now() - timedelta(minutes=5),  # expired
             active=True,
@@ -172,6 +187,113 @@ class SubscriptionTests(TestCase):
         subscription.refresh_from_db()
         self.assertFalse(subscription.active)
         mock_send_email.assert_called_once()
+
+
+class FreeTrialTests(TestCase):
+    def setUp(self):
+        self.user = User.objects.create_user(
+            email="trial@scuib.com",
+            password="testpassword",
+            first_name="Trial"
+        )
+        self.token = str(AccessToken.for_user(self.user))
+        self.auth_headers = {"HTTP_AUTHORIZATION": f"Bearer {self.token}"}
+
+    def _entitlement_filter(self):
+        # The exact expression the boost-chat gates use.
+        return BoostSubscription.objects.filter(
+            user=self.user, active=True, end_date__gte=timezone.now()
+        )
+
+    def test_new_user_is_given_a_14_day_trial(self):
+        sub = BoostSubscription.objects.get(user=self.user)
+
+        self.assertEqual(sub.plan, BoostSubscription.TRIAL_PLAN)
+        self.assertTrue(sub.is_trial)
+        self.assertTrue(sub.active)
+        self.assertFalse(sub.auto_renew)  # a trial must never be charged
+        self.assertTrue(sub.is_active())
+
+        remaining = (sub.end_date - timezone.now()).total_seconds()
+        self.assertAlmostEqual(remaining, 14 * 86400, delta=60)
+
+    def test_trial_unlocks_the_existing_entitlement_check(self):
+        self.assertTrue(self._entitlement_filter().exists())
+
+        _set_subscription(self.user, end_date=timezone.now() - timedelta(minutes=1))
+
+        self.assertFalse(self._entitlement_filter().exists())
+        self.assertFalse(BoostSubscription.objects.get(user=self.user).is_active())
+
+    def test_trial_overwrites_an_active_paid_subscription(self):
+        _set_subscription(
+            self.user,
+            plan="monthly",
+            end_date=timezone.now() + timedelta(days=30),
+            auto_renew=True,
+        )
+
+        sub = start_free_trial(self.user)
+
+        self.assertEqual(sub.plan, "trial")
+        self.assertFalse(sub.auto_renew)
+        self.assertTrue(sub.active)
+        remaining = (sub.end_date - timezone.now()).total_seconds()
+        self.assertAlmostEqual(remaining, 14 * 86400, delta=60)
+
+    def test_regranting_does_not_extend_a_running_trial(self):
+        first_end = start_free_trial(self.user).end_date
+
+        second = start_free_trial(self.user)
+
+        self.assertEqual(second.end_date, first_end)
+
+    def test_subscription_status_reports_the_trial(self):
+        response = self.client.get(
+            reverse("subscription-status"), **self.auth_headers
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.data["active"])
+        self.assertTrue(response.data["is_trial"])
+        self.assertEqual(response.data["plan"], "trial")
+        self.assertFalse(response.data["auto_renew"])
+
+    @patch("requests.post")
+    @patch("resend.Emails.send")
+    def test_expired_trial_is_never_charged_or_emailed(
+        self, mock_send_email, mock_post
+    ):
+        _set_subscription(self.user, end_date=timezone.now() - timedelta(minutes=5))
+
+        call_command("renew_subscriptions")
+
+        mock_post.assert_not_called()
+        mock_send_email.assert_not_called()
+
+        sub = BoostSubscription.objects.get(user=self.user)
+        self.assertTrue(sub.active)      # left untouched
+        self.assertFalse(sub.is_active())  # but grants nothing
+
+    @patch("resend.Emails.send")
+    def test_sync_free_trials_emails_each_user_once(self, mock_send):
+        call_command("sync_free_trials", delay=0)
+
+        self.assertEqual(mock_send.call_count, 1)
+        sub = BoostSubscription.objects.get(user=self.user)
+        self.assertIsNotNone(sub.trial_notified_at)
+
+        call_command("sync_free_trials", delay=0)
+
+        self.assertEqual(mock_send.call_count, 1)  # not emailed twice
+
+    @patch("resend.Emails.send")
+    def test_sync_free_trials_dry_run_sends_nothing(self, mock_send):
+        call_command("sync_free_trials", dry_run=True, delay=0)
+
+        mock_send.assert_not_called()
+        sub = BoostSubscription.objects.get(user=self.user)
+        self.assertIsNone(sub.trial_notified_at)
 
 
 class DeleteOldIngestedJobsTests(TestCase):

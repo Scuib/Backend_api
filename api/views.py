@@ -77,6 +77,7 @@ from rest_framework.parsers import MultiPartParser, FormParser, JSONParser
 
 from django.conf import settings
 from .custom_signal import job_created, assist_created
+from .free_trial import send_trial_started_email
 from api.job_model.data_processing import DataPreprocessor
 import resend
 from scuibai.settings import RESEND_API_KEY
@@ -173,6 +174,11 @@ def register(request):
                 },
                 status=status.HTTP_501_NOT_IMPLEMENTED,
             )
+
+        # The trial itself was granted by the User post_save signal; this is
+        # where we tell the new user about it (the signal stays email-free so
+        # that create_user never performs network I/O).
+        send_trial_started_email(user)
 
         return Response(
             {
@@ -4115,6 +4121,9 @@ def subscribe_to_boost(request):
         },
     )
 
+    # Captured before `plan` is overwritten below.
+    was_trial = not created and subscription.plan == BoostSubscription.TRIAL_PLAN
+
     if not created and subscription.end_date > now:
         subscription.end_date += timedelta(days=duration)
     else:
@@ -4123,6 +4132,11 @@ def subscribe_to_boost(request):
         subscription.active = True
 
     subscription.plan = plan
+    if was_trial:
+        # Trials run with auto_renew off so they can never be charged.
+        # Buying over a trial restores the auto-renew behaviour every other
+        # purchase has, until the user opts out via toggle-auto-renew.
+        subscription.auto_renew = True
     subscription.save()
 
     return Response(
@@ -4151,6 +4165,7 @@ def subscribe_to_boost(request):
                 "application/json": {
                     "active": True,
                     "plan": "monthly",
+                    "is_trial": False,
                     "expires": "2025-12-30T14:22:10Z",
                 }
             },
@@ -4174,12 +4189,15 @@ def my_subscription(request):
             {
                 "active": bool(sub.is_active()),
                 "plan": str(sub.plan),
+                "is_trial": sub.is_trial,
                 "expires": sub.end_date,
                 "auto_renew": sub.auto_renew,
             }
         )
     except BoostSubscription.DoesNotExist:
-        return Response({"active": False, "auto_renew": False})
+        return Response(
+            {"active": False, "auto_renew": False, "is_trial": False}
+        )
 
 
 @api_view(["GET"])
