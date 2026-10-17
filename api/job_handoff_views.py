@@ -10,7 +10,7 @@ from django.db.models import Count
 from django.utils import timezone
 from django.utils.dateparse import parse_date, parse_datetime
 
-from .models import IngestedJob, MatchResult, Profile, JobPreference
+from .models import IngestedJob, MatchResult, Profile, JobPreference, BoostSubscription
 from .job_model.job_recommender import JobAppMatching
 
 logger = logging.getLogger(__name__)
@@ -428,3 +428,24 @@ def match_ingested_jobs(request):
         "count": len(recommendations),
         "results": recommendations,
     })
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def unlock_ingested_job_url(request, pk):
+    try:
+        job = IngestedJob.objects.get(id=pk)
+    except IngestedJob.DoesNotExist:
+        return Response({"detail": "This job does not exist"},
+                        status=status.HTTP_404_NOT_FOUND)
+
+    if not BoostSubscription.objects.filter(
+        user=request.user, active=True, end_date__gte=timezone.now()
+    ).exists():
+        return Response({"detail": "You have no active subscription plan"},
+                        status=status.HTTP_403_FORBIDDEN)
+
+    if not job.application_link:
+        return Response({"detail": "Unable to get application url"},
+                        status=status.HTTP_404_NOT_FOUND)
+
+    return Response({"application_link": job.application_link})
