@@ -295,6 +295,133 @@ class FreeTrialTests(TestCase):
         sub = BoostSubscription.objects.get(user=self.user)
         self.assertIsNone(sub.trial_notified_at)
 
+    # --- the endpoint (this is what production actually calls) ----------
+
+    def _staff_headers(self, email="admin@scuib.com"):
+        """A staff account, with its own trial marked as already notified.
+
+        Marking it keeps the pending counts in these tests down to the users
+        they are actually about.
+        """
+        admin = User.objects.create_user(
+            email=email, first_name="Admin"
+        )
+        admin.is_staff = True
+        admin.save(update_fields=["is_staff"])
+        BoostSubscription.objects.filter(user=admin).update(
+            trial_notified_at=timezone.now()
+        )
+        token = str(AccessToken.for_user(admin))
+        return {"HTTP_AUTHORIZATION": f"Bearer {token}"}
+
+    def test_sync_endpoint_rejects_anyone_who_is_not_staff(self):
+        url = reverse("subscription-sync-trials")
+
+        # No credentials at all -> 401 (JWTAuthentication supplies a
+        # WWW-Authenticate header); a real user without is_staff -> 403.
+        self.assertEqual(self.client.get(url).status_code, 401)
+        self.assertEqual(self.client.get(url, **self.auth_headers).status_code, 403)
+        self.assertEqual(self.client.post(url, **self.auth_headers).status_code, 403)
+
+    @patch("resend.Emails.send")
+    def test_sync_endpoint_get_is_always_a_dry_run(self, mock_send):
+        headers = self._staff_headers()
+
+        response = self.client.get(reverse("subscription-sync-trials"), **headers)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.data["dry_run"])
+        self.assertEqual(response.data["granted"], 0)
+        self.assertEqual(response.data["emailed"], 0)
+        self.assertEqual(response.data["pending"], 1)
+        mock_send.assert_not_called()
+        self.assertIsNone(
+            BoostSubscription.objects.get(user=self.user).trial_notified_at
+        )
+
+    @patch("resend.Emails.send")
+    def test_sync_endpoint_post_sends_the_backfill(self, mock_send):
+        headers = self._staff_headers()
+
+        response = self.client.post(reverse("subscription-sync-trials"), **headers)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(response.data["dry_run"])
+        self.assertEqual(response.data["missing"], 0)
+        self.assertEqual(response.data["granted"], 0)
+        self.assertEqual(response.data["emailed"], 1)
+        self.assertEqual(response.data["failed"], 0)
+        self.assertEqual(response.data["remaining"], 0)
+        self.assertEqual(response.data["detail"], "All caught up.")
+        mock_send.assert_called_once()
+        self.assertIsNotNone(
+            BoostSubscription.objects.get(user=self.user).trial_notified_at
+        )
+
+    @patch("resend.Emails.send")
+    def test_sync_endpoint_grants_users_who_have_no_row(self, mock_send):
+        # Simulates an account created during the deploy window: migration
+        # 0007 had already run, so it never received a trial.
+        headers = self._staff_headers()
+        BoostSubscription.objects.filter(user=self.user).delete()
+
+        response = self.client.post(reverse("subscription-sync-trials"), **headers)
+
+        self.assertEqual(response.data["missing"], 1)
+        self.assertEqual(response.data["granted"], 1)
+        self.assertEqual(response.data["emailed"], 1)
+        mock_send.assert_called_once()
+        self.assertEqual(
+            BoostSubscription.objects.get(user=self.user).plan, "trial"
+        )
+
+    @patch("resend.Emails.send")
+    def test_sync_endpoint_repeats_only_do_what_is_still_owed(self, mock_send):
+        headers = self._staff_headers()
+        url = reverse("subscription-sync-trials")
+
+        first = self.client.post(url, **headers)
+        second = self.client.post(url, **headers)
+
+        self.assertEqual(first.data["emailed"], 1)
+        self.assertEqual(second.data["emailed"], 0)
+        self.assertEqual(second.data["remaining"], 0)
+        self.assertEqual(second.data["detail"], "All caught up.")
+        self.assertEqual(mock_send.call_count, 1)
+
+    @patch("resend.Emails.send")
+    def test_sync_endpoint_batches_with_limit(self, mock_send):
+        headers = self._staff_headers()
+        for index in range(2):
+            User.objects.create_user(
+                email=f"batch{index}@scuib.com", first_name="Batch"
+            )
+        url = reverse("subscription-sync-trials")
+
+        first = self.client.post(f"{url}?limit=2", **headers)
+        second = self.client.post(f"{url}?limit=2", **headers)
+
+        self.assertEqual(first.data["emailed"], 2)
+        self.assertEqual(first.data["remaining"], 1)
+        self.assertIn("call again", first.data["detail"])
+        self.assertEqual(second.data["emailed"], 1)
+        self.assertEqual(second.data["remaining"], 0)
+        self.assertEqual(mock_send.call_count, 3)
+
+    def test_swagger_documents_the_endpoint(self):
+        # Guards the drf_yasg decorators: a malformed one breaks schema
+        # generation, and that would otherwise only surface when someone
+        # opens /swagger/.
+        response = self.client.get("/swagger/?format=openapi")
+        self.assertEqual(response.status_code, 200)
+
+        path = "/api/subscription/sync-trials/"
+        schema = response.json()
+        self.assertIn(path, schema["paths"])
+        methods = schema["paths"][path]
+        self.assertIn("get", methods)
+        self.assertIn("post", methods)
+
 
 class DeleteOldIngestedJobsTests(TestCase):
     def _make_job(self, source_job_id, created_at):

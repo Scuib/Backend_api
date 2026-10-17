@@ -124,6 +124,11 @@ urlpatterns = [
     path("subscription/card/", views.list_saved_cards, name="subscription-cards"),
     path("subscription/card/<int:card_id>/", views.delete_saved_card, name="delete-card"),
     path("subscription/toggle-auto-renew/", views.toggle_auto_renew, name="toggle-auto-renew"),
+    path(
+        "subscription/sync-trials/",
+        views.sync_free_trials,
+        name="subscription-sync-trials",
+    ),
     path("fetch-twitter-jobs/", views.fetch_twitter_jobs, name="fetch-twitter-jobs"),
     path("boost/jobs/post/", views.post_boost_job, name="post-job"),
     path("boost/jobs/", views.all_boost_jobs, name="list-boost-jobs"),

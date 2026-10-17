@@ -20,6 +20,7 @@ Rules
 """
 
 import logging
+import time
 from datetime import timedelta
 
 import resend
@@ -27,7 +28,7 @@ from django.conf import settings
 from django.template.loader import get_template
 from django.utils import timezone
 
-from .models import BoostSubscription
+from .models import BoostSubscription, User
 
 logger = logging.getLogger(__name__)
 
@@ -118,3 +119,91 @@ def send_trial_started_email(user, subscription=None):
             exc,
         )
         return False
+
+
+def sync_trials(*, dry_run=False, limit=0, delay=0.1):
+    """Backfill missing trials and email everyone not yet notified.
+
+    Idempotent and safe to call repeatedly — it is the single implementation
+    behind both the ``sync_free_trials`` management command and the admin
+    endpoint, which is the production path (Render's free tier has no shell,
+    so a command cannot be run against the live database).
+
+    * grants a trial only to users with no subscription row at all, covering
+      anyone who registered during the deploy window (after migration 0007
+      ran but before the new code served traffic);
+    * emails only subscriptions whose ``trial_notified_at`` is still null and
+      whose trial is still running — expired trials are counted but skipped.
+
+    ``limit``/``delay`` exist to keep a single call short and inside Resend's
+    rate limit; when ``remaining`` is not 0, simply call again.
+
+    Returns a summary dict::
+
+        dry_run         nothing was changed or sent
+        missing         users with no subscription row at all
+        granted         rows created (always 0 on a dry run)
+        pending         emails owed before this call
+        selected        rows this call handled (after ``limit``)
+        emailed         emails sent by this call
+        failed          sends that raised — still owed, retried next call
+        expired_skipped expired trials that will never be emailed
+        remaining       emails still owed after this call
+    """
+    now = timezone.now()
+
+    # 1. Users with no subscription row at all.
+    missing_qs = User.objects.exclude(
+        id__in=BoostSubscription.objects.values_list("user_id", flat=True)
+    )
+    missing = missing_qs.count()
+    granted = 0
+    if not dry_run and missing:
+        for user in missing_qs.iterator():
+            start_free_trial(user)
+            granted += 1
+
+    # 2. Trials that still need their start email. Evaluated *after* the
+    #    grants above, so freshly granted users are eligible in the same call.
+    pending_qs = (
+        BoostSubscription.objects.filter(
+            plan=TRIAL_PLAN,
+            trial_notified_at__isnull=True,
+            end_date__gte=now,
+        )
+        .select_related("user")
+        .order_by("id")
+    )
+    expired_skipped = BoostSubscription.objects.filter(
+        plan=TRIAL_PLAN,
+        trial_notified_at__isnull=True,
+        end_date__lt=now,
+    ).count()
+
+    pending = pending_qs.count()
+    to_send = list(pending_qs[:limit] if limit else pending_qs)
+
+    emailed = 0
+    failed = 0
+    if not dry_run:
+        for subscription in to_send:
+            if send_trial_started_email(
+                subscription.user, subscription=subscription
+            ):
+                emailed += 1
+            else:
+                failed += 1
+            if delay:
+                time.sleep(delay)
+
+    return {
+        "dry_run": dry_run,
+        "missing": missing,
+        "granted": granted,
+        "pending": pending,
+        "selected": len(to_send),
+        "emailed": emailed,
+        "failed": failed,
+        "expired_skipped": expired_skipped,
+        "remaining": pending - emailed,
+    }

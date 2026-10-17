@@ -1,12 +1,9 @@
 """Ensure every user has a free trial and email anyone not yet notified.
 
-Idempotent and safe to re-run:
-
-* grants a trial only to users with no subscription row at all (covers anyone
-  who registered during the deploy window, after migration 0007 ran but
-  before the new code was serving traffic);
-* emails only subscriptions whose ``trial_notified_at`` is still null and
-  whose trial is still running.
+Thin wrapper around :func:`api.free_trial.sync_trials`, which is also what the
+``/api/subscription/sync-trials/`` endpoint runs. **Production uses the
+endpoint** — Render's free tier has no shell, so this command is for local
+development and one-off use only.
 
 Usage::
 
@@ -15,19 +12,16 @@ Usage::
     python manage.py sync_free_trials
 """
 
-import time
-
 from django.core.management.base import BaseCommand
-from django.utils import timezone
 
-from api.free_trial import TRIAL_PLAN, send_trial_started_email, start_free_trial
-from api.models import BoostSubscription, User
+from api.free_trial import sync_trials
 
 
 class Command(BaseCommand):
     help = (
         "Grant the free trial to any user missing one, then send the "
-        "trial-start email to everyone not yet notified. Idempotent."
+        "trial-start email to everyone not yet notified. Idempotent. "
+        "Prefer POST /api/subscription/sync-trials/ in production."
     )
 
     def add_arguments(self, parser):
@@ -50,66 +44,30 @@ class Command(BaseCommand):
         )
 
     def handle(self, *args, **options):
-        dry_run = options["dry_run"]
-        limit = options["limit"]
-        delay = options["delay"]
-        now = timezone.now()
-
-        # 1. Users with no subscription row at all.
-        missing = User.objects.exclude(
-            id__in=BoostSubscription.objects.values_list("user_id", flat=True)
+        summary = sync_trials(
+            dry_run=options["dry_run"],
+            limit=options["limit"],
+            delay=options["delay"],
         )
-        missing_count = missing.count()
-        if dry_run:
+
+        verb = "Would grant" if summary["dry_run"] else "Granted"
+        self.stdout.write(
+            f"{verb} a trial to {summary['missing']} user(s) with no subscription."
+        )
+        if summary["expired_skipped"]:
             self.stdout.write(
-                f"Would grant a trial to {missing_count} user(s) with no subscription."
+                f"Skipped {summary['expired_skipped']} already-expired trial(s)."
+            )
+
+        if summary["dry_run"]:
+            self.stdout.write(
+                f"Would email {summary['selected']} of {summary['pending']} "
+                "pending user(s)."
             )
         else:
-            for user in missing.iterator():
-                start_free_trial(user)
-            self.stdout.write(f"Granted a trial to {missing_count} user(s).")
-
-        # 2. Trials that still need their start email.
-        pending = (
-            BoostSubscription.objects.filter(
-                plan=TRIAL_PLAN,
-                trial_notified_at__isnull=True,
-                end_date__gte=now,
-            )
-            .select_related("user")
-            .order_by("id")
-        )
-        expired_unnotified = (
-            BoostSubscription.objects.filter(
-                plan=TRIAL_PLAN,
-                trial_notified_at__isnull=True,
-                end_date__lt=now,
-            ).count()
-        )
-        if expired_unnotified:
             self.stdout.write(
-                f"Skipping {expired_unnotified} already-expired trial(s)."
+                self.style.SUCCESS(
+                    f"Emailed {summary['emailed']} user(s), "
+                    f"{summary['failed']} failed, {summary['remaining']} left unsent."
+                )
             )
-
-        total = pending.count()
-        to_send = pending[:limit] if limit else pending
-
-        if dry_run:
-            self.stdout.write(f"Would email {len(to_send)} of {total} pending user(s).")
-            return
-
-        sent = 0
-        failed = 0
-        for subscription in to_send:
-            if send_trial_started_email(
-                subscription.user, subscription=subscription
-            ):
-                sent += 1
-            else:
-                failed += 1
-            if delay:
-                time.sleep(delay)
-
-        self.stdout.write(
-            self.style.SUCCESS(f"Emailed {sent} user(s), {failed} failed, {total - len(to_send)} left unsent.")
-        )

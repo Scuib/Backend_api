@@ -77,7 +77,7 @@ from rest_framework.parsers import MultiPartParser, FormParser, JSONParser
 
 from django.conf import settings
 from .custom_signal import job_created, assist_created
-from .free_trial import send_trial_started_email
+from .free_trial import send_trial_started_email, sync_trials
 from api.job_model.data_processing import DataPreprocessor
 import resend
 from scuibai.settings import RESEND_API_KEY
@@ -4198,6 +4198,194 @@ def my_subscription(request):
         return Response(
             {"active": False, "auto_renew": False, "is_trial": False}
         )
+
+
+def _trial_sync_param(request, name, default=None):
+    """Read a parameter from the query string, falling back to the body."""
+    if name in request.query_params:
+        return request.query_params[name]
+    try:
+        data = request.data
+    except Exception:
+        return default
+    if hasattr(data, "get") and name in data:
+        return data[name]
+    return default
+
+
+def _as_bool(value, default=False):
+    if value is None:
+        return default
+    if isinstance(value, bool):
+        return value
+    return str(value).strip().lower() in {"1", "true", "yes", "y", "on"}
+
+
+def _as_int(value, default, ceiling):
+    try:
+        number = int(value)
+    except (TypeError, ValueError):
+        return default
+    return max(0, min(number, ceiling))
+
+
+def _as_float(value, default, ceiling):
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        return default
+    return max(0.0, min(number, ceiling))
+
+
+TRIAL_SYNC_AUTH = openapi.Parameter(
+    name="Authorization",
+    in_=openapi.IN_HEADER,
+    description="Bearer {token}",
+    type=openapi.TYPE_STRING,
+    required=True,
+)
+TRIAL_SYNC_LIMIT = openapi.Parameter(
+    name="limit",
+    in_=openapi.IN_QUERY,
+    description=(
+        "Emails to send in this call. Default 50, max 500 — kept small so one "
+        "request stays inside the server timeout and Resend's rate limit. "
+        "Repeat until `remaining` is 0."
+    ),
+    type=openapi.TYPE_INTEGER,
+    required=False,
+)
+TRIAL_SYNC_SUMMARY_EXAMPLE = {
+    "application/json": {
+        "dry_run": True,
+        "missing": 0,
+        "granted": 0,
+        "pending": 128,
+        "selected": 50,
+        "emailed": 0,
+        "failed": 0,
+        "expired_skipped": 3,
+        "remaining": 128,
+        "detail": "Dry run — nothing was changed or sent. Use POST to run it.",
+    }
+}
+
+
+@swagger_auto_schema(
+    method="get",
+    operation_summary="Preview the free-trial backfill (read only)",
+    operation_description=(
+        "Admin only. Reports how many users are still missing a trial and how "
+        "many trial-start emails are owed, without granting or sending "
+        "anything. Always a dry run — use POST to perform the sync."
+    ),
+    manual_parameters=[
+        TRIAL_SYNC_AUTH,
+        TRIAL_SYNC_LIMIT,
+    ],
+    responses={
+        200: openapi.Response(
+            description="Backfill summary; nothing was changed",
+            examples=TRIAL_SYNC_SUMMARY_EXAMPLE,
+        ),
+        403: openapi.Response(
+            description="Staff account required",
+            examples={
+                "application/json": {
+                    "detail": "You do not have permission to perform this action."
+                }
+            },
+        ),
+    },
+)
+@swagger_auto_schema(
+    method="post",
+    operation_summary="Run the free-trial backfill",
+    operation_description=(
+        "Admin only. Grants a trial to any user still missing one (anyone "
+        "who registered during the deploy window), then sends the trial-start "
+        "email to everyone not yet notified. Idempotent and safe to repeat: "
+        "each call only does work that is still owed. This endpoint is how the "
+        "sync is run in production, where there is no shell access. "
+        "Batches to 50 emails per call — repeat until `remaining` is 0."
+    ),
+    manual_parameters=[
+        TRIAL_SYNC_AUTH,
+        TRIAL_SYNC_LIMIT,
+        openapi.Parameter(
+            name="dry_run",
+            in_=openapi.IN_QUERY,
+            description="Report only; change nothing. Default false.",
+            type=openapi.TYPE_BOOLEAN,
+            required=False,
+        ),
+        openapi.Parameter(
+            name="delay",
+            in_=openapi.IN_QUERY,
+            description=(
+                "Seconds to wait between emails to stay under Resend's rate "
+                "limit. Default 0.1, max 2."
+            ),
+            type=openapi.TYPE_NUMBER,
+            required=False,
+        ),
+    ],
+    responses={
+        200: openapi.Response(
+            description="Backfill summary",
+            examples={
+                "application/json": {
+                    "dry_run": False,
+                    "missing": 4,
+                    "granted": 4,
+                    "pending": 128,
+                    "selected": 50,
+                    "emailed": 50,
+                    "failed": 0,
+                    "expired_skipped": 3,
+                    "remaining": 78,
+                    "detail": "78 email(s) still owed — call again.",
+                }
+            },
+        ),
+        403: openapi.Response(
+            description="Staff account required",
+            examples={
+                "application/json": {
+                    "detail": "You do not have permission to perform this action."
+                }
+            },
+        ),
+    },
+)
+@api_view(["GET", "POST"])
+@permission_classes([IsAdminUser])
+def sync_free_trials(request):
+    """Backfill free trials and email everyone not yet notified.
+
+    GET is always a dry run; POST does the work. See
+    :func:`api.free_trial.sync_trials` for the actual behaviour.
+    """
+    dry_run = request.method != "POST" or _as_bool(
+        _trial_sync_param(request, "dry_run"), default=False
+    )
+    limit = _as_int(_trial_sync_param(request, "limit"), default=50, ceiling=500)
+    delay = _as_float(_trial_sync_param(request, "delay"), default=0.1, ceiling=2.0)
+
+    summary = sync_trials(dry_run=dry_run, limit=limit, delay=delay)
+
+    if summary["dry_run"]:
+        summary["detail"] = (
+            "Dry run — nothing was changed or sent. Use POST to run it."
+        )
+    elif summary["remaining"]:
+        summary["detail"] = (
+            f"{summary['remaining']} email(s) still owed — call again."
+        )
+    else:
+        summary["detail"] = "All caught up."
+
+    return Response(summary, status=status.HTTP_200_OK)
 
 
 @api_view(["GET"])
