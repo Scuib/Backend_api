@@ -10,7 +10,7 @@ from .models import (
     CompanyProfile,
 )
 from django.dispatch import receiver
-from scuibai.settings import BASE_DIR
+from scuibai.settings import BASE_DIR, EMAIL_FROM
 from .models import Message
 import resend
 
@@ -96,7 +96,7 @@ def send_message_email(sender, instance, created, **kwargs):
         try:
             resend.Emails.send(
                 {
-                    "from": "Scuibai <Admin@scuib.com>",
+                    "from": EMAIL_FROM,
                     "to": [recipient.email],
                     "subject": subject,
                     "html": email_html,

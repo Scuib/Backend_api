@@ -80,7 +80,7 @@ from .custom_signal import job_created, assist_created
 from .free_trial import send_trial_started_email, sync_trials
 from api.job_model.data_processing import DataPreprocessor
 import resend
-from scuibai.settings import RESEND_API_KEY
+from scuibai.settings import EMAIL_FROM, RESEND_API_KEY
 from django.core.mail import send_mail
 import uuid
 from decimal import Decimal
@@ -157,7 +157,7 @@ def register(request):
         html = template.render(context)
 
         params: resend.Emails.SendParams = {
-            "from": "Scuibai <godwin@scuib.com>",
+            "from": EMAIL_FROM,
             "to": [user.email],
             "subject": "VERIFY YOUR EMAIL",
             "html": html,
@@ -546,7 +546,7 @@ def reset_password(request):
 
         # Build params for Resend
         params: resend.Emails.SendParams = {
-            "from": "Scuibai <Admin@scuib.com>",
+            "from": EMAIL_FROM,
             "to": [user.email],
             "subject": "Reset Your Password",
             "html": html,
@@ -2786,7 +2786,7 @@ def contact_us(request):
     html = template.render(context)
 
     params: resend.Emails.SendParams = {
-        "from": "Scuibai <admin@scuib.com>",
+        "from": EMAIL_FROM,
         "to": ["scuib.com@gmail.com", "okpephillips.dev@gmail.com"],
         "subject": f"New Contact Form Message from {name}",
         "html": html,

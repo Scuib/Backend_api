@@ -36,7 +36,7 @@ TRIAL_PLAN = BoostSubscription.TRIAL_PLAN
 TRIAL_DAYS = BoostSubscription.TRIAL_DAYS
 
 TRIAL_EMAIL_SUBJECT = "Your 2-week free trial has started"
-TRIAL_EMAIL_FROM = "Scuibai <godwin@scuib.com>"
+TRIAL_EMAIL_FROM = settings.EMAIL_FROM
 
 
 def start_free_trial(user):

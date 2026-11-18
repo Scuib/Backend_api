@@ -160,7 +160,7 @@ class Command(BaseCommand):
         </div>
         """
         params: resend.Emails.SendParams = {
-            "from": "Scuibai <godwin@scuib.com>",
+            "from": settings.EMAIL_FROM,
             "to": [user.email],
             "subject": subject,
             "html": html,
